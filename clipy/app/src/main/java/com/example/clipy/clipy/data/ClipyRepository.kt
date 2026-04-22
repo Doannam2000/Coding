@@ -1,38 +1,27 @@
 package com.example.clipy.clipy.data
 
-import android.content.ContentValues
 import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
-import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
 import androidx.room.Room
+import com.example.clipy.clipy.model.AppLanguage
 import com.example.clipy.clipy.model.CropRatio
 import com.example.clipy.clipy.model.ExportFormat
 import com.example.clipy.clipy.model.ExportJobState
-import com.example.clipy.clipy.model.ExportPlan
 import com.example.clipy.clipy.model.ExportRecord
 import com.example.clipy.clipy.model.ExportRecordUi
 import com.example.clipy.clipy.model.Mp4Quality
 import com.example.clipy.clipy.model.ProjectDraft
 import com.example.clipy.clipy.model.SaveBehavior
-import com.example.clipy.clipy.model.buildExportPlan
 import com.example.clipy.clipy.model.sanitizeTimeline
 import com.example.clipy.clipy.model.sanitizeOutputName
-import com.example.clipy.clipy.model.snapTimelineMs
+import com.example.clipy.clipy.model.snapToNearestKeyframe
 import com.example.clipy.clipy.model.shouldPersistUri
 import com.example.clipy.clipy.model.UserPreferences
-import com.example.clipy.clipy.model.WatermarkPosition
 import com.example.clipy.clipy.model.validateExport
-import java.io.FileNotFoundException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.math.roundToLong
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,6 +35,7 @@ class ClipyRepository private constructor(context: Context) {
   private val preferenceRepository = PreferenceRepository(appContext)
   private val database = Room.databaseBuilder(appContext, ClipyDatabase::class.java, "clipy.db").fallbackToDestructiveMigration().build()
   private val dao = database.clipyDao()
+  private val exporter = AndroidVideoExporter(appContext)
   private val draftState = MutableStateFlow(ProjectDraft())
   private val exportState = MutableStateFlow(ExportJobState())
 
@@ -88,6 +78,7 @@ class ClipyRepository private constructor(context: Context) {
   fun loadVideo(uri: Uri) {
     val name = uri.lastPathSegment?.substringAfterLast('/')?.ifBlank { "Selected clip" } ?: "Selected clip"
     val durationMs = readDurationMs(uri) ?: 12_000L
+    val keyframeTimes = readKeyframeTimes(durationMs)
     if (shouldPersistUri(uri.toString())) {
       runCatching {
         appContext.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -98,6 +89,7 @@ class ClipyRepository private constructor(context: Context) {
         sourceUri = uri.toString(),
         displayName = name,
         sourceDurationMs = durationMs,
+        keyframeTimesMs = keyframeTimes,
         trimStartMs = 0L,
         trimEndMs = durationMs.coerceAtMost(12_000L),
         playheadMs = 0L,
@@ -124,7 +116,8 @@ class ClipyRepository private constructor(context: Context) {
   fun setPlayhead(positionMs: Long) {
     updateDraft {
       val timeline = sanitizeTimeline(it.sourceDurationMs, it.trimStartMs, it.trimEndMs, positionMs, it.timelineZoom)
-      it.copy(playheadMs = snapTimelineMs(timeline.playheadMs).coerceIn(timeline.trimStartMs, timeline.trimEndMs))
+      val snapped = snapToNearestKeyframe(timeline.playheadMs, it.keyframeTimesMs, fallbackStepMs = 33L)
+      it.copy(playheadMs = snapped.coerceIn(timeline.trimStartMs, timeline.trimEndMs))
     }
   }
 
@@ -143,21 +136,23 @@ class ClipyRepository private constructor(context: Context) {
   fun updateTrimWindow(startMs: Long = draftState.value.trimStartMs, endMs: Long = draftState.value.trimEndMs) {
     updateDraft {
       val timeline = sanitizeTimeline(it.sourceDurationMs, startMs, endMs, it.playheadMs, it.timelineZoom)
+      val snappedStart = snapToNearestKeyframe(timeline.trimStartMs, it.keyframeTimesMs)
+      val snappedEnd = snapToNearestKeyframe(timeline.trimEndMs, it.keyframeTimesMs).coerceAtLeast(snappedStart + 250L)
       it.copy(
-        trimStartMs = snapTimelineMs(timeline.trimStartMs),
-        trimEndMs = snapTimelineMs(timeline.trimEndMs).coerceAtLeast(timeline.trimStartMs + 250L),
-        playheadMs = timeline.playheadMs.coerceIn(timeline.trimStartMs, timeline.trimEndMs),
+        trimStartMs = snappedStart,
+        trimEndMs = snappedEnd.coerceAtMost(it.sourceDurationMs),
+        playheadMs = timeline.playheadMs.coerceIn(snappedStart, snappedEnd.coerceAtMost(it.sourceDurationMs)),
       )
     }
   }
 
   suspend fun completeOnboarding(languageCode: String) {
-    preferenceRepository.setLanguage(com.example.clipy.clipy.model.AppLanguage.entries.first { it.code == languageCode })
+    preferenceRepository.setLanguage(AppLanguage.entries.first { it.code == languageCode })
     preferenceRepository.setOnboardingCompleted(true)
   }
 
   suspend fun updateSettings(prefs: UserPreferences) {
-    preferenceRepository.setLanguage(com.example.clipy.clipy.model.AppLanguage.entries.first { it.code == prefs.languageCode })
+    preferenceRepository.setLanguage(AppLanguage.entries.first { it.code == prefs.languageCode })
     preferenceRepository.updateDefaults(
       gifFps = prefs.defaultGifFps,
       gifResolution = prefs.defaultGifResolution,
@@ -176,6 +171,7 @@ class ClipyRepository private constructor(context: Context) {
         sourceUri = record.sourceUri,
         displayName = record.outputName,
         sourceDurationMs = record.durationMs.coerceAtLeast(1_000L),
+        keyframeTimesMs = readKeyframeTimes(record.durationMs.coerceAtLeast(1_000L)),
         trimStartMs = 0L,
         trimEndMs = record.durationMs.coerceAtLeast(1_000L),
         playheadMs = 0L,
@@ -204,49 +200,54 @@ class ClipyRepository private constructor(context: Context) {
 
     val sanitizedDraft = current.copy(outputName = sanitizeOutputName(current.outputName))
     val saveBehavior = preferences.first().saveBehavior
-    val plan = buildExportPlan(sanitizedDraft)
     exportState.value = ExportJobState(jobId = sanitizedDraft.outputName, projectId = sanitizedDraft.id, progressPercent = 0, currentStep = "Preparing timeline", isCancellable = true, status = "Running")
-    val progressMarks = listOf(10, 26, 46, 70, 90, 100)
-    val steps = progressMarks.zip(plan.progressSteps)
-    steps.forEach { (progress, step) ->
-      currentCoroutineContext().ensureActive()
-      exportState.value = exportState.value.copy(progressPercent = progress, currentStep = step)
-      delay(220)
-    }
-
-    val outputUri = saveExportArtifact(sanitizedDraft, saveBehavior, plan)
-    val estimatedFileSize = estimateFileSize(sanitizedDraft)
-    dao.insertRecord(
-      ExportRecord(
-        sourceUri = sanitizedDraft.sourceUri,
-        outputUri = outputUri,
-        outputName = sanitizedDraft.outputName,
-        format = sanitizedDraft.exportFormat.name.uppercase(Locale.getDefault()),
-        durationMs = sanitizedDraft.trimEndMs - sanitizedDraft.trimStartMs,
-        cropRatio = sanitizedDraft.cropRatio.label,
-        speedMultiplier = sanitizedDraft.speedMultiplier,
-        isMuted = sanitizedDraft.isMuted,
-        isReversed = sanitizedDraft.isReversed,
-        isBoomerang = sanitizedDraft.isBoomerang,
-        watermarkText = sanitizedDraft.watermarkText,
-        gifFps = sanitizedDraft.gifFps.takeIf { sanitizedDraft.exportFormat == ExportFormat.Gif },
-        gifResolution = sanitizedDraft.gifResolution.takeIf { sanitizedDraft.exportFormat == ExportFormat.Gif },
-        mp4Quality = sanitizedDraft.mp4Quality.name.takeIf { sanitizedDraft.exportFormat == ExportFormat.Mp4 },
-        status = "Saved",
-        fileSizeBytes = estimatedFileSize,
-        createdAt = System.currentTimeMillis(),
+    runCatching {
+      exporter.export(sanitizedDraft, saveBehavior) { progress, step ->
+        exportState.value = exportState.value.copy(progressPercent = progress, currentStep = step, status = "Running", isCancellable = true)
+      }
+    }.onSuccess { result ->
+      dao.insertRecord(
+        ExportRecord(
+          sourceUri = sanitizedDraft.sourceUri,
+          outputUri = result.outputUri,
+          outputName = sanitizedDraft.outputName,
+          format = sanitizedDraft.exportFormat.name.uppercase(Locale.getDefault()),
+          durationMs = sanitizedDraft.trimEndMs - sanitizedDraft.trimStartMs,
+          cropRatio = sanitizedDraft.cropRatio.label,
+          speedMultiplier = sanitizedDraft.speedMultiplier,
+          isMuted = sanitizedDraft.isMuted,
+          isReversed = sanitizedDraft.isReversed,
+          isBoomerang = sanitizedDraft.isBoomerang,
+          watermarkText = sanitizedDraft.watermarkText,
+          gifFps = sanitizedDraft.gifFps.takeIf { sanitizedDraft.exportFormat == ExportFormat.Gif },
+          gifResolution = sanitizedDraft.gifResolution.takeIf { sanitizedDraft.exportFormat == ExportFormat.Gif },
+          mp4Quality = sanitizedDraft.mp4Quality.name.takeIf { sanitizedDraft.exportFormat == ExportFormat.Mp4 },
+          status = "Saved",
+          fileSizeBytes = result.fileSizeBytes,
+          createdAt = System.currentTimeMillis(),
+        )
       )
-    )
-    exportState.value = exportState.value.copy(
-      progressPercent = 100,
-      currentStep = exportCompletionStep(saveBehavior),
-      status = "Success",
-      isCancellable = false,
-      outputUri = outputUri,
-    )
+      exportState.value = exportState.value.copy(
+        progressPercent = 100,
+        currentStep = exportCompletionStep(saveBehavior),
+        status = "Success",
+        isCancellable = false,
+        outputUri = result.outputUri,
+        errorMessage = null,
+      )
+    }.onFailure { error ->
+      val cancelled = error is kotlinx.coroutines.CancellationException
+      exportState.value = exportState.value.copy(
+        status = if (cancelled) "Cancelled" else "Failed",
+        currentStep = if (cancelled) "Export cancelled" else "Export failed",
+        isCancellable = false,
+        errorMessage = if (cancelled) null else (error.message ?: "Unable to finish export."),
+      )
+    }
   }
 
   fun cancelExport() {
+    exporter.cancel()
     exportState.value = exportState.value.copy(status = "Cancelled", currentStep = "Export cancelled", isCancellable = false, errorMessage = null)
   }
 
@@ -260,20 +261,6 @@ class ClipyRepository private constructor(context: Context) {
         mp4Quality = prefs.defaultMp4Quality,
         isMuted = prefs.defaultMuteEnabled,
       )
-    }
-  }
-
-  private fun estimateFileSize(draft: ProjectDraft): Long {
-    val durationSeconds = ((draft.trimEndMs - draft.trimStartMs).coerceAtLeast(500L) / 1000f)
-    return if (draft.exportFormat == ExportFormat.Gif) {
-      (durationSeconds * draft.gifFps * 22_000L).toLong().coerceAtLeast(900_000L)
-    } else {
-      val qualityMultiplier = when (draft.mp4Quality) {
-        Mp4Quality.Fast -> 1L
-        Mp4Quality.Balanced -> 2L
-        Mp4Quality.Crisp -> 3L
-      }
-      (durationSeconds * qualityMultiplier * 1_700_000L).toLong().coerceAtLeast(2_400_000L)
     }
   }
 
@@ -295,78 +282,27 @@ class ClipyRepository private constructor(context: Context) {
     }
   }
 
-  private suspend fun saveExportArtifact(draft: ProjectDraft, saveBehavior: SaveBehavior, plan: ExportPlan): String {
-    val targetUri = createExportUri(draft, saveBehavior)
-    val payload = buildExportPayload(draft, plan)
-    val resolver = appContext.contentResolver
-    resolver.openOutputStream(targetUri)?.use { stream ->
-      stream.write(payload.toByteArray())
-      stream.flush()
-    } ?: throw FileNotFoundException("Unable to open export destination.")
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-      val values = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
-      resolver.update(targetUri, values, null, null)
+  private fun readKeyframeTimes(durationMs: Long): List<Long> {
+    val stepMs = when {
+      durationMs <= 6_000L -> 250L
+      durationMs <= 20_000L -> 500L
+      else -> 1_000L
     }
-    return targetUri.toString()
-  }
-
-  private fun createExportUri(draft: ProjectDraft, saveBehavior: SaveBehavior): Uri {
-    val resolver = appContext.contentResolver
-    val fileName = buildOutputFileName(draft)
-    val relativePath = when (draft.exportFormat) {
-      ExportFormat.Gif -> Environment.DIRECTORY_PICTURES + "/Clipy"
-      ExportFormat.Mp4 -> Environment.DIRECTORY_MOVIES + "/Clipy"
-    }
-    val values = ContentValues().apply {
-      put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-      put(MediaStore.MediaColumns.MIME_TYPE, if (draft.exportFormat == ExportFormat.Gif) "image/gif" else "video/mp4")
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
-        put(MediaStore.MediaColumns.IS_PENDING, 1)
+    return buildList {
+      var cursor = 0L
+      while (cursor < durationMs) {
+        add(cursor)
+        cursor += stepMs
       }
-      if (saveBehavior == SaveBehavior.ShareFirst) {
-        put(MediaStore.MediaColumns.TITLE, "Clipy share export")
-      }
+      add(durationMs)
     }
-    val collection = if (draft.exportFormat == ExportFormat.Gif) MediaStore.Images.Media.EXTERNAL_CONTENT_URI else MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-    return requireNotNull(resolver.insert(collection, values))
-  }
-
-  private fun buildExportPayload(draft: ProjectDraft, plan: ExportPlan): String {
-    val safeWatermark = draft.watermarkText.ifBlank { "none" }
-    val fpsOrQuality = if (draft.exportFormat == ExportFormat.Gif) {
-      "gif_fps=${draft.gifFps};gif_resolution=${draft.gifResolution}"
-    } else {
-      "mp4_quality=${draft.mp4Quality.name}"
-    }
-    return buildString {
-      appendLine("clipy_export=1")
-      appendLine("source=${draft.sourceUri}")
-      appendLine("trim=${draft.trimStartMs}-${draft.trimEndMs}")
-      appendLine("crop=${draft.cropRatio.label}")
-      appendLine("speed=${draft.speedMultiplier}")
-      appendLine("muted=${draft.isMuted}")
-      appendLine("reverse=${draft.isReversed}")
-      appendLine("boomerang=${draft.isBoomerang}")
-      appendLine("watermark=${safeWatermark}")
-      appendLine("watermark_position=${draft.watermarkPosition.name}")
-      appendLine(fpsOrQuality)
-      appendLine("ffmpeg=${plan.ffmpegCommand}")
-      appendLine("warnings=${plan.warnings.joinToString(" | ").ifBlank { "none" }}")
-    }
-  }
-
-  private fun buildOutputFileName(draft: ProjectDraft): String {
-    val extension = if (draft.exportFormat == ExportFormat.Gif) ".gif" else ".mp4"
-    return sanitizeOutputName(draft.outputName) + extension
   }
 
   data class AppSnapshot(
     val preferences: UserPreferences,
     val draft: ProjectDraft,
     val exportJobState: ExportJobState,
-    val history: List<com.example.clipy.clipy.model.ExportRecordUi>,
+    val history: List<ExportRecordUi>,
   )
 
   companion object {

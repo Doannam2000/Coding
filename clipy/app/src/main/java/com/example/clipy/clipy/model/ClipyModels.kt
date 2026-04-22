@@ -44,6 +44,7 @@ data class ProjectDraft(
   val sourceUri: String = "",
   val displayName: String = "No clip selected",
   val sourceDurationMs: Long = 12000L,
+  val keyframeTimesMs: List<Long> = emptyList(),
   val trimStartMs: Long = 0L,
   val trimEndMs: Long = 12000L,
   val playheadMs: Long = 0L,
@@ -211,6 +212,12 @@ fun timelineFrameStepMs(durationMs: Long): Long =
     durationMs <= 20_000L -> 50L
     else -> 100L
   }
+
+fun snapToNearestKeyframe(valueMs: Long, keyframeTimesMs: List<Long>, fallbackStepMs: Long = FRAME_STEP_MS): Long {
+  if (keyframeTimesMs.isEmpty()) return snapTimelineMs(valueMs, fallbackStepMs)
+  val closest = keyframeTimesMs.minByOrNull { kotlin.math.abs(it - valueMs) } ?: valueMs
+  return closest.coerceAtLeast(0L)
+}
 
 fun thumbnailCaptureTimesMs(timeline: TimelineSnapshot, frameCount: Int): List<Long> {
   if (frameCount <= 1) return listOf(timeline.trimStartMs)
