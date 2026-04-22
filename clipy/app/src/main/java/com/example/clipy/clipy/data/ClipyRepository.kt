@@ -83,6 +83,18 @@ class ClipyRepository private constructor(context: Context) {
     }
   }
 
+  fun canExport(): Boolean = draftState.value.sourceUri.isNotBlank()
+
+  fun blockExport() {
+    exportState.value = ExportJobState(
+      jobId = draftState.value.outputName,
+      projectId = draftState.value.id,
+      currentStep = "Import required",
+      status = "Blocked",
+      errorMessage = "Import a video before exporting.",
+    )
+  }
+
   suspend fun completeOnboarding(languageCode: String) {
     preferenceRepository.setLanguage(com.example.clipy.clipy.model.AppLanguage.entries.first { it.code == languageCode })
     preferenceRepository.setOnboardingCompleted(true)

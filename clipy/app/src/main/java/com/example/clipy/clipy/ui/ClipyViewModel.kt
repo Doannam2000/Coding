@@ -104,8 +104,13 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
     viewModelScope.launch { repository.reuseHistoryRecord(recordId) }
   }
 
-  fun startExport() {
+  fun startExport(): Boolean {
+    if (!repository.canExport()) {
+      repository.blockExport()
+      return false
+    }
     viewModelScope.launch { repository.startMockExport() }
+    return true
   }
 
   fun cancelExport() {

@@ -30,6 +30,8 @@
     <string name="editor_preview">Preview</string>
     <string name="editor_pick_video">Pick video</string>
     <string name="editor_pick_video_hint">Pick a clip to enable Media3 playback.</string>
+    <string name="editor_source_label">Source clip</string>
+    <string name="editor_video_required">Import a video to enable export and history-ready output.</string>
     <string name="section_trim">Trim</string>
     <string name="section_trim_hint">Quick presets keep the MVP lightweight while still feeling tactile.</string>
     <string name="trim_start">Start</string>
@@ -57,6 +59,7 @@
     <string name="settings_mute_default">Mute by default</string>
     <string name="settings_storage">Storage behavior</string>
     <string name="settings_storage_hint">Choose whether Clipy saves directly, asks each time, or opens sharing first.</string>
+    <string name="settings_uri_guidance">Clipy keeps read access to the selected video URI so you can revisit the same clip later.</string>
     <string name="save_behavior_app_folder">Save to Clipy folder</string>
     <string name="save_behavior_prompt">Ask every export</string>
     <string name="save_behavior_share_first">Open share sheet first</string>
@@ -74,6 +77,8 @@
     <string name="history_reuse">Reuse settings</string>
     <string name="export_title">Export progress</string>
     <string name="export_saved_locally">Saved locally</string>
+    <string name="export_save_behavior">Save behavior: %1$s</string>
+    <string name="export_source_missing">No source clip selected. Import a video before exporting.</string>
     <string name="export_processing_note">Processing stays on device so your source clip never leaves Clipy.</string>
     <string name="share">Share</string>
     <string name="open">Open</string>

@@ -183,8 +183,9 @@ fun ClipyApp(finishApp: () -> Unit) {
         onOpenHistory = { navController.navigate(HISTORY) },
         onOpenSettings = { navController.navigate(SETTINGS) },
         onExport = {
-          viewModel.startExport()
-          navController.navigate(EXPORT)
+          if (viewModel.startExport()) {
+            navController.navigate(EXPORT)
+          }
         },
         onExit = finishApp,
       )
@@ -422,10 +423,14 @@ private fun EditorScreen(
             stringResource(if (draft.exportFormat == ExportFormat.Gif) R.string.editor_gif_hint else R.string.editor_mp4_hint),
             color = ClipyMuted,
           )
+          if (draft.sourceUri.isBlank()) {
+            Text(stringResource(R.string.editor_video_required), color = MaterialTheme.colorScheme.error)
+          }
           Button(
             onClick = onExport,
             modifier = Modifier.fillMaxWidth().height(56.dp),
             colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary),
+            enabled = draft.sourceUri.isNotBlank(),
           ) {
             Text(stringResource(if (draft.exportFormat == ExportFormat.Gif) R.string.editor_export_gif else R.string.editor_export_mp4))
           }
@@ -472,6 +477,10 @@ private fun EditorScreen(
             )
           }
         }
+        Spacer(Modifier.height(12.dp))
+        Text(stringResource(R.string.editor_source_label), style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(4.dp))
+        Text(draft.displayName, color = ClipyMuted)
         Spacer(Modifier.height(12.dp))
         OutlinedButton(onClick = { picker.launch(arrayOf("video/*")) }, modifier = Modifier.fillMaxWidth()) {
           Icon(Icons.Rounded.FolderOpen, contentDescription = null)
@@ -605,6 +614,8 @@ private fun SettingsScreen(preferences: UserPreferences, onBack: () -> Unit, onS
         Text(stringResource(R.string.settings_storage_hint), color = ClipyMuted)
         Spacer(Modifier.height(12.dp))
         ChipRow(items = SaveBehavior.entries.toList(), selected = edited.saveBehavior, label = { Text(saveBehaviorLabel(it)) }, onSelected = { edited = edited.copy(saveBehavior = it) })
+        Spacer(Modifier.height(12.dp))
+        Text(stringResource(R.string.settings_uri_guidance), color = ClipyMuted)
       }
       SectionCard(title = stringResource(R.string.settings_about)) {
         Text(stringResource(R.string.settings_about_body), color = ClipyMuted)
@@ -677,6 +688,7 @@ private fun ExportScreen(state: AppSnapshot, onBack: () -> Unit, onCancel: () ->
   val context = LocalContext.current
   val job = state.exportJobState
   val latestExport = latestExportRecord(state)
+  val saveBehavior = saveBehaviorLabel(state.preferences.saveBehavior)
 
   Scaffold(
     containerColor = ClipyBackground,
@@ -698,6 +710,8 @@ private fun ExportScreen(state: AppSnapshot, onBack: () -> Unit, onCancel: () ->
         Spacer(Modifier.height(8.dp))
         Text(exportSummary(state), color = ClipyMuted)
         Spacer(Modifier.height(6.dp))
+        Text(stringResource(R.string.export_save_behavior, saveBehavior), color = ClipyMuted)
+        Spacer(Modifier.height(6.dp))
         Text(stringResource(R.string.export_processing_note), color = ClipyMuted)
         Spacer(Modifier.height(18.dp))
         LinearProgressIndicator(
@@ -711,6 +725,9 @@ private fun ExportScreen(state: AppSnapshot, onBack: () -> Unit, onCancel: () ->
         Text(job.currentStep, color = ClipyMuted)
         Spacer(Modifier.height(20.dp))
         when {
+          job.status == "Blocked" -> {
+            Text(job.errorMessage ?: stringResource(R.string.export_source_missing), color = MaterialTheme.colorScheme.error)
+          }
           job.status == "Success" -> {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
               AssistChip(
@@ -844,6 +861,9 @@ private fun ClipySurfaceVariant(): Color = MaterialTheme.colorScheme.surfaceVari
 
 private fun exportSummary(state: AppSnapshot): String {
   val draft = state.draft
+  if (draft.sourceUri.isBlank()) {
+    return ""
+  }
   return if (draft.exportFormat == ExportFormat.Gif) {
     "GIF • ${draft.cropRatio.label} • ${draft.gifFps} FPS • ${draft.gifResolution}"
   } else {

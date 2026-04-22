@@ -30,6 +30,8 @@
     <string name="editor_preview">Xem truoc</string>
     <string name="editor_pick_video">Chon video</string>
     <string name="editor_pick_video_hint">Chon mot clip de bat phat Media3.</string>
+    <string name="editor_source_label">Clip nguon</string>
+    <string name="editor_video_required">Can nhap video truoc khi xuat va luu vao lich su.</string>
     <string name="section_trim">Cat</string>
     <string name="section_trim_hint">Cac moc nhanh giu MVP gon nhe nhung van de thao tac.</string>
     <string name="trim_start">Bat dau</string>
@@ -57,6 +59,7 @@
     <string name="settings_mute_default">Mac dinh tat am</string>
     <string name="settings_storage">Cach luu</string>
     <string name="settings_storage_hint">Chon de Clipy luu truc tiep, hoi moi lan, hoac mo chia se truoc.</string>
+    <string name="settings_uri_guidance">Clipy giu quyen doc URI cua video da chon de ban co the mo lai clip sau nay.</string>
     <string name="save_behavior_app_folder">Luu vao thu muc Clipy</string>
     <string name="save_behavior_prompt">Hoi moi lan xuat</string>
     <string name="save_behavior_share_first">Mo chia se truoc</string>
@@ -74,6 +77,8 @@
     <string name="history_reuse">Dung lai thiet lap</string>
     <string name="export_title">Tien trinh xuat</string>
     <string name="export_saved_locally">Da luu cuc bo</string>
+    <string name="export_save_behavior">Cach luu: %1$s</string>
+    <string name="export_source_missing">Chua co clip nguon. Hay nhap video truoc khi xuat.</string>
     <string name="export_processing_note">Qua trinh xu ly dien ra tren thiet bi nen clip goc khong roi khoi Clipy.</string>
     <string name="share">Chia se</string>
     <string name="open">Mo</string>
