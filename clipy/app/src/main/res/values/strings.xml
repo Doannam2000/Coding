@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Clipy</string>
+    <string name="clipy_video_mime">video/*</string>
+    <string name="clipy_export_mime">video/mp4</string>
 </resources>

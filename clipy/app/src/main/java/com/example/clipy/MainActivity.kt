@@ -13,10 +13,13 @@ import com.example.clipy.theme.MyApplicationTheme
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-
     enableEdgeToEdge()
     setContent {
-      MyApplicationTheme { Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { MainNavigation() } }
+      MyApplicationTheme {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+          ClipyApp(finishApp = ::finishAffinity)
+        }
+      }
     }
   }
 }
