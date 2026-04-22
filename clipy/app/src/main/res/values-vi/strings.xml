@@ -64,6 +64,9 @@
     <string name="settings_storage">Cach luu</string>
     <string name="settings_storage_hint">Chon de Clipy luu truc tiep, hoi moi lan, hoac mo chia se truoc.</string>
     <string name="settings_uri_guidance">Clipy giu quyen doc URI cua video da chon de ban co the mo lai clip sau nay.</string>
+    <string name="settings_performance">Hieu nang</string>
+    <string name="settings_performance_hint">Dat muc cache thumbnail don gian de viec tua tren editor van muot voi cac clip ngan pho bien.</string>
+    <string name="settings_cache_limit_mb">Gioi han cache: %1$d MB</string>
     <string name="save_behavior_app_folder">Luu vao thu muc Clipy</string>
     <string name="save_behavior_prompt">Hoi moi lan xuat</string>
     <string name="save_behavior_share_first">Mo chia se truoc</string>

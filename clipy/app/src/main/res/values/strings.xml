@@ -64,6 +64,9 @@
     <string name="settings_storage">Storage behavior</string>
     <string name="settings_storage_hint">Choose whether Clipy saves directly, asks each time, or opens sharing first.</string>
     <string name="settings_uri_guidance">Clipy keeps read access to the selected video URI so you can revisit the same clip later.</string>
+    <string name="settings_performance">Performance</string>
+    <string name="settings_performance_hint">Set a simple thumbnail cache target to keep editor scrubbing responsive on common short clips.</string>
+    <string name="settings_cache_limit_mb">Cache limit: %1$d MB</string>
     <string name="save_behavior_app_folder">Save to Clipy folder</string>
     <string name="save_behavior_prompt">Ask every export</string>
     <string name="save_behavior_share_first">Open share sheet first</string>

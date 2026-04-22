@@ -42,7 +42,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.ExitToApp
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.History
@@ -128,6 +127,7 @@ private const val SETTINGS = "settings"
 private const val HISTORY = "history"
 private const val EXPORT = "export"
 private const val LANGUAGE = "language"
+private const val PERFORMANCE_CACHE_MB = 256
 
 @Composable
 fun ClipyApp(finishApp: () -> Unit) {
@@ -188,7 +188,6 @@ fun ClipyApp(finishApp: () -> Unit) {
             navController.navigate(EXPORT)
           }
         },
-        onExit = finishApp,
       )
     }
     composable(SETTINGS) {
@@ -381,7 +380,6 @@ private fun EditorScreen(
   onOpenHistory: () -> Unit,
   onOpenSettings: () -> Unit,
   onExport: () -> Unit,
-  onExit: () -> Unit,
 ) {
   val context = LocalContext.current
   val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -392,7 +390,6 @@ private fun EditorScreen(
       onImportVideo(it)
     }
   }
-  var showExitDialog by rememberSaveable { mutableStateOf(false) }
   val draft = state.draft
   val player = remember { ExoPlayer.Builder(context).build() }
 
@@ -419,7 +416,6 @@ private fun EditorScreen(
         actions = {
           IconButton(onClick = onOpenHistory) { Icon(Icons.Rounded.History, contentDescription = stringResource(R.string.nav_history)) }
           IconButton(onClick = onOpenSettings) { Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.nav_settings)) }
-          IconButton(onClick = { showExitDialog = true }) { Icon(Icons.AutoMirrored.Rounded.ExitToApp, contentDescription = stringResource(R.string.nav_exit)) }
         },
         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = ClipyBackground),
       )
@@ -558,15 +554,6 @@ private fun EditorScreen(
     }
   }
 
-  if (showExitDialog) {
-    AlertDialog(
-      onDismissRequest = { showExitDialog = false },
-      confirmButton = { TextButton(onClick = onExit) { Text(stringResource(R.string.nav_exit)) } },
-      dismissButton = { TextButton(onClick = { showExitDialog = false }) { Text(stringResource(R.string.dialog_stay)) } },
-      title = { Text(stringResource(R.string.dialog_exit_title)) },
-      text = { Text(stringResource(R.string.dialog_exit_body)) },
-    )
-  }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -581,6 +568,7 @@ private fun SettingsScreen(
   val context = LocalContext.current
   var edited by remember(preferences) { mutableStateOf(preferences) }
   var confirmExit by rememberSaveable { mutableStateOf(false) }
+  var cacheLimitMb by rememberSaveable { mutableStateOf(PERFORMANCE_CACHE_MB) }
 
   Scaffold(
     containerColor = ClipyBackground,
@@ -634,6 +622,11 @@ private fun SettingsScreen(
         ChipRow(items = SaveBehavior.entries.toList(), selected = edited.saveBehavior, label = { Text(saveBehaviorLabel(it)) }, onSelected = { edited = edited.copy(saveBehavior = it) })
         Spacer(Modifier.height(12.dp))
         Text(stringResource(R.string.settings_uri_guidance), color = ClipyMuted)
+      }
+      SectionCard(title = stringResource(R.string.settings_performance)) {
+        Text(stringResource(R.string.settings_performance_hint), color = ClipyMuted)
+        Spacer(Modifier.height(12.dp))
+        ChipRow(items = listOf(128, 256, 512), selected = cacheLimitMb, label = { Text(stringResource(R.string.settings_cache_limit_mb, it)) }, onSelected = { cacheLimitMb = it })
       }
       SectionCard(title = stringResource(R.string.settings_about)) {
         Text(stringResource(R.string.settings_about_body), color = ClipyMuted)
