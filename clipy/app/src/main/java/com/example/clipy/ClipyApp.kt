@@ -85,10 +85,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.os.LocaleListCompat
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
@@ -106,6 +109,8 @@ import com.example.clipy.clipy.model.Mp4Quality
 import com.example.clipy.clipy.model.SaveBehavior
 import com.example.clipy.clipy.model.UserPreferences
 import com.example.clipy.clipy.model.WatermarkPosition
+import com.example.clipy.clipy.model.exportMimeType
+import com.example.clipy.clipy.model.mimeType
 import com.example.clipy.clipy.ui.ClipyViewModel
 import com.example.clipy.theme.ClipyAccent
 import com.example.clipy.theme.ClipyBackground
@@ -131,6 +136,10 @@ fun ClipyApp(finishApp: () -> Unit) {
   val state by viewModel.appState.collectAsStateWithLifecycle()
   val navController = rememberNavController()
   var splashResolved by rememberSaveable { mutableStateOf(false) }
+
+  LaunchedEffect(state.preferences.languageCode) {
+    AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(state.preferences.languageCode))
+  }
 
   LaunchedEffect(state.preferences.onboardingCompleted, splashResolved) {
     if (splashResolved) {
@@ -248,13 +257,15 @@ private fun SplashScreen(onReady: () -> Unit) {
       Spacer(Modifier.height(18.dp))
       Text("Clipy", style = MaterialTheme.typography.headlineLarge, color = ClipyOnDark)
       Text(
-        "Fast social-ready video edits and GIF exports in seconds.",
+        stringResource(R.string.tagline),
         modifier = Modifier.padding(top = 8.dp, start = 24.dp, end = 24.dp),
         textAlign = TextAlign.Center,
         color = ClipyMuted,
       )
       Spacer(Modifier.height(40.dp))
       CircularProgressIndicator(color = ClipyPrimary)
+      Spacer(Modifier.height(12.dp))
+      Text(stringResource(R.string.splash_loading), color = ClipyMuted)
     }
   }
 }
@@ -264,9 +275,9 @@ private fun IntroScreen(selectedLanguage: String, onContinue: (AppLanguage) -> U
   var page by rememberSaveable { mutableStateOf(0) }
   var language by rememberSaveable { mutableStateOf(AppLanguage.entries.first { it.code == selectedLanguage }) }
   val cards = listOf(
-    "Trim fast" to "Cut social-ready clips in seconds with one streamlined workspace.",
-    "Frame every format" to "Switch between 1:1, 4:5, 9:16, and 16:9 without leaving the editor.",
-    "Export smart" to "Balance GIF size, MP4 quality, speed, watermark, mute, reverse, and boomerang in one flow.",
+    stringResource(R.string.onboarding_trim_title) to stringResource(R.string.onboarding_trim_body),
+    stringResource(R.string.onboarding_frame_title) to stringResource(R.string.onboarding_frame_body),
+    stringResource(R.string.onboarding_export_title) to stringResource(R.string.onboarding_export_body),
   )
 
   Scaffold(containerColor = ClipyBackground, contentWindowInsets = WindowInsets.safeDrawing) { padding ->
@@ -278,7 +289,7 @@ private fun IntroScreen(selectedLanguage: String, onContinue: (AppLanguage) -> U
       verticalArrangement = Arrangement.SpaceBetween,
     ) {
       Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        Text("Creator-ready in one pass", style = MaterialTheme.typography.headlineLarge)
+        Text(stringResource(R.string.intro_title), style = MaterialTheme.typography.headlineLarge)
         AnimatedContent(targetState = page, label = "introPage") { currentPage ->
           PremiumCard {
             Text(cards[currentPage].first, style = MaterialTheme.typography.headlineMedium)
@@ -302,7 +313,7 @@ private fun IntroScreen(selectedLanguage: String, onContinue: (AppLanguage) -> U
             )
           }
         }
-        Text("Choose language", style = MaterialTheme.typography.titleLarge)
+        Text(stringResource(R.string.intro_language_title), style = MaterialTheme.typography.titleLarge)
         AppLanguage.entries.forEach { option ->
           LanguageCard(language = option, selected = language == option, onClick = { language = option })
         }
@@ -325,10 +336,10 @@ private fun IntroScreen(selectedLanguage: String, onContinue: (AppLanguage) -> U
           modifier = Modifier.fillMaxWidth().height(56.dp),
           colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary),
         ) {
-          Text(if (page < cards.lastIndex) "Continue" else "Enter Clipy")
+          Text(stringResource(if (page < cards.lastIndex) R.string.intro_continue else R.string.intro_enter))
         }
         TextButton(onClick = { onContinue(language) }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-          Text("Skip")
+          Text(stringResource(R.string.intro_skip))
         }
       }
     }
@@ -362,7 +373,9 @@ private fun EditorScreen(
   val context = LocalContext.current
   val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
     uri?.let {
-      context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      runCatching {
+        context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      }
       onImportVideo(it)
     }
   }
@@ -404,9 +417,9 @@ private fun EditorScreen(
           modifier = Modifier.fillMaxWidth().padding(16.dp).navigationBarsPadding(),
           verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-          Text("Ready for export", style = MaterialTheme.typography.titleMedium)
+          Text(stringResource(R.string.editor_ready), style = MaterialTheme.typography.titleMedium)
           Text(
-            if (draft.exportFormat == ExportFormat.Gif) "Duration capped for compact sharing." else "MP4 quality stays tuned for social posting.",
+            stringResource(if (draft.exportFormat == ExportFormat.Gif) R.string.editor_gif_hint else R.string.editor_mp4_hint),
             color = ClipyMuted,
           )
           Button(
@@ -414,7 +427,7 @@ private fun EditorScreen(
             modifier = Modifier.fillMaxWidth().height(56.dp),
             colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary),
           ) {
-            Text(if (draft.exportFormat == ExportFormat.Gif) "Export GIF" else "Export MP4")
+            Text(stringResource(if (draft.exportFormat == ExportFormat.Gif) R.string.editor_export_gif else R.string.editor_export_mp4))
           }
         }
       }
@@ -429,7 +442,7 @@ private fun EditorScreen(
       verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
       PremiumCard {
-        Text("Preview", style = MaterialTheme.typography.titleLarge)
+        Text(stringResource(R.string.editor_preview), style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(12.dp))
         Box(
           modifier = Modifier
@@ -444,7 +457,7 @@ private fun EditorScreen(
               Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(56.dp), tint = ClipyOnDark)
               Spacer(Modifier.height(8.dp))
               Text(draft.displayName)
-              Text("Pick a clip to enable Media3 playback.", color = ClipyMuted)
+              Text(stringResource(R.string.editor_pick_video_hint), color = ClipyMuted)
             }
           } else {
             AndroidView(
@@ -463,51 +476,51 @@ private fun EditorScreen(
         OutlinedButton(onClick = { picker.launch(arrayOf("video/*")) }, modifier = Modifier.fillMaxWidth()) {
           Icon(Icons.Rounded.FolderOpen, contentDescription = null)
           Spacer(Modifier.width(8.dp))
-          Text("Pick video")
+          Text(stringResource(R.string.editor_pick_video))
         }
       }
 
-      SectionCard(title = "Trim") {
-        Text("Quick presets keep the MVP lightweight while still feeling tactile.", color = ClipyMuted)
+      SectionCard(title = stringResource(R.string.section_trim)) {
+        Text(stringResource(R.string.section_trim_hint), color = ClipyMuted)
         Spacer(Modifier.height(12.dp))
-        RangeRow(label = "Start", value = draft.trimStartMs, suffix = "ms", presets = listOf(0L, 1000L, 2000L, 3000L), onSelected = onTrimStartChange)
+        RangeRow(label = stringResource(R.string.trim_start), value = draft.trimStartMs, suffix = stringResource(R.string.time_ms), presets = listOf(0L, 1000L, 2000L, 3000L), onSelected = onTrimStartChange)
         Spacer(Modifier.height(12.dp))
-        RangeRow(label = "End", value = draft.trimEndMs, suffix = "ms", presets = listOf(6000L, 9000L, 12000L, 15000L), onSelected = onTrimEndChange)
+        RangeRow(label = stringResource(R.string.trim_end), value = draft.trimEndMs, suffix = stringResource(R.string.time_ms), presets = listOf(6000L, 9000L, 12000L, 15000L), onSelected = onTrimEndChange)
       }
 
-      SectionCard(title = "Frame") {
+      SectionCard(title = stringResource(R.string.section_frame)) {
         ChipRow(items = CropRatio.entries.toList(), selected = draft.cropRatio, label = { it.label }, onSelected = onCropChange)
       }
 
-      SectionCard(title = "Motion") {
+      SectionCard(title = stringResource(R.string.section_motion)) {
         ChipRow(items = listOf(0.5f, 1f, 1.5f, 2f), selected = draft.speedMultiplier, label = { "${it}x" }, onSelected = onSpeedChange)
         Spacer(Modifier.height(12.dp))
-        ToggleRow("Reverse", draft.isReversed, onToggleReverse)
-        ToggleRow("Boomerang", draft.isBoomerang, onToggleBoomerang)
+        ToggleRow(stringResource(R.string.toggle_reverse), draft.isReversed, onToggleReverse)
+        ToggleRow(stringResource(R.string.toggle_boomerang), draft.isBoomerang, onToggleBoomerang)
       }
 
-      SectionCard(title = "Audio") {
-        ToggleRow("Mute export", draft.isMuted, onToggleMute)
+      SectionCard(title = stringResource(R.string.section_audio)) {
+        ToggleRow(stringResource(R.string.toggle_mute), draft.isMuted, onToggleMute)
       }
 
-      SectionCard(title = "Watermark") {
+      SectionCard(title = stringResource(R.string.section_watermark)) {
         OutlinedTextField(
           value = draft.watermarkText,
           onValueChange = onWatermarkChange,
           modifier = Modifier.fillMaxWidth(),
-          label = { Text("Watermark text") },
+          label = { Text(stringResource(R.string.watermark_label)) },
           keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
         )
         Spacer(Modifier.height(12.dp))
         ChipRow(items = WatermarkPosition.entries.toList(), selected = draft.watermarkPosition, label = { it.label }, onSelected = onWatermarkPositionChange)
       }
 
-      SectionCard(title = "Output") {
+      SectionCard(title = stringResource(R.string.section_output)) {
         OutlinedTextField(
           value = draft.outputName,
           onValueChange = onOutputNameChange,
           modifier = Modifier.fillMaxWidth(),
-          label = { Text("Output name") },
+          label = { Text(stringResource(R.string.output_name_label)) },
         )
         Spacer(Modifier.height(12.dp))
         ChipRow(items = ExportFormat.entries.toList(), selected = draft.exportFormat, label = { it.name.uppercase() }, onSelected = onFormatChange)
@@ -538,6 +551,7 @@ private fun EditorScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsScreen(preferences: UserPreferences, onBack: () -> Unit, onSave: (UserPreferences) -> Unit, onExit: () -> Unit) {
+  val context = LocalContext.current
   var edited by remember(preferences) { mutableStateOf(preferences) }
   var confirmExit by rememberSaveable { mutableStateOf(false) }
 
@@ -545,8 +559,8 @@ private fun SettingsScreen(preferences: UserPreferences, onBack: () -> Unit, onS
     containerColor = ClipyBackground,
     topBar = {
       CenterAlignedTopAppBar(
-        title = { Text("Settings") },
-        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, contentDescription = "Back") } },
+        title = { Text(stringResource(R.string.settings_title)) },
+        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, contentDescription = stringResource(R.string.back)) } },
         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = ClipyBackground),
       )
     },
@@ -559,15 +573,20 @@ private fun SettingsScreen(preferences: UserPreferences, onBack: () -> Unit, onS
         .verticalScroll(rememberScrollState()),
       verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-      SectionCard(title = "Language") {
+      SectionCard(title = stringResource(R.string.settings_language)) {
         ChipRow(
           items = AppLanguage.entries.toList(),
           selected = AppLanguage.entries.first { it.code == edited.languageCode },
-          label = { if (it == AppLanguage.English) "English" else "Tiếng Việt" },
+          label = {
+            when (it) {
+              AppLanguage.English -> context.getString(R.string.language_english)
+              AppLanguage.Vietnamese -> context.getString(R.string.language_vietnamese)
+            }
+          },
           onSelected = { edited = edited.copy(languageCode = it.code) },
         )
       }
-      SectionCard(title = "Default export preferences") {
+      SectionCard(title = stringResource(R.string.settings_defaults)) {
         ChipRow(items = listOf(12, 18, 24, 30), selected = edited.defaultGifFps, label = { "${it} FPS" }, onSelected = { edited = edited.copy(defaultGifFps = it) })
         Spacer(Modifier.height(12.dp))
         ChipRow(items = listOf("480p", "720p", "1080p"), selected = edited.defaultGifResolution, label = { it }, onSelected = { edited = edited.copy(defaultGifResolution = it) })
@@ -576,27 +595,27 @@ private fun SettingsScreen(preferences: UserPreferences, onBack: () -> Unit, onS
         Spacer(Modifier.height(12.dp))
         ChipRow(items = CropRatio.entries.toList(), selected = edited.defaultCropRatio, label = { it.label }, onSelected = { edited = edited.copy(defaultCropRatio = it) })
         Spacer(Modifier.height(12.dp))
-        ToggleRow(title = "Mute by default", checked = edited.defaultMuteEnabled) {
+        ToggleRow(title = stringResource(R.string.settings_mute_default), checked = edited.defaultMuteEnabled) {
           edited = edited.copy(defaultMuteEnabled = !edited.defaultMuteEnabled)
         }
       }
-      SectionCard(title = "Storage behavior") {
-        Text("Choose whether Clipy saves directly, asks each time, or opens sharing first.", color = ClipyMuted)
+      SectionCard(title = stringResource(R.string.settings_storage)) {
+        Text(stringResource(R.string.settings_storage_hint), color = ClipyMuted)
         Spacer(Modifier.height(12.dp))
         ChipRow(items = SaveBehavior.entries.toList(), selected = edited.saveBehavior, label = { it.label }, onSelected = { edited = edited.copy(saveBehavior = it) })
       }
-      SectionCard(title = "About") {
-        Text("Privacy-first creator workflow with local history and reusable export presets.", color = ClipyMuted)
+      SectionCard(title = stringResource(R.string.settings_about)) {
+        Text(stringResource(R.string.settings_about_body), color = ClipyMuted)
       }
       Button(
         onClick = { onSave(edited); onBack() },
         modifier = Modifier.fillMaxWidth().height(56.dp),
         colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary),
       ) {
-        Text("Save settings")
+        Text(stringResource(R.string.settings_save))
       }
       OutlinedButton(onClick = { confirmExit = true }, modifier = Modifier.fillMaxWidth()) {
-        Text("Exit app")
+        Text(stringResource(R.string.settings_exit))
       }
     }
   }
@@ -604,10 +623,10 @@ private fun SettingsScreen(preferences: UserPreferences, onBack: () -> Unit, onS
   if (confirmExit) {
     AlertDialog(
       onDismissRequest = { confirmExit = false },
-      confirmButton = { TextButton(onClick = onExit) { Text("Exit") } },
-      dismissButton = { TextButton(onClick = { confirmExit = false }) { Text("Cancel") } },
-      title = { Text("Close Clipy") },
-      text = { Text("Use the explicit exit path required for the app shell.") },
+      confirmButton = { TextButton(onClick = onExit) { Text(stringResource(R.string.nav_exit)) } },
+      dismissButton = { TextButton(onClick = { confirmExit = false }) { Text(stringResource(R.string.dialog_cancel)) } },
+      title = { Text(stringResource(R.string.dialog_close_title)) },
+      text = { Text(stringResource(R.string.dialog_close_body)) },
     )
   }
 }
@@ -619,8 +638,8 @@ private fun HistoryScreen(state: AppSnapshot, onBack: () -> Unit, onReuse: (Long
     containerColor = ClipyBackground,
     topBar = {
       CenterAlignedTopAppBar(
-        title = { Text("Export history") },
-        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, contentDescription = "Back") } },
+        title = { Text(stringResource(R.string.history_title)) },
+        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, contentDescription = stringResource(R.string.back)) } },
         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = ClipyBackground),
       )
     },
@@ -635,9 +654,9 @@ private fun HistoryScreen(state: AppSnapshot, onBack: () -> Unit, onReuse: (Long
     ) {
       if (state.history.isEmpty()) {
         PremiumCard {
-          Text("No exports yet", style = MaterialTheme.typography.titleLarge)
+          Text(stringResource(R.string.history_empty_title), style = MaterialTheme.typography.titleLarge)
           Spacer(Modifier.height(8.dp))
-          Text("Finish your first GIF or MP4 to build a reusable local history.", color = ClipyMuted)
+          Text(stringResource(R.string.history_empty_body), color = ClipyMuted)
         }
       } else {
         state.history.forEach { item ->
@@ -653,13 +672,14 @@ private fun HistoryScreen(state: AppSnapshot, onBack: () -> Unit, onReuse: (Long
 private fun ExportScreen(state: AppSnapshot, onBack: () -> Unit, onCancel: () -> Unit) {
   val context = LocalContext.current
   val job = state.exportJobState
+  val latestExport = latestExportRecord(state)
 
   Scaffold(
     containerColor = ClipyBackground,
     topBar = {
       CenterAlignedTopAppBar(
-        title = { Text("Export progress") },
-        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, contentDescription = "Back") } },
+        title = { Text(stringResource(R.string.export_title)) },
+        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, contentDescription = stringResource(R.string.back)) } },
         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = ClipyBackground),
       )
     },
@@ -688,23 +708,29 @@ private fun ExportScreen(state: AppSnapshot, onBack: () -> Unit, onCancel: () ->
           job.status == "Success" -> {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
               AssistChip(
-                onClick = {},
-                label = { Text("Saved locally") },
-                leadingIcon = { Box(Modifier.size(8.dp).clip(CircleShape).background(ClipySuccess)) },
-              )
-              AssistChip(onClick = { shareUri(context, Uri.parse(state.history.firstOrNull()?.outputUri ?: "")) }, label = { Text("Share") })
-              AssistChip(onClick = { openUri(context, Uri.parse(state.history.firstOrNull()?.outputUri ?: "")) }, label = { Text("Open") })
+                 onClick = {},
+                 label = { Text(stringResource(R.string.export_saved_locally)) },
+                 leadingIcon = { Box(Modifier.size(8.dp).clip(CircleShape).background(ClipySuccess)) },
+               )
+               AssistChip(
+                 onClick = { shareUri(context, Uri.parse(latestExport?.outputUri.orEmpty()), state.draft.exportFormat.mimeType()) },
+                 label = { Text(stringResource(R.string.share)) },
+               )
+               AssistChip(
+                 onClick = { openUri(context, Uri.parse(latestExport?.outputUri.orEmpty()), state.draft.exportFormat.mimeType()) },
+                 label = { Text(stringResource(R.string.open)) },
+               )
+             }
+           }
+           job.isCancellable -> {
+             OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.export_cancel))
+              }
+            }
+            job.status == "Cancelled" -> {
+              Text(stringResource(R.string.export_cancelled_body), color = ClipyMuted)
             }
           }
-          job.isCancellable -> {
-            OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-              Text("Cancel export")
-            }
-          }
-          job.status == "Cancelled" -> {
-            Text("Export was cancelled before saving the final output.", color = ClipyMuted)
-          }
-        }
       }
     }
   }
@@ -725,20 +751,20 @@ private fun HistoryItemCard(item: ExportRecordUi, onReuse: () -> Unit) {
     }
     Spacer(Modifier.height(14.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-      OutlinedButton(onClick = { shareUri(context, Uri.parse(item.outputUri)) }, modifier = Modifier.weight(1f)) {
+      OutlinedButton(onClick = { shareUri(context, Uri.parse(item.outputUri), item.formatLabel.exportMimeType()) }, modifier = Modifier.weight(1f)) {
         Icon(Icons.Rounded.Share, contentDescription = null)
         Spacer(Modifier.width(8.dp))
-        Text("Share")
+        Text(stringResource(R.string.share))
       }
-      OutlinedButton(onClick = { openUri(context, Uri.parse(item.outputUri)) }, modifier = Modifier.weight(1f)) {
+      OutlinedButton(onClick = { openUri(context, Uri.parse(item.outputUri), item.formatLabel.exportMimeType()) }, modifier = Modifier.weight(1f)) {
         Icon(Icons.Rounded.OpenInNew, contentDescription = null)
         Spacer(Modifier.width(8.dp))
-        Text("Open")
+        Text(stringResource(R.string.open))
       }
     }
     Spacer(Modifier.height(10.dp))
     Button(onClick = onReuse, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary)) {
-      Text("Reuse settings")
+      Text(stringResource(R.string.history_reuse))
     }
   }
 }
@@ -791,7 +817,6 @@ private fun <T> ChipRow(items: List<T>, selected: T, label: (T) -> String, onSel
 @Composable
 private fun LanguageCard(language: AppLanguage, selected: Boolean, onClick: () -> Unit) {
   val borderColor = if (selected) ClipyPrimary else Color.Transparent
-  val label = if (language == AppLanguage.English) "English" else "Tiếng Việt"
   PremiumCard(
     modifier = Modifier
       .fillMaxWidth()
@@ -802,9 +827,9 @@ private fun LanguageCard(language: AppLanguage, selected: Boolean, onClick: () -
         onClick = onClick,
       ),
   ) {
-    Text(label, style = MaterialTheme.typography.titleLarge)
+    Text(languageLabel(language), style = MaterialTheme.typography.titleLarge)
     Spacer(Modifier.height(6.dp))
-    Text(if (language == AppLanguage.English) "Fast workflow copy in English" else "Giao diện thao tác nhanh bằng tiếng Việt", color = ClipyMuted)
+    Text(languageHelper(language), color = ClipyMuted)
   }
 }
 
@@ -820,29 +845,40 @@ private fun exportSummary(state: AppSnapshot): String {
   }
 }
 
-private fun shareUri(context: android.content.Context, uri: Uri) {
+private fun latestExportRecord(state: AppSnapshot): ExportRecordUi? =
+  state.history.firstOrNull { it.outputName == state.draft.outputName } ?: state.history.firstOrNull()
+
+@Composable
+private fun languageLabel(language: AppLanguage): String =
+  stringResource(if (language == AppLanguage.English) R.string.language_english else R.string.language_vietnamese)
+
+@Composable
+private fun languageHelper(language: AppLanguage): String =
+  stringResource(if (language == AppLanguage.English) R.string.language_english_helper else R.string.language_vietnamese_helper)
+
+private fun shareUri(context: android.content.Context, uri: Uri, mimeType: String) {
   if (uri.toString().isBlank()) return
   val intent = Intent(Intent.ACTION_SEND).apply {
-    type = "video/*"
+    type = mimeType
     putExtra(Intent.EXTRA_STREAM, uri)
     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
   }
   try {
-    context.startActivity(Intent.createChooser(intent, "Share export"))
+    context.startActivity(Intent.createChooser(intent, context.getString(R.string.share_export)))
   } catch (_: ActivityNotFoundException) {
-    Toast.makeText(context, "No app available to share this export.", Toast.LENGTH_SHORT).show()
+    Toast.makeText(context, context.getString(R.string.share_error), Toast.LENGTH_SHORT).show()
   }
 }
 
-private fun openUri(context: android.content.Context, uri: Uri) {
+private fun openUri(context: android.content.Context, uri: Uri, mimeType: String) {
   if (uri.toString().isBlank()) return
   val intent = Intent(Intent.ACTION_VIEW).apply {
-    setDataAndType(uri, "video/*")
+    setDataAndType(uri, mimeType)
     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
   }
   try {
     context.startActivity(intent)
   } catch (_: ActivityNotFoundException) {
-    Toast.makeText(context, "No app available to open this export.", Toast.LENGTH_SHORT).show()
+    Toast.makeText(context, context.getString(R.string.open_error), Toast.LENGTH_SHORT).show()
   }
 }

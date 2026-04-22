@@ -10,12 +10,12 @@ import com.example.clipy.clipy.model.ExportRecord
 import com.example.clipy.clipy.model.ExportRecordUi
 import com.example.clipy.clipy.model.Mp4Quality
 import com.example.clipy.clipy.model.ProjectDraft
+import com.example.clipy.clipy.model.SaveBehavior
 import com.example.clipy.clipy.model.UserPreferences
 import com.example.clipy.clipy.model.WatermarkPosition
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,6 +78,7 @@ class ClipyRepository private constructor(context: Context) {
         trimStartMs = 0L,
         trimEndMs = 12000L,
         outputName = name.substringBeforeLast('.').ifBlank { "clipy_export" },
+        exportFormat = ExportFormat.Gif,
       )
     }
   }
@@ -97,6 +98,7 @@ class ClipyRepository private constructor(context: Context) {
       saveBehavior = prefs.saveBehavior,
       defaultMuteEnabled = prefs.defaultMuteEnabled,
     )
+    applyDefaultSettingsToDraft()
   }
 
   suspend fun reuseHistoryRecord(recordId: Long) {
@@ -128,7 +130,9 @@ class ClipyRepository private constructor(context: Context) {
       delay(450)
       exportState.value = exportState.value.copy(progressPercent = ((index + 1) * 25), currentStep = step)
     }
-    val outputUri = "content://clipy/exports/${current.outputName}"
+    val outputUri = current.sourceUri.ifBlank { "content://clipy/exports/${current.outputName}" }
+    val statusLabel = if (current.sourceUri.isBlank()) "Preview only" else "Saved"
+    val estimatedFileSize = estimateFileSize(current)
     dao.insertRecord(
       ExportRecord(
         sourceUri = current.sourceUri,
@@ -145,12 +149,17 @@ class ClipyRepository private constructor(context: Context) {
         gifFps = current.gifFps.takeIf { current.exportFormat == ExportFormat.Gif },
         gifResolution = current.gifResolution.takeIf { current.exportFormat == ExportFormat.Gif },
         mp4Quality = current.mp4Quality.label.takeIf { current.exportFormat == ExportFormat.Mp4 },
-        status = "Saved",
-        fileSizeBytes = if (current.exportFormat == ExportFormat.Gif) 2_800_000L else 8_500_000L,
+        status = statusLabel,
+        fileSizeBytes = estimatedFileSize,
         createdAt = System.currentTimeMillis(),
       )
     )
-    exportState.value = exportState.value.copy(progressPercent = 100, currentStep = "Ready to share", status = "Success", isCancellable = false)
+    exportState.value = exportState.value.copy(
+      progressPercent = 100,
+      currentStep = exportCompletionStep(current.sourceUri.isNotBlank()),
+      status = "Success",
+      isCancellable = false,
+    )
   }
 
   fun cancelExport() {
@@ -169,6 +178,30 @@ class ClipyRepository private constructor(context: Context) {
       )
     }
   }
+
+  private fun estimateFileSize(draft: ProjectDraft): Long {
+    val durationSeconds = ((draft.trimEndMs - draft.trimStartMs).coerceAtLeast(500L) / 1000f)
+    return if (draft.exportFormat == ExportFormat.Gif) {
+      (durationSeconds * draft.gifFps * 22_000L).toLong().coerceAtLeast(900_000L)
+    } else {
+      val qualityMultiplier = when (draft.mp4Quality) {
+        Mp4Quality.Fast -> 1L
+        Mp4Quality.Balanced -> 2L
+        Mp4Quality.Crisp -> 3L
+      }
+      (durationSeconds * qualityMultiplier * 1_700_000L).toLong().coerceAtLeast(2_400_000L)
+    }
+  }
+
+  private suspend fun exportCompletionStep(hasOutputUri: Boolean): String {
+    val saveLabel = when (preferences.first().saveBehavior) {
+      SaveBehavior.AppFolder -> "Saved to Clipy flow"
+      SaveBehavior.PromptEachTime -> "Ready to choose save location"
+      SaveBehavior.ShareFirst -> "Ready to share"
+    }
+    return if (hasOutputUri) saveLabel else "Preview ready"
+  }
+
   data class AppSnapshot(
     val preferences: UserPreferences,
     val draft: ProjectDraft,
