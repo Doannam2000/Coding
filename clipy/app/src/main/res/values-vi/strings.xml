@@ -43,6 +43,11 @@
     <string name="toggle_mute">Tat am khi xuat</string>
     <string name="section_watermark">Watermark</string>
     <string name="watermark_label">Noi dung watermark</string>
+    <string name="watermark_top_left">Tren trai</string>
+    <string name="watermark_top_right">Tren phai</string>
+    <string name="watermark_bottom_left">Duoi trai</string>
+    <string name="watermark_bottom_right">Duoi phai</string>
+    <string name="watermark_center">Chinh giua</string>
     <string name="section_output">Dau ra</string>
     <string name="output_name_label">Ten tep xuat</string>
     <string name="settings_title">Cai dat</string>
@@ -52,8 +57,12 @@
     <string name="settings_mute_default">Mac dinh tat am</string>
     <string name="settings_storage">Cach luu</string>
     <string name="settings_storage_hint">Chon de Clipy luu truc tiep, hoi moi lan, hoac mo chia se truoc.</string>
+    <string name="save_behavior_app_folder">Luu vao thu muc Clipy</string>
+    <string name="save_behavior_prompt">Hoi moi lan xuat</string>
+    <string name="save_behavior_share_first">Mo chia se truoc</string>
     <string name="settings_about">Gioi thieu</string>
     <string name="settings_about_body">Quy trinh sang tao uu tien rieng tu voi lich su cuc bo va mau xuat co the tai su dung.</string>
+    <string name="settings_version">Phien ban %1$s</string>
     <string name="settings_save">Luu cai dat</string>
     <string name="settings_exit">Thoat ung dung</string>
     <string name="dialog_close_title">Dong Clipy</string>
@@ -65,6 +74,7 @@
     <string name="history_reuse">Dung lai thiet lap</string>
     <string name="export_title">Tien trinh xuat</string>
     <string name="export_saved_locally">Da luu cuc bo</string>
+    <string name="export_processing_note">Qua trinh xu ly dien ra tren thiet bi nen clip goc khong roi khoi Clipy.</string>
     <string name="share">Chia se</string>
     <string name="open">Mo</string>
     <string name="export_cancel">Huy xuat</string>
@@ -75,4 +85,8 @@
     <string name="share_export">Chia se tep xuat</string>
     <string name="share_error">Khong co ung dung phu hop de chia se tep xuat nay.</string>
     <string name="open_error">Khong co ung dung phu hop de mo tep xuat nay.</string>
+    <string name="history_format_badge">Dinh dang</string>
+    <string name="mp4_quality_fast">Nhanh 720p</string>
+    <string name="mp4_quality_balanced">Can bang 1080p</string>
+    <string name="mp4_quality_crisp">Net theo nguon</string>
 </resources>

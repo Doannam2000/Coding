@@ -56,7 +56,7 @@ class ClipyRepository private constructor(context: Context) {
           watermarkText = it.watermarkText,
           gifFps = it.gifFps,
           gifResolution = it.gifResolution,
-          mp4Quality = it.mp4Quality?.let { quality -> Mp4Quality.entries.firstOrNull { entry -> entry.label == quality } },
+          mp4Quality = it.mp4Quality?.let { quality -> Mp4Quality.entries.firstOrNull { entry -> entry.name == quality } },
         )
       }
     }
@@ -116,7 +116,7 @@ class ClipyRepository private constructor(context: Context) {
         exportFormat = if (record.format.equals("GIF", ignoreCase = true)) ExportFormat.Gif else ExportFormat.Mp4,
         gifFps = record.gifFps ?: it.gifFps,
         gifResolution = record.gifResolution ?: it.gifResolution,
-        mp4Quality = record.mp4Quality?.let { quality -> Mp4Quality.entries.firstOrNull { entry -> entry.label == quality } } ?: it.mp4Quality,
+        mp4Quality = record.mp4Quality?.let { quality -> Mp4Quality.entries.firstOrNull { entry -> entry.name == quality } } ?: it.mp4Quality,
         outputName = "${record.outputName}_redo",
       )
     }
@@ -148,7 +148,7 @@ class ClipyRepository private constructor(context: Context) {
         watermarkText = current.watermarkText,
         gifFps = current.gifFps.takeIf { current.exportFormat == ExportFormat.Gif },
         gifResolution = current.gifResolution.takeIf { current.exportFormat == ExportFormat.Gif },
-        mp4Quality = current.mp4Quality.label.takeIf { current.exportFormat == ExportFormat.Mp4 },
+        mp4Quality = current.mp4Quality.name.takeIf { current.exportFormat == ExportFormat.Mp4 },
         status = statusLabel,
         fileSizeBytes = estimatedFileSize,
         createdAt = System.currentTimeMillis(),
@@ -195,7 +195,7 @@ class ClipyRepository private constructor(context: Context) {
 
   private suspend fun exportCompletionStep(hasOutputUri: Boolean): String {
     val saveLabel = when (preferences.first().saveBehavior) {
-      SaveBehavior.AppFolder -> "Saved to Clipy flow"
+      SaveBehavior.AppFolder -> "Saved to Clipy folder"
       SaveBehavior.PromptEachTime -> "Ready to choose save location"
       SaveBehavior.ShareFirst -> "Ready to share"
     }

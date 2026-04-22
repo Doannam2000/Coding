@@ -15,26 +15,26 @@ enum class CropRatio(val label: String) {
   Landscape("16:9"),
 }
 
-enum class WatermarkPosition(val label: String) {
-  TopLeft("Top Left"),
-  TopRight("Top Right"),
-  BottomLeft("Bottom Left"),
-  BottomRight("Bottom Right"),
-  Center("Center"),
+enum class WatermarkPosition {
+  TopLeft,
+  TopRight,
+  BottomLeft,
+  BottomRight,
+  Center,
 }
 
 enum class ExportFormat { Gif, Mp4 }
 
-enum class Mp4Quality(val label: String) {
-  Fast("Fast 720p"),
-  Balanced("Balanced 1080p"),
-  Crisp("Crisp 4K source"),
+enum class Mp4Quality {
+  Fast,
+  Balanced,
+  Crisp,
 }
 
-enum class SaveBehavior(val label: String) {
-  AppFolder("Save to Clipy folder"),
-  PromptEachTime("Ask every export"),
-  ShareFirst("Open share sheet first"),
+enum class SaveBehavior {
+  AppFolder,
+  PromptEachTime,
+  ShareFirst,
 }
 
 data class ProjectDraft(

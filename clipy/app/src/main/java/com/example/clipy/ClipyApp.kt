@@ -41,11 +41,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.ExitToApp
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ExitToApp
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.History
-import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Share
@@ -404,9 +404,9 @@ private fun EditorScreen(
       CenterAlignedTopAppBar(
         title = { Text("Clipy") },
         actions = {
-          IconButton(onClick = onOpenHistory) { Icon(Icons.Rounded.History, contentDescription = "History") }
-          IconButton(onClick = onOpenSettings) { Icon(Icons.Rounded.Settings, contentDescription = "Settings") }
-          IconButton(onClick = { showExitDialog = true }) { Icon(Icons.Rounded.ExitToApp, contentDescription = "Exit") }
+          IconButton(onClick = onOpenHistory) { Icon(Icons.Rounded.History, contentDescription = stringResource(R.string.nav_history)) }
+          IconButton(onClick = onOpenSettings) { Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.nav_settings)) }
+          IconButton(onClick = { showExitDialog = true }) { Icon(Icons.AutoMirrored.Rounded.ExitToApp, contentDescription = stringResource(R.string.nav_exit)) }
         },
         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = ClipyBackground),
       )
@@ -512,7 +512,7 @@ private fun EditorScreen(
           keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
         )
         Spacer(Modifier.height(12.dp))
-        ChipRow(items = WatermarkPosition.entries.toList(), selected = draft.watermarkPosition, label = { it.label }, onSelected = onWatermarkPositionChange)
+        ChipRow(items = WatermarkPosition.entries.toList(), selected = draft.watermarkPosition, label = { Text(watermarkPositionLabel(it)) }, onSelected = onWatermarkPositionChange)
       }
 
       SectionCard(title = stringResource(R.string.section_output)) {
@@ -523,14 +523,14 @@ private fun EditorScreen(
           label = { Text(stringResource(R.string.output_name_label)) },
         )
         Spacer(Modifier.height(12.dp))
-        ChipRow(items = ExportFormat.entries.toList(), selected = draft.exportFormat, label = { it.name.uppercase() }, onSelected = onFormatChange)
+        ChipRow(items = ExportFormat.entries.toList(), selected = draft.exportFormat, label = { Text(it.name.uppercase()) }, onSelected = onFormatChange)
         Spacer(Modifier.height(12.dp))
         if (draft.exportFormat == ExportFormat.Gif) {
-          ChipRow(items = listOf(12, 18, 24, 30), selected = draft.gifFps, label = { "${it} FPS" }, onSelected = onGifFpsChange)
+          ChipRow(items = listOf(12, 18, 24, 30), selected = draft.gifFps, label = { Text("${it} FPS") }, onSelected = onGifFpsChange)
           Spacer(Modifier.height(12.dp))
-          ChipRow(items = listOf("480p", "720p", "1080p"), selected = draft.gifResolution, label = { it }, onSelected = onGifResolutionChange)
+          ChipRow(items = listOf("480p", "720p", "1080p"), selected = draft.gifResolution, label = { Text(it) }, onSelected = onGifResolutionChange)
         } else {
-          ChipRow(items = Mp4Quality.entries.toList(), selected = draft.mp4Quality, label = { it.label }, onSelected = onMp4QualityChange)
+           ChipRow(items = Mp4Quality.entries.toList(), selected = draft.mp4Quality, label = { Text(mp4QualityLabel(it)) }, onSelected = onMp4QualityChange)
         }
       }
       Spacer(Modifier.height(12.dp))
@@ -540,10 +540,10 @@ private fun EditorScreen(
   if (showExitDialog) {
     AlertDialog(
       onDismissRequest = { showExitDialog = false },
-      confirmButton = { TextButton(onClick = onExit) { Text("Exit") } },
-      dismissButton = { TextButton(onClick = { showExitDialog = false }) { Text("Stay") } },
-      title = { Text("Exit Clipy?") },
-      text = { Text("Your draft stays local on device. Leave the app when you are ready.") },
+      confirmButton = { TextButton(onClick = onExit) { Text(stringResource(R.string.nav_exit)) } },
+      dismissButton = { TextButton(onClick = { showExitDialog = false }) { Text(stringResource(R.string.dialog_stay)) } },
+      title = { Text(stringResource(R.string.dialog_exit_title)) },
+      text = { Text(stringResource(R.string.dialog_exit_body)) },
     )
   }
 }
@@ -560,7 +560,7 @@ private fun SettingsScreen(preferences: UserPreferences, onBack: () -> Unit, onS
     topBar = {
       CenterAlignedTopAppBar(
         title = { Text(stringResource(R.string.settings_title)) },
-        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, contentDescription = stringResource(R.string.back)) } },
+        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.back)) } },
         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = ClipyBackground),
       )
     },
@@ -578,22 +578,24 @@ private fun SettingsScreen(preferences: UserPreferences, onBack: () -> Unit, onS
           items = AppLanguage.entries.toList(),
           selected = AppLanguage.entries.first { it.code == edited.languageCode },
           label = {
-            when (it) {
-              AppLanguage.English -> context.getString(R.string.language_english)
-              AppLanguage.Vietnamese -> context.getString(R.string.language_vietnamese)
-            }
+            Text(
+              when (it) {
+                AppLanguage.English -> context.getString(R.string.language_english)
+                AppLanguage.Vietnamese -> context.getString(R.string.language_vietnamese)
+              },
+            )
           },
           onSelected = { edited = edited.copy(languageCode = it.code) },
         )
       }
       SectionCard(title = stringResource(R.string.settings_defaults)) {
-        ChipRow(items = listOf(12, 18, 24, 30), selected = edited.defaultGifFps, label = { "${it} FPS" }, onSelected = { edited = edited.copy(defaultGifFps = it) })
+        ChipRow(items = listOf(12, 18, 24, 30), selected = edited.defaultGifFps, label = { Text("${it} FPS") }, onSelected = { edited = edited.copy(defaultGifFps = it) })
         Spacer(Modifier.height(12.dp))
-        ChipRow(items = listOf("480p", "720p", "1080p"), selected = edited.defaultGifResolution, label = { it }, onSelected = { edited = edited.copy(defaultGifResolution = it) })
+        ChipRow(items = listOf("480p", "720p", "1080p"), selected = edited.defaultGifResolution, label = { Text(it) }, onSelected = { edited = edited.copy(defaultGifResolution = it) })
         Spacer(Modifier.height(12.dp))
-        ChipRow(items = Mp4Quality.entries.toList(), selected = edited.defaultMp4Quality, label = { it.label }, onSelected = { edited = edited.copy(defaultMp4Quality = it) })
+        ChipRow(items = Mp4Quality.entries.toList(), selected = edited.defaultMp4Quality, label = { Text(mp4QualityLabel(it)) }, onSelected = { edited = edited.copy(defaultMp4Quality = it) })
         Spacer(Modifier.height(12.dp))
-        ChipRow(items = CropRatio.entries.toList(), selected = edited.defaultCropRatio, label = { it.label }, onSelected = { edited = edited.copy(defaultCropRatio = it) })
+        ChipRow(items = CropRatio.entries.toList(), selected = edited.defaultCropRatio, label = { Text(it.label) }, onSelected = { edited = edited.copy(defaultCropRatio = it) })
         Spacer(Modifier.height(12.dp))
         ToggleRow(title = stringResource(R.string.settings_mute_default), checked = edited.defaultMuteEnabled) {
           edited = edited.copy(defaultMuteEnabled = !edited.defaultMuteEnabled)
@@ -602,10 +604,12 @@ private fun SettingsScreen(preferences: UserPreferences, onBack: () -> Unit, onS
       SectionCard(title = stringResource(R.string.settings_storage)) {
         Text(stringResource(R.string.settings_storage_hint), color = ClipyMuted)
         Spacer(Modifier.height(12.dp))
-        ChipRow(items = SaveBehavior.entries.toList(), selected = edited.saveBehavior, label = { it.label }, onSelected = { edited = edited.copy(saveBehavior = it) })
+        ChipRow(items = SaveBehavior.entries.toList(), selected = edited.saveBehavior, label = { Text(saveBehaviorLabel(it)) }, onSelected = { edited = edited.copy(saveBehavior = it) })
       }
       SectionCard(title = stringResource(R.string.settings_about)) {
         Text(stringResource(R.string.settings_about_body), color = ClipyMuted)
+        Spacer(Modifier.height(8.dp))
+        Text(settingsVersionLabel(), color = ClipyMuted, style = MaterialTheme.typography.bodyMedium)
       }
       Button(
         onClick = { onSave(edited); onBack() },
@@ -639,7 +643,7 @@ private fun HistoryScreen(state: AppSnapshot, onBack: () -> Unit, onReuse: (Long
     topBar = {
       CenterAlignedTopAppBar(
         title = { Text(stringResource(R.string.history_title)) },
-        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, contentDescription = stringResource(R.string.back)) } },
+        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.back)) } },
         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = ClipyBackground),
       )
     },
@@ -679,7 +683,7 @@ private fun ExportScreen(state: AppSnapshot, onBack: () -> Unit, onCancel: () ->
     topBar = {
       CenterAlignedTopAppBar(
         title = { Text(stringResource(R.string.export_title)) },
-        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, contentDescription = stringResource(R.string.back)) } },
+        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.back)) } },
         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = ClipyBackground),
       )
     },
@@ -693,6 +697,8 @@ private fun ExportScreen(state: AppSnapshot, onBack: () -> Unit, onCancel: () ->
         Text(state.draft.outputName, style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(8.dp))
         Text(exportSummary(state), color = ClipyMuted)
+        Spacer(Modifier.height(6.dp))
+        Text(stringResource(R.string.export_processing_note), color = ClipyMuted)
         Spacer(Modifier.height(18.dp))
         LinearProgressIndicator(
           progress = { job.progressPercent / 100f },
@@ -757,10 +763,10 @@ private fun HistoryItemCard(item: ExportRecordUi, onReuse: () -> Unit) {
         Text(stringResource(R.string.share))
       }
       OutlinedButton(onClick = { openUri(context, Uri.parse(item.outputUri), item.formatLabel.exportMimeType()) }, modifier = Modifier.weight(1f)) {
-        Icon(Icons.Rounded.OpenInNew, contentDescription = null)
-        Spacer(Modifier.width(8.dp))
-        Text(stringResource(R.string.open))
-      }
+         Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null)
+         Spacer(Modifier.width(8.dp))
+         Text(stringResource(R.string.open))
+       }
     }
     Spacer(Modifier.height(10.dp))
     Button(onClick = onReuse, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary)) {
@@ -801,15 +807,15 @@ private fun ToggleRow(title: String, checked: Boolean, onToggle: () -> Unit) {
 private fun RangeRow(label: String, value: Long, suffix: String, presets: List<Long>, onSelected: (Long) -> Unit) {
   Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
     Text("$label: $value $suffix", style = MaterialTheme.typography.titleMedium)
-    ChipRow(items = presets, selected = value, label = { "$it" }, onSelected = onSelected)
+    ChipRow(items = presets, selected = value, label = { Text("$it") }, onSelected = onSelected)
   }
 }
 
 @Composable
-private fun <T> ChipRow(items: List<T>, selected: T, label: (T) -> String, onSelected: (T) -> Unit) {
+private fun <T> ChipRow(items: List<T>, selected: T, label: @Composable (T) -> Unit, onSelected: (T) -> Unit) {
   Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
     items.forEach { item ->
-      FilterChip(selected = item == selected, onClick = { onSelected(item) }, label = { Text(label(item)) })
+      FilterChip(selected = item == selected, onClick = { onSelected(item) }, label = { label(item) })
     }
   }
 }
@@ -841,7 +847,7 @@ private fun exportSummary(state: AppSnapshot): String {
   return if (draft.exportFormat == ExportFormat.Gif) {
     "GIF • ${draft.cropRatio.label} • ${draft.gifFps} FPS • ${draft.gifResolution}"
   } else {
-    "MP4 • ${draft.cropRatio.label} • ${draft.mp4Quality.label}"
+    "MP4 • ${draft.cropRatio.label} • ${mp4QualitySummaryLabel(draft.mp4Quality)}"
   }
 }
 
@@ -855,6 +861,54 @@ private fun languageLabel(language: AppLanguage): String =
 @Composable
 private fun languageHelper(language: AppLanguage): String =
   stringResource(if (language == AppLanguage.English) R.string.language_english_helper else R.string.language_vietnamese_helper)
+
+@Composable
+private fun watermarkPositionLabel(position: WatermarkPosition): String =
+  stringResource(
+    when (position) {
+      WatermarkPosition.TopLeft -> R.string.watermark_top_left
+      WatermarkPosition.TopRight -> R.string.watermark_top_right
+      WatermarkPosition.BottomLeft -> R.string.watermark_bottom_left
+      WatermarkPosition.BottomRight -> R.string.watermark_bottom_right
+      WatermarkPosition.Center -> R.string.watermark_center
+    },
+  )
+
+@Composable
+private fun mp4QualityLabel(quality: Mp4Quality): String =
+  stringResource(
+    when (quality) {
+      Mp4Quality.Fast -> R.string.mp4_quality_fast
+      Mp4Quality.Balanced -> R.string.mp4_quality_balanced
+      Mp4Quality.Crisp -> R.string.mp4_quality_crisp
+    },
+  )
+
+@Composable
+private fun saveBehaviorLabel(saveBehavior: SaveBehavior): String =
+  stringResource(
+    when (saveBehavior) {
+      SaveBehavior.AppFolder -> R.string.save_behavior_app_folder
+      SaveBehavior.PromptEachTime -> R.string.save_behavior_prompt
+      SaveBehavior.ShareFirst -> R.string.save_behavior_share_first
+    },
+  )
+
+@Composable
+private fun settingsVersionLabel(): String {
+  val context = LocalContext.current
+  val versionName = runCatching {
+    context.packageManager.getPackageInfo(context.packageName, 0).versionName
+  }.getOrDefault("1.0") ?: "1.0"
+  return stringResource(R.string.settings_version, versionName)
+}
+
+private fun mp4QualitySummaryLabel(quality: Mp4Quality): String =
+  when (quality) {
+    Mp4Quality.Fast -> "Fast 720p"
+    Mp4Quality.Balanced -> "Balanced 1080p"
+    Mp4Quality.Crisp -> "Crisp source"
+  }
 
 private fun shareUri(context: android.content.Context, uri: Uri, mimeType: String) {
   if (uri.toString().isBlank()) return
