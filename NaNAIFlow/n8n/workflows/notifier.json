@@ -1,0 +1,81 @@
+{
+  "name": "bot-notifier",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "WorkflowTrigger",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        280,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const taskId = $json.task_id;\nconst stepNo = $json.step_no;\nconst rawStatus = ($json.status || 'info').toLowerCase();\nconst message = $json.message || '';\nconst pr = $json.pr_url || '';\nconst branch = $json.branch || '';\nconst commit = $json.commit || '';\nconst changedFiles = $json.changed_files || '';\nconst startedAt = $json.started_at ? new Date($json.started_at) : null;\nconst finishedAt = $json.finished_at ? new Date($json.finished_at) : null;\n\nconst emojiMap = { success: '✅', failed: '❌', info: 'ℹ️', warning: '⚠️' };\nconst emoji = emojiMap[rawStatus] || 'ℹ️';\nconst status = rawStatus.toUpperCase();\n\nlet elapsed = '';\nif (startedAt && finishedAt && !Number.isNaN(startedAt.getTime()) && !Number.isNaN(finishedAt.getTime())) {\n  const seconds = Math.max(0, Math.round((finishedAt.getTime() - startedAt.getTime()) / 1000));\n  elapsed = `${seconds}s`;\n}\n\nconst lines = [\n  `${emoji} Task #${taskId} | Step ${stepNo} | ${status}`,\n  message\n];\nif (elapsed) lines.push(`Time: ${elapsed}`);\nif (branch) lines.push(`Branch: ${branch}`);\nif (commit) lines.push(`Commit: ${commit}`);\nif (changedFiles) lines.push(`Files: ${changedFiles}`);\nif (pr) lines.push(`PR: ${pr}`);\n\nreturn [{ text: lines.filter(Boolean).join('\\n') }];"
+      },
+      "id": "FormatMessage",
+      "name": "Format Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{Number($env.ALLOWED_TELEGRAM_CHAT_ID || $env.ALLOWED_TELEGRAM_ID)}}",
+        "text": "={{$json.text}}",
+        "additionalFields": {}
+      },
+      "id": "SendTelegram",
+      "name": "Send Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        760,
+        260
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Format Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Message": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1"
+}

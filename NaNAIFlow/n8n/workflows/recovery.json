@@ -1,0 +1,120 @@
+{
+  "name": "bot-recovery",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      },
+      "id": "Every2Minutes",
+      "name": "Every 2 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "with timeout_cfg as (select coalesce((select value::int from bot_settings where key='task_timeout_minutes'), 30) as timeout_min), stale_steps as (select s.task_id, s.step_no from bot_task_steps s, timeout_cfg cfg where s.status='running' and s.started_at < now() - make_interval(mins => cfg.timeout_min)), reset_steps as (update bot_task_steps s set status='pending', updated_at=now() from stale_steps st where s.task_id = st.task_id and s.step_no = st.step_no returning s.task_id, s.step_no), reset_tasks as (update bot_tasks t set status='failed_retryable', next_run_at=now(), last_error='Recovered stale running step after timeout', updated_at=now() from (select distinct task_id from stale_steps) st where t.id = st.task_id returning t.id) select rs.task_id, rs.step_no from reset_steps rs;"
+      },
+      "id": "RecoverStaleSteps",
+      "name": "Recover Stale Steps",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        500,
+        260
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => ({ json: { task_id: item.json.task_id, step_no: item.json.step_no, status: 'warning', message: 'Recovered stale running step and re-queued task for retry.' } }));"
+      },
+      "id": "FormatRecovery",
+      "name": "Format Recovery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        740,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "bot-notifier",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "task_id": "={{$json.task_id}}",
+            "step_no": "={{$json.step_no}}",
+            "status": "={{$json.status}}",
+            "message": "={{$json.message}}"
+          }
+        }
+      },
+      "id": "NotifyRecovery",
+      "name": "Notify Recovery",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        980,
+        260
+      ]
+    }
+  ],
+  "connections": {
+    "Every 2 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Recover Stale Steps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recover Stale Steps": {
+      "main": [
+        [
+          {
+            "node": "Format Recovery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Recovery": {
+      "main": [
+        [
+          {
+            "node": "Notify Recovery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1"
+}

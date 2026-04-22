@@ -1,0 +1,14 @@
+{
+  "name": "nanai-flow-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "n8n + Telegram + OpenCode automation bot workspace",
+  "scripts": {
+    "validate:workflows": "powershell -NoProfile -Command \"Get-ChildItem -Path './n8n/workflows' -Filter '*.json' | ForEach-Object { Get-Content $_.FullName -Raw | ConvertFrom-Json | Out-Null }; Write-Host 'workflow json ok'\"",
+    "validate:scripts": "powershell -NoProfile -Command \"Add-Type -AssemblyName System.Management.Automation; Get-ChildItem -Path './scripts' -Filter '*.ps1' | ForEach-Object { $t=$null; $e=$null; [System.Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$t,[ref]$e) | Out-Null; if($e.Count -gt 0){ throw $e[0].Message } }; Write-Host 'powershell scripts ok'\"",
+    "check": "npm run validate:workflows && npm run validate:scripts"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

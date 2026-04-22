@@ -1,0 +1,331 @@
+{
+  "name": "bot-scheduler-and-planner",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "Cron",
+      "name": "Every Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update bot_tasks set status='ready', updated_at=now() where status in ('paused','failed_retryable') and next_run_at is not null and next_run_at <= now() returning id, repo, title, prompt, config_md_path, status;"
+      },
+      "id": "ReleaseDueTasks",
+      "name": "Release Due Tasks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        470,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select id, repo, title, prompt, config_md_path from bot_tasks where status='queued' and not exists (select 1 from bot_task_steps s where s.task_id = bot_tasks.id) order by created_at asc limit 10;"
+      },
+      "id": "SelectNeedPlan",
+      "name": "Select Need Plan",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        470,
+        420
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "PlanBatch",
+      "name": "Plan Batch",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        700,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update bot_tasks set status='planning', updated_at=now() where id=$1 returning id;",
+        "additionalFields": {
+          "queryParams": "={{[$json.id]}}"
+        }
+      },
+      "id": "MarkPlanning",
+      "name": "Mark Planning",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        920,
+        420
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "command": "=powershell -ExecutionPolicy Bypass -File \"D:\\Code\\NaNAIFlow\\scripts\\plan-task.ps1\" -TaskId {{$json.id}} -RepoPath \"D:\\Code\\{{$json.repo}}\" -TaskTitle \"{{$json.title}}\" -TaskPrompt \"{{$json.prompt}}\" -ConfigPath \"{{$json.config_md_path || 'docs/ai-spec.md'}}\" -DefaultTestCommand \"{{$env.DEFAULT_TEST_COMMAND}}\" -DefaultBuildCommand \"{{$env.DEFAULT_BUILD_COMMAND}}\""
+      },
+      "id": "RunPlanner",
+      "name": "Run Planner",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const out = ($json.stdout || '').trim();\nconst parsed = JSON.parse(out);\nif (parsed.status !== 'success') {\n  return [{ ok: false, message: parsed.message || 'Planner failed', taskId: $item(0).$node['Plan Batch'].json.id }];\n}\nconst steps = parsed.steps || [];\nreturn steps.map((s, idx) => ({\n  ok: true,\n  taskId: $item(0).$node['Plan Batch'].json.id,\n  step_no: Number(s.step_no || (idx + 1)),\n  title: s.title,\n  instruction: s.instruction,\n  test_command: s.test_command || $env.DEFAULT_TEST_COMMAND || 'npm test',\n  build_command: s.build_command || $env.DEFAULT_BUILD_COMMAND || 'npm run build'\n}));"
+      },
+      "id": "ParsePlan",
+      "name": "Parse Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.ok}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "PlanOk",
+      "name": "Plan OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1580,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into bot_task_steps(task_id, step_no, title, instruction, status, test_command, build_command, created_at, updated_at) values($1,$2,$3,$4,'pending',$5,$6,now(),now()) on conflict(task_id, step_no) do update set title=excluded.title, instruction=excluded.instruction, test_command=excluded.test_command, build_command=excluded.build_command, updated_at=now();",
+        "additionalFields": {
+          "queryParams": "={{[$json.taskId, $json.step_no, $json.title, $json.instruction, $json.test_command, $json.build_command]}}"
+        }
+      },
+      "id": "InsertStep",
+      "name": "Insert Step",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1800,
+        320
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update bot_tasks set status='failed_terminal', last_error=$2, updated_at=now() where id=$1 returning id;",
+        "additionalFields": {
+          "queryParams": "={{[$json.taskId, $json.message]}}"
+        }
+      },
+      "id": "MarkPlanFailed",
+      "name": "Mark Plan Failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1800,
+        520
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update bot_tasks set status='ready', next_run_at=now(), updated_at=now() where id=$1 returning id;",
+        "additionalFields": {
+          "queryParams": "={{[$json.taskId]}}"
+        }
+      },
+      "id": "MarkReadyAfterPlan",
+      "name": "Mark Ready After Plan",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2020,
+        320
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Minute": {
+      "main": [
+        [
+          {
+            "node": "Release Due Tasks",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Select Need Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Need Plan": {
+      "main": [
+        [
+          {
+            "node": "Plan Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Batch": {
+      "main": [
+        [
+          {
+            "node": "MarkPlanning",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Plan Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MarkPlanning": {
+      "main": [
+        [
+          {
+            "node": "Run Planner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Planner": {
+      "main": [
+        [
+          {
+            "node": "Parse Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Plan": {
+      "main": [
+        [
+          {
+            "node": "Plan OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan OK?": {
+      "main": [
+        [
+          {
+            "node": "Insert Step",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Plan Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Step": {
+      "main": [
+        [
+          {
+            "node": "Mark Ready After Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1"
+}
