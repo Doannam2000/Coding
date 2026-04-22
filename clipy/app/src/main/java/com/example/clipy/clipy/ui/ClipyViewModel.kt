@@ -41,11 +41,27 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
   }
 
   fun updateTrimStart(value: Long) {
-    repository.updateDraft { it.copy(trimStartMs = value.coerceAtMost(it.trimEndMs - 500L)) }
+    repository.updateTrimWindow(startMs = value)
   }
 
   fun updateTrimEnd(value: Long) {
-    repository.updateDraft { it.copy(trimEndMs = value.coerceAtLeast(it.trimStartMs + 500L)) }
+    repository.updateTrimWindow(endMs = value)
+  }
+
+  fun updatePlayhead(value: Long) {
+    repository.setPlayhead(value)
+  }
+
+  fun stepPlayheadForward() {
+    repository.stepPlayhead(1)
+  }
+
+  fun stepPlayheadBackward() {
+    repository.stepPlayhead(-1)
+  }
+
+  fun updateTimelineZoom(zoom: Float) {
+    repository.updateTimelineZoom(zoom)
   }
 
   fun updateCropRatio(ratio: CropRatio) {
@@ -109,7 +125,7 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
       repository.blockExport()
       return false
     }
-    viewModelScope.launch { repository.startMockExport() }
+    viewModelScope.launch { repository.startExport() }
     return true
   }
 

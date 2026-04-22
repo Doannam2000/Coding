@@ -3,6 +3,8 @@ package com.example.clipy
 import android.app.Application
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -17,6 +19,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -27,9 +32,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -81,13 +88,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.os.LocaleListCompat
 import androidx.appcompat.app.AppCompatDelegate
@@ -106,10 +121,16 @@ import com.example.clipy.clipy.model.ExportFormat
 import com.example.clipy.clipy.model.ExportRecordUi
 import com.example.clipy.clipy.model.Mp4Quality
 import com.example.clipy.clipy.model.SaveBehavior
+import com.example.clipy.clipy.model.thumbnailCaptureTimesMs
+import com.example.clipy.clipy.model.timelineFrameStepMs
+import com.example.clipy.clipy.model.timelineScrollForPlayhead
+import com.example.clipy.clipy.model.timelineThumbnailCount
+import com.example.clipy.clipy.model.timelineSnapshot
 import com.example.clipy.clipy.model.UserPreferences
 import com.example.clipy.clipy.model.WatermarkPosition
 import com.example.clipy.clipy.model.exportMimeType
 import com.example.clipy.clipy.model.mimeType
+import com.example.clipy.clipy.model.snapTimelineMs
 import com.example.clipy.clipy.ui.ClipyViewModel
 import com.example.clipy.theme.ClipyAccent
 import com.example.clipy.theme.ClipyBackground
@@ -119,6 +140,10 @@ import com.example.clipy.theme.ClipyPrimary
 import com.example.clipy.theme.ClipySecondary
 import com.example.clipy.theme.ClipySuccess
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlin.math.abs
+import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 private const val SPLASH = "splash"
 private const val INTRO = "intro"
@@ -171,6 +196,10 @@ fun ClipyApp(finishApp: () -> Unit) {
         onTrimEndChange = viewModel::updateTrimEnd,
         onCropChange = viewModel::updateCropRatio,
         onSpeedChange = viewModel::updateSpeed,
+        onPlayheadChange = viewModel::updatePlayhead,
+        onStepBackward = viewModel::stepPlayheadBackward,
+        onStepForward = viewModel::stepPlayheadForward,
+        onTimelineZoomChange = viewModel::updateTimelineZoom,
         onToggleMute = viewModel::toggleMuted,
         onToggleReverse = viewModel::toggleReverse,
         onToggleBoomerang = viewModel::toggleBoomerang,
@@ -367,6 +396,10 @@ private fun EditorScreen(
   onTrimEndChange: (Long) -> Unit,
   onCropChange: (CropRatio) -> Unit,
   onSpeedChange: (Float) -> Unit,
+  onPlayheadChange: (Long) -> Unit,
+  onStepBackward: () -> Unit,
+  onStepForward: () -> Unit,
+  onTimelineZoomChange: (Float) -> Unit,
   onToggleMute: () -> Unit,
   onToggleReverse: () -> Unit,
   onToggleBoomerang: () -> Unit,
@@ -392,6 +425,7 @@ private fun EditorScreen(
   }
   val draft = state.draft
   val player = remember { ExoPlayer.Builder(context).build() }
+  val timeline = remember(draft) { draft.timelineSnapshot() }
 
   LaunchedEffect(draft.sourceUri) {
     if (draft.sourceUri.isBlank()) {
@@ -400,6 +434,25 @@ private fun EditorScreen(
     } else {
       player.setMediaItem(MediaItem.fromUri(draft.sourceUri))
       player.prepare()
+      player.seekTo(draft.playheadMs)
+    }
+  }
+
+  LaunchedEffect(draft.playheadMs, draft.sourceUri) {
+    if (draft.sourceUri.isNotBlank() && abs(player.currentPosition - draft.playheadMs) > timelineFrameStepMs(draft.sourceDurationMs)) {
+      player.seekTo(draft.playheadMs)
+    }
+  }
+
+  LaunchedEffect(player, draft.trimStartMs, draft.trimEndMs, draft.sourceUri) {
+    while (isActive) {
+      delay(66)
+      if (draft.sourceUri.isBlank()) continue
+      val currentPosition = player.currentPosition.coerceAtLeast(0L)
+      if (player.isPlaying && currentPosition >= draft.trimEndMs) {
+        player.seekTo(draft.trimStartMs)
+      }
+      onPlayheadChange(currentPosition.coerceIn(draft.trimStartMs, draft.trimEndMs))
     }
   }
 
@@ -489,6 +542,8 @@ private fun EditorScreen(
         Text(stringResource(R.string.editor_source_label), style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(4.dp))
         Text(draft.displayName, color = ClipyMuted)
+        Spacer(Modifier.height(8.dp))
+        Text("${draft.trimStartMs} - ${draft.trimEndMs} ms • ${draft.sourceDurationMs} ms source", color = ClipyMuted, fontSize = 12.sp)
         Spacer(Modifier.height(12.dp))
         OutlinedButton(onClick = { picker.launch(arrayOf("video/*")) }, modifier = Modifier.fillMaxWidth()) {
           Icon(Icons.Rounded.FolderOpen, contentDescription = null)
@@ -500,9 +555,16 @@ private fun EditorScreen(
       SectionCard(title = stringResource(R.string.section_trim)) {
         Text(stringResource(R.string.section_trim_hint), color = ClipyMuted)
         Spacer(Modifier.height(12.dp))
-        RangeRow(label = stringResource(R.string.trim_start), value = draft.trimStartMs, suffix = stringResource(R.string.time_ms), presets = listOf(0L, 1000L, 2000L, 3000L), onSelected = onTrimStartChange)
-        Spacer(Modifier.height(12.dp))
-        RangeRow(label = stringResource(R.string.trim_end), value = draft.trimEndMs, suffix = stringResource(R.string.time_ms), presets = listOf(6000L, 9000L, 12000L, 15000L), onSelected = onTrimEndChange)
+        TimelineEditor(
+          sourceUri = draft.sourceUri,
+          timeline = timeline,
+          onTrimStartChange = onTrimStartChange,
+          onTrimEndChange = onTrimEndChange,
+          onPlayheadChange = onPlayheadChange,
+          onStepBackward = onStepBackward,
+          onStepForward = onStepForward,
+          onZoomChange = onTimelineZoomChange,
+        )
       }
 
       SectionCard(title = stringResource(R.string.section_frame)) {
@@ -746,6 +808,7 @@ private fun ExportScreen(state: AppSnapshot, onBack: () -> Unit, onCancel: () ->
   val context = LocalContext.current
   val job = state.exportJobState
   val latestExport = latestExportRecord(state)
+  val outputUri = job.outputUri ?: latestExport?.outputUri.orEmpty()
   val saveBehavior = saveBehaviorLabel(state.preferences.saveBehavior)
 
   Scaffold(
@@ -793,14 +856,14 @@ private fun ExportScreen(state: AppSnapshot, onBack: () -> Unit, onCancel: () ->
                  label = { Text(stringResource(R.string.export_saved_locally)) },
                  leadingIcon = { Box(Modifier.size(8.dp).clip(CircleShape).background(ClipySuccess)) },
                )
-               AssistChip(
-                 onClick = { shareUri(context, Uri.parse(latestExport?.outputUri.orEmpty()), state.draft.exportFormat.mimeType()) },
-                 label = { Text(stringResource(R.string.share)) },
-               )
-               AssistChip(
-                 onClick = { openUri(context, Uri.parse(latestExport?.outputUri.orEmpty()), state.draft.exportFormat.mimeType()) },
-                 label = { Text(stringResource(R.string.open)) },
-               )
+                AssistChip(
+                  onClick = { shareUri(context, Uri.parse(outputUri), state.draft.exportFormat.mimeType()) },
+                  label = { Text(stringResource(R.string.share)) },
+                )
+                AssistChip(
+                  onClick = { openUri(context, Uri.parse(outputUri), state.draft.exportFormat.mimeType()) },
+                  label = { Text(stringResource(R.string.open)) },
+                )
              }
            }
            job.isCancellable -> {
@@ -879,10 +942,155 @@ private fun ToggleRow(title: String, checked: Boolean, onToggle: () -> Unit) {
 }
 
 @Composable
-private fun RangeRow(label: String, value: Long, suffix: String, presets: List<Long>, onSelected: (Long) -> Unit) {
-  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    Text("$label: $value $suffix", style = MaterialTheme.typography.titleMedium)
-    ChipRow(items = presets, selected = value, label = { Text("$it") }, onSelected = onSelected)
+private fun TimelineEditor(
+  sourceUri: String,
+  timeline: com.example.clipy.clipy.model.TimelineSnapshot,
+  onTrimStartChange: (Long) -> Unit,
+  onTrimEndChange: (Long) -> Unit,
+  onPlayheadChange: (Long) -> Unit,
+  onStepBackward: () -> Unit,
+  onStepForward: () -> Unit,
+  onZoomChange: (Float) -> Unit,
+) {
+  val density = LocalDensity.current
+  val scrollState = rememberScrollState()
+  var viewportWidthPx by remember { mutableStateOf(with(density) { 320.dp.roundToPx() }) }
+  val contentWidth = (520.dp * timeline.zoom)
+  val contentWidthPx = with(density) { contentWidth.roundToPx() }
+  val handleWidth = 18.dp
+  val duration = timeline.durationMs.coerceAtLeast(1L)
+  val startFraction = timeline.trimStartMs / duration.toFloat()
+  val endFraction = timeline.trimEndMs / duration.toFloat()
+  val playheadFraction = timeline.playheadMs / duration.toFloat()
+  val thumbnailCount = remember(duration, timeline.zoom, viewportWidthPx) { timelineThumbnailCount(timeline.zoom, viewportWidthPx) }
+  val thumbnailTimes = remember(timeline, thumbnailCount) { thumbnailCaptureTimesMs(timeline, thumbnailCount) }
+
+  LaunchedEffect(playheadFraction, contentWidthPx, viewportWidthPx) {
+    val target = timelineScrollForPlayhead(playheadFraction, contentWidthPx, viewportWidthPx)
+    val maxValue = (contentWidthPx - viewportWidthPx).coerceAtLeast(0)
+    scrollState.animateScrollTo(target.coerceIn(0, maxValue))
+  }
+
+  Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+      OutlinedButton(onClick = onStepBackward) { Text("-1f") }
+      OutlinedButton(onClick = onStepForward) { Text("+1f") }
+      Text("${timeline.zoom}x zoom", color = ClipyMuted)
+    }
+    Box(
+      modifier = Modifier
+        .fillMaxWidth()
+        .height(118.dp)
+        .onSizeChanged { viewportWidthPx = it.width }
+        .clip(RoundedCornerShape(20.dp))
+        .background(Color(0xFF171B26))
+        .horizontalScroll(scrollState)
+        .pointerInput(timeline.zoom) {
+          detectTransformGestures { _, _, zoom, _ ->
+            onZoomChange((timeline.zoom * zoom).coerceIn(1f, 6f))
+          }
+        },
+    ) {
+      Box(modifier = Modifier.width(contentWidth).fillMaxSize()) {
+        Row(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+          thumbnailTimes.forEach { captureTimeMs ->
+            TimelineThumbnail(
+              sourceUri = sourceUri,
+              captureTimeMs = captureTimeMs,
+              modifier = Modifier.weight(1f).fillMaxSize(),
+            )
+          }
+        }
+        Box(
+          modifier = Modifier
+            .fillMaxHeight()
+            .width(handleWidth)
+            .offset { IntOffset(with(density) { (contentWidth.toPx() * startFraction).roundToInt() }, 0) }
+            .background(ClipyAccent.copy(alpha = 0.9f))
+            .pointerInput(timeline) {
+              detectDragGestures { change, dragAmount ->
+                change.consume()
+                val fractionDelta = dragAmount.x / with(density) { contentWidth.toPx() }
+                val target = snapTimelineMs((timeline.trimStartMs + (timeline.durationMs * fractionDelta)).roundToLong())
+                onTrimStartChange(target)
+              }
+            },
+        )
+        Box(
+          modifier = Modifier
+            .fillMaxHeight()
+            .width(handleWidth)
+            .offset { IntOffset((with(density) { contentWidth.toPx() } * endFraction).roundToInt() - with(density) { handleWidth.toPx().roundToInt() }, 0) }
+            .background(ClipyAccent.copy(alpha = 0.9f))
+            .pointerInput(timeline) {
+              detectDragGestures { change, dragAmount ->
+                change.consume()
+                val fractionDelta = dragAmount.x / with(density) { contentWidth.toPx() }
+                val target = snapTimelineMs((timeline.trimEndMs + (timeline.durationMs * fractionDelta)).roundToLong())
+                onTrimEndChange(target)
+              }
+            },
+        )
+        Box(
+          modifier = Modifier
+            .fillMaxHeight()
+            .width(3.dp)
+            .offset { IntOffset((with(density) { contentWidth.toPx() } * playheadFraction).roundToInt(), 0) }
+            .background(ClipyPrimary)
+            .pointerInput(timeline) {
+              detectDragGestures { change, dragAmount ->
+                change.consume()
+                val fractionDelta = dragAmount.x / with(density) { contentWidth.toPx() }
+                val target = snapTimelineMs((timeline.playheadMs + (timeline.durationMs * fractionDelta)).roundToLong())
+                onPlayheadChange(target)
+              }
+            },
+        )
+      }
+    }
+    Text("Loop ${timeline.trimStartMs} ms to ${timeline.trimEndMs} ms • Playhead ${timeline.playheadMs} ms", color = ClipyMuted, fontSize = 12.sp)
+  }
+}
+
+@Composable
+private fun TimelineThumbnail(sourceUri: String, captureTimeMs: Long, modifier: Modifier = Modifier) {
+  val context = LocalContext.current
+  var thumbnail by remember(sourceUri, captureTimeMs) { mutableStateOf<Bitmap?>(null) }
+
+  LaunchedEffect(sourceUri, captureTimeMs) {
+    if (sourceUri.isBlank()) {
+      thumbnail = null
+      return@LaunchedEffect
+    }
+    thumbnail = runCatching {
+      val retriever = MediaMetadataRetriever()
+      try {
+        retriever.setDataSource(context, Uri.parse(sourceUri))
+        retriever.getFrameAtTime(captureTimeMs * 1000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+      } finally {
+        runCatching { retriever.release() }
+      }
+    }.getOrNull()
+  }
+
+  Box(
+    modifier = modifier
+      .clip(RoundedCornerShape(14.dp))
+      .background(ClipySurfaceVariant()),
+    contentAlignment = Alignment.Center,
+  ) {
+    if (thumbnail != null) {
+      Image(
+        bitmap = thumbnail!!.asImageBitmap(),
+        contentDescription = null,
+        modifier = Modifier.fillMaxSize(),
+        contentScale = ContentScale.Crop,
+      )
+    } else {
+      Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("${captureTimeMs} ms", color = ClipyMuted, fontSize = 11.sp)
+      }
+    }
   }
 }
 
