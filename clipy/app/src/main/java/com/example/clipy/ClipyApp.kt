@@ -127,6 +127,7 @@ private const val EDITOR = "editor"
 private const val SETTINGS = "settings"
 private const val HISTORY = "history"
 private const val EXPORT = "export"
+private const val LANGUAGE = "language"
 
 @Composable
 fun ClipyApp(finishApp: () -> Unit) {
@@ -195,7 +196,18 @@ fun ClipyApp(finishApp: () -> Unit) {
         preferences = state.preferences,
         onBack = navController::popBackStack,
         onSave = viewModel::saveSettings,
+        onOpenLanguage = { navController.navigate(LANGUAGE) },
         onExit = finishApp,
+      )
+    }
+    composable(LANGUAGE) {
+      LanguageScreen(
+        selectedLanguage = state.preferences.languageCode,
+        onBack = navController::popBackStack,
+        onApply = {
+          viewModel.saveSettings(state.preferences.copy(languageCode = it.code))
+          navController.popBackStack()
+        },
       )
     }
     composable(HISTORY) {
@@ -559,7 +571,13 @@ private fun EditorScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsScreen(preferences: UserPreferences, onBack: () -> Unit, onSave: (UserPreferences) -> Unit, onExit: () -> Unit) {
+private fun SettingsScreen(
+  preferences: UserPreferences,
+  onBack: () -> Unit,
+  onSave: (UserPreferences) -> Unit,
+  onOpenLanguage: () -> Unit,
+  onExit: () -> Unit,
+) {
   val context = LocalContext.current
   var edited by remember(preferences) { mutableStateOf(preferences) }
   var confirmExit by rememberSaveable { mutableStateOf(false) }
@@ -583,19 +601,19 @@ private fun SettingsScreen(preferences: UserPreferences, onBack: () -> Unit, onS
       verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
       SectionCard(title = stringResource(R.string.settings_language)) {
-        ChipRow(
-          items = AppLanguage.entries.toList(),
-          selected = AppLanguage.entries.first { it.code == edited.languageCode },
-          label = {
-            Text(
-              when (it) {
+        Text(stringResource(R.string.settings_language_hint), color = ClipyMuted)
+        Spacer(Modifier.height(12.dp))
+        OutlinedButton(onClick = onOpenLanguage, modifier = Modifier.fillMaxWidth()) {
+          Text(
+            stringResource(
+              R.string.settings_language_current,
+              when (AppLanguage.entries.first { it.code == edited.languageCode }) {
                 AppLanguage.English -> context.getString(R.string.language_english)
                 AppLanguage.Vietnamese -> context.getString(R.string.language_vietnamese)
               },
-            )
-          },
-          onSelected = { edited = edited.copy(languageCode = it.code) },
-        )
+            ),
+          )
+        }
       }
       SectionCard(title = stringResource(R.string.settings_defaults)) {
         ChipRow(items = listOf(12, 18, 24, 30), selected = edited.defaultGifFps, label = { Text("${it} FPS") }, onSelected = { edited = edited.copy(defaultGifFps = it) })
@@ -643,6 +661,53 @@ private fun SettingsScreen(preferences: UserPreferences, onBack: () -> Unit, onS
       title = { Text(stringResource(R.string.dialog_close_title)) },
       text = { Text(stringResource(R.string.dialog_close_body)) },
     )
+  }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LanguageScreen(selectedLanguage: String, onBack: () -> Unit, onApply: (AppLanguage) -> Unit) {
+  var language by rememberSaveable { mutableStateOf(AppLanguage.entries.first { it.code == selectedLanguage }) }
+
+  Scaffold(
+    containerColor = ClipyBackground,
+    topBar = {
+      CenterAlignedTopAppBar(
+        title = { Text(stringResource(R.string.intro_language_title)) },
+        navigationIcon = {
+          IconButton(onClick = onBack) {
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.back))
+          }
+        },
+        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = ClipyBackground),
+      )
+    },
+    bottomBar = {
+      Surface(color = ClipySurfaceVariant(), tonalElevation = 4.dp) {
+        Button(
+          onClick = { onApply(language) },
+          modifier = Modifier.fillMaxWidth().padding(16.dp).navigationBarsPadding().height(56.dp),
+          colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary),
+        ) {
+          Text(stringResource(R.string.language_apply))
+        }
+      }
+    },
+  ) { padding ->
+    Column(
+      modifier = Modifier
+        .fillMaxSize()
+        .padding(padding)
+        .padding(16.dp),
+      verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+      PremiumCard {
+        Text(stringResource(R.string.language_screen_body), color = ClipyMuted)
+      }
+      AppLanguage.entries.forEach { option ->
+        LanguageCard(language = option, selected = language == option, onClick = { language = option })
+      }
+    }
   }
 }
 

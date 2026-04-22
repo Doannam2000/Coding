@@ -19,6 +19,8 @@
     <string name="language_vietnamese">Vietnamese</string>
     <string name="language_english_helper">Fast workflow copy in English</string>
     <string name="language_vietnamese_helper">Fast workflow copy in Vietnamese</string>
+    <string name="language_apply">Apply language</string>
+    <string name="language_screen_body">Choose the language Clipy uses across onboarding, settings, and the editing workflow.</string>
     <string name="nav_history">History</string>
     <string name="nav_settings">Settings</string>
     <string name="nav_exit">Exit</string>
@@ -55,6 +57,8 @@
     <string name="settings_title">Settings</string>
     <string name="back">Back</string>
     <string name="settings_language">Language</string>
+    <string name="settings_language_hint">Open a dedicated language selector so the app can refresh visible copy after saving.</string>
+    <string name="settings_language_current">Current language: %1$s</string>
     <string name="settings_defaults">Default export preferences</string>
     <string name="settings_mute_default">Mute by default</string>
     <string name="settings_storage">Storage behavior</string>

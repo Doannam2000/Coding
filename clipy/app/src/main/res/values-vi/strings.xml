@@ -19,6 +19,8 @@
     <string name="language_vietnamese">Tieng Viet</string>
     <string name="language_english_helper">Giao dien quy trinh nhanh bang tieng Anh</string>
     <string name="language_vietnamese_helper">Giao dien quy trinh nhanh bang tieng Viet</string>
+    <string name="language_apply">Ap dung ngon ngu</string>
+    <string name="language_screen_body">Chon ngon ngu ma Clipy su dung trong onboarding, cai dat va quy trinh bien tap.</string>
     <string name="nav_history">Lich su</string>
     <string name="nav_settings">Cai dat</string>
     <string name="nav_exit">Thoat</string>
@@ -55,6 +57,8 @@
     <string name="settings_title">Cai dat</string>
     <string name="back">Quay lai</string>
     <string name="settings_language">Ngon ngu</string>
+    <string name="settings_language_hint">Mo bo chon ngon ngu rieng de ung dung co the cap nhat noi dung hien thi sau khi luu.</string>
+    <string name="settings_language_current">Ngon ngu hien tai: %1$s</string>
     <string name="settings_defaults">Tuy chon xuat mac dinh</string>
     <string name="settings_mute_default">Mac dinh tat am</string>
     <string name="settings_storage">Cach luu</string>

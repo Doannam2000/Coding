@@ -2,18 +2,20 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-22 13:59 UTC
+- Last updated: 2026-04-22 17:28 UTC
 - App: Clipy
 - Slug: clipy
 - Tagline: Fast social-ready video edits and GIF exports in seconds.
 - Target users: Content creators, TikTok/Reels users, meme makers, casual users needing fast video editing
-- Design direction: Premium dark creator-tool aesthetic with fast, confident interactions. Use a cinematic charcoal base, vibrant violet-teal accents, rounded large surfaces, and strong visual hierarchy so editing controls feel immediate without becoming visually noisy. The UI should feel modern and social-content-focused, with compact control groups, clear progress states, and polished motion on key transitions.
+- Design direction: Premium dark creator-tool aesthetic with high contrast surfaces, rounded cards, and motion-led feedback. The UI should feel fast and focused like a lightweight mobile editor: large media preview, compact control groups, clear export emphasis, and minimal ornament beyond subtle gradients and tonal elevation.
 - Core constraints: Android only, no backend, lightweight but powerful, limit GIF size/duration, smooth UX, handle large videos safely
 Design style must align with: Modern dark creator-tool UI, clean layout, smooth animations, rounded cards, premium feel
 Typography should align with: Inter
 Feature priorities: Pick video, preview playback, trim start/end, crop ratios 1:1 4:5 9:16 16:9, change speed, mute audio, export GIF, export MP4, adjust GIF fps/resolution, adjust MP4 quality, reverse, boomerang, add text watermark, rename output, save, share, export progress, export history
 Must-have requirements: Kotlin, Jetpack Compose, MVVM, Media3 ExoPlayer, FFmpeg processing, Room database, DataStore, proper content URI handling, optimized performance
 Use Android applicationId/package name: com.nantcompany.clipy
+Feature priorities update: Add draggable trim timeline like CapCut with thumbnail preview, start/end handles, playhead, and real-time synced video preview
+Feature priorities update: Add a CapCut-style timeline editor with draggable start and end handles, thumbnail preview strip, movable playhead, and real-time synced video preview. Continue refining UX, gestures, and animations until the interaction feels as smooth and responsive as CapCut timeline editing.
 
 ### Core Features
 - Splash screen followed by onboarding and main app flow
@@ -47,5 +49,5 @@ Use Android applicationId/package name: com.nantcompany.clipy
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Room for export history and draft metadata, DataStore for language and default export preferences, MediaStore plus persisted content URIs for import/save handling
+- storage: Room for export history, DataStore for user preferences/defaults, ContentResolver plus scoped storage/content URI persistence for media access, and local file output storage for exported assets
 <!-- AUTO-GENERATED:CORE_END -->
