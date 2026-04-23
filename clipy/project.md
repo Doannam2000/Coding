@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-23 00:56 UTC
+- Last updated: 2026-04-23 01:44 UTC
 - App: Clipy
 - Slug: clipy
 - Tagline: Fast social-ready video edits and GIF exports in seconds.
 - Target users: Content creators, TikTok/Reels users, meme makers, casual users needing fast video editing
-- Design direction: Premium dark creator-tool interface built on Material 3 with dense but clear editing controls, rounded surfaces, bold contrast, and motion that feels fast and purposeful rather than playful. The visual language should support a single-flow editing experience where preview media stays dominant, controls feel production-ready, and export actions are always visually prioritized.
+- Design direction: Premium dark creator-tool interface with a fast single-screen workflow, using Material 3 foundations, soft-corner surfaces, high-contrast media-focused layouts, and restrained motion that feels polished without adding implementation risk.
 - Core constraints: Android only, no backend, lightweight but powerful, limit GIF size/duration, smooth UX, handle large videos safely
 Design style must align with: Modern dark creator-tool UI, clean layout, smooth animations, rounded cards, premium feel
 Typography should align with: Inter
@@ -20,6 +20,7 @@ Feature priorities update: Implement a CapCut-style timeline editor with pinch-t
 Feature priorities update: Implement the basic MVP first: pick video from gallery, preview video playback, draggable start and end trim selection, real-time synced preview while trimming, export as short MP4, export as GIF, save output to device, share exported file, simple export progress UI, and basic export history
 Feature priorities update: Add basic crop ratio presets for 1:1, 4:5, 9:16, and 16:9 so users can export clips for different social platforms
 Additional follow-up requirement: Add mute toggle so users can choose whether exported MP4 keeps or removes original audio
+Feature priorities update: Redesign the video editor UI and timeline to closely match CapCut style: large video preview on top, thumbnail timeline strip below, draggable start and end trim handles, central playhead, smooth horizontal scrolling, pinch-to-zoom timeline, dimmed unselected areas, highlighted selected range, real-time synced preview while dragging, looping preview for selected segment, and polished animations until the interaction feels as smooth and responsive as CapCut
 
 ### Core Features
 - Splash screen followed by onboarding and main app flow
@@ -44,15 +45,14 @@ Additional follow-up requirement: Add mute toggle so users can choose whether ex
 
 ### Main Screens
 - Splash Screen
-- Intro and Language Selection
-- Main Editor
-- Export Progress
-- Export Result and Share
-- Export History
-- Settings
+- Intro Screen
+- Language Selection Screen
+- Main Editor Screen
+- Export Progress Screen
+- History & Settings Screen
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Room for export history, DataStore for preferences, MediaStore/content URI access for imported and exported files, and local cached timeline thumbnails for smooth editor performance
+- storage: Room for export history, DataStore for preferences and onboarding/language state, MediaStore plus content URI permissions for input/output file access
 <!-- AUTO-GENERATED:CORE_END -->

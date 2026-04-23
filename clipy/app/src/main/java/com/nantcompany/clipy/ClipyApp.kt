@@ -207,6 +207,7 @@ fun ClipyApp(finishApp: () -> Unit) {
     composable(INTRO) {
       IntroScreen(
         selectedLanguage = state.preferences.languageCode,
+        onOpenLanguage = { navController.navigate(LANGUAGE) },
         onContinue = {
           viewModel.completeOnboarding(it)
           navController.navigate(HOME) { popUpTo(INTRO) { inclusive = true } }
@@ -351,7 +352,11 @@ private fun SplashScreen(onReady: () -> Unit) {
 }
 
 @Composable
-private fun IntroScreen(selectedLanguage: String, onContinue: (AppLanguage) -> Unit) {
+private fun IntroScreen(
+  selectedLanguage: String,
+  onOpenLanguage: () -> Unit,
+  onContinue: (AppLanguage) -> Unit,
+) {
   var page by rememberSaveable { mutableStateOf(0) }
   var language by rememberSaveable { mutableStateOf(AppLanguage.entries.first { it.code == selectedLanguage }) }
   val cards = listOf(
@@ -359,6 +364,10 @@ private fun IntroScreen(selectedLanguage: String, onContinue: (AppLanguage) -> U
     stringResource(R.string.onboarding_frame_title) to stringResource(R.string.onboarding_frame_body),
     stringResource(R.string.onboarding_export_title) to stringResource(R.string.onboarding_export_body),
   )
+
+  LaunchedEffect(selectedLanguage) {
+    language = AppLanguage.entries.first { it.code == selectedLanguage }
+  }
 
   Scaffold(containerColor = ClipyBackground, contentWindowInsets = WindowInsets.safeDrawing) { padding ->
     Column(
@@ -393,7 +402,16 @@ private fun IntroScreen(selectedLanguage: String, onContinue: (AppLanguage) -> U
             )
           }
         }
-        Text(stringResource(R.string.intro_language_title), style = MaterialTheme.typography.titleLarge)
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(stringResource(R.string.intro_language_title), style = MaterialTheme.typography.titleLarge)
+          TextButton(onClick = onOpenLanguage) {
+            Text(stringResource(R.string.settings_language))
+          }
+        }
         AppLanguage.entries.forEach { option ->
           LanguageCard(language = option, selected = language == option, onClick = { language = option })
         }
