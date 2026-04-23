@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-23 17:17 UTC
+- Last updated: 2026-04-23 17:58 UTC
 - App: Clipy
 - Slug: clipy
 - Tagline: Fast social-ready video edits and GIF exports in seconds.
 - Target users: Content creators, TikTok/Reels users, meme makers, casual users needing fast video editing
-- Design direction: Incrementally evolve the existing editor into a tighter CapCut-inspired composition: a dominant preview, dense precision timeline dock, restrained chrome, and premium contrast layering. Keep the current dark editor language, but sharpen hierarchy with smaller controls, cleaner spacing, stronger center alignment, and more tactile edit states so trimming, scrolling, zooming, and audio editing feel exact and deliberate rather than decorative.
+- Design direction: Incrementally evolve the existing single-route editor into a more CapCut-like mobile workspace by deepening the premium dark timeline language, tightening spatial rhythm, and adding smoother creator-first interaction states without changing navigation or export flow. Keep the current dense docked editor structure, but extend it with a clearer three-zone hierarchy: rounded preview stage on top, ultra-readable multi-track timeline core in the middle, and a compact active-tool rail with contextual controls below.
 - Core constraints: Android only, no backend, lightweight but powerful, limit GIF size/duration, smooth UX, handle large videos safely
 Design style must align with: Modern dark creator-tool UI, clean layout, smooth animations, rounded cards, premium feel
 Typography should align with: Inter
@@ -26,6 +26,64 @@ Additional follow-up requirement: [fixbug] Fix the editor UI because it does not
 Additional follow-up requirement: [fixbug] Fix the editor UI because it does not match CapCut style and the timeline feels laggy when swiping. Redesign the layout to look closer to CapCut with a cleaner preview area, thumbnail strip, selected range highlight, draggable trim handles, and central playhead. Optimize timeline rendering, gesture handling, thumbnail caching, lazy loading, and preview sync so horizontal swiping becomes smooth, responsive, and stable like CapCut.
 Additional follow-up requirement: Redesign and polish the editor UI to be small, clean, modern, and visually close to CapCut with pixel-level accuracy. Implement a full timeline system including video track with thumbnail strip, draggable trim handles, central playhead, smooth scrolling, and zoom. Add a separate audio track below the video timeline with waveform visualization and support trimming, cutting, and adjusting audio independently. Improve spacing, typography, colors, and interactions so the UI feels minimal, premium, and identical to CapCut experience.
 Additional follow-up requirement: Redesign and polish the editor UI to be small, clean, modern, and visually close to CapCut with pixel-level accuracy. Implement a full timeline system including video track with thumbnail strip, draggable trim handles, central playhead, smooth scrolling, and zoom. Add a separate audio track below the video timeline with waveform visualization and support trimming, cutting, and adjusting audio independently. Improve spacing, typography, colors, and interactions so the UI feels minimal, premium, and identical to CapCut experience.
+Additional follow-up requirement: [fixbug] Design a modern mobile video editing app UI inspired by CapCut.
+
+Style:
+- Clean, minimal, dark mode (primary: #0F0F0F, secondary: #1C1C1E)
+- Accent color: #2563EB (blue highlight for active tools)
+- Smooth, professional, creator-focused UI
+- Rounded corners (12–16dp), soft shadows, glassmorphism overlays
+- High contrast text (white/gray)
+
+Layout:
+1. Top Preview Area:
+   - Video preview with rounded corners
+   - Play/Pause button centered
+   - Timeline scrubber overlay
+   - Gesture support (pinch to zoom, drag to seek)
+
+2. Timeline Editor (Core focus like CapCut):
+   - Horizontal scrollable timeline
+   - Multiple tracks:
+     + Video track (thumbnails)
+     + Audio track (waveform)
+     + Text/Sticker track
+   - Draggable clips (trim, split, move)
+   - Current time indicator (vertical line)
+   - Smooth scrolling, no lag when dragging
+
+3. Bottom Tool Bar:
+   - Icons with labels (Edit, Audio, Text, Effects, Filters)
+   - Active state highlighted (blue)
+   - Expandable tool panel when selected
+
+4. Editing Panel:
+   - Context-based tools (Trim, Split, Speed, Volume, Fade)
+   - Slider controls (smooth, responsive)
+   - Real-time preview update
+
+5. Interaction:
+   - Smooth animation (like CapCut)
+   - No lag when scrubbing timeline
+   - Gesture-first UX (drag, pinch, swipe)
+   - Snap-to-grid timeline alignment
+
+6. Extra Features UI:
+   - Add audio button (+)
+   - Add text overlay
+   - Layer management
+   - Undo/Redo floating buttons
+
+Constraints:
+- UI must feel identical to CapCut experience
+- Timeline interaction must be ultra smooth (no jitter)
+- Prioritize usability for beginners and creators
+- Mobile-first design (Android & iOS)
+
+Output:
+- Full UI layout with all components
+- Clean spacing, no overlapping elements
+- Production-ready design system
 
 ### Core Features
 - Splash screen followed by onboarding and main app flow
@@ -50,11 +108,11 @@ Additional follow-up requirement: Redesign and polish the editor UI to be small,
 
 ### Main Screens
 - Editor Screen
-- Timeline Dock
-- Audio Editing Surface
+- Timeline Editor
+- Tool Workspace
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Keep existing Room/DataStore and editor persistence behavior unchanged; add editor-local timeline, zoom, waveform, and audio-segment state in memory, persisting audio edit metadata only through the current project/editor save path if it already exists
+- storage: Keep existing Room/DataStore and current editor persistence behavior unchanged; store the richer tool-panel, multi-track presentation, gesture, and clip-interaction state in editor-local/viewmodel memory, persisting only through the existing project save path if that path already supports timeline edit metadata.
 <!-- AUTO-GENERATED:CORE_END -->

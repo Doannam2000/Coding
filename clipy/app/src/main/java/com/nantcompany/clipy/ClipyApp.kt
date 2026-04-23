@@ -73,6 +73,15 @@ import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.FilterAlt
+import androidx.compose.material.icons.rounded.FitScreen
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.Redo
+import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.rounded.Undo
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -92,6 +101,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -265,12 +275,37 @@ private enum class EditorControlTab {
 private enum class EditorTrack {
   Video,
   Audio,
+  Text,
 }
 
 private enum class TimelineTool {
   Trim,
   Split,
   Gain,
+}
+
+private enum class EditorPrimaryTool {
+  Edit,
+  Audio,
+  Text,
+  Effects,
+  Filters,
+}
+
+private data class TextClipUi(
+  val id: String,
+  val label: String,
+  val startMs: Long,
+  val endMs: Long,
+)
+
+private data class UndoRedoState(
+  val undoStack: List<String> = emptyList(),
+  val redoStack: List<String> = emptyList(),
+) {
+  val canUndo: Boolean get() = undoStack.isNotEmpty()
+  val canRedo: Boolean get() = redoStack.isNotEmpty()
+  val lastActionLabel: String? get() = undoStack.lastOrNull()
 }
 
 @Composable
@@ -669,6 +704,7 @@ private fun EditorScreen(
   val player = remember { ExoPlayer.Builder(context).build() }
   val timeline = remember(draft) { draft.timelineSnapshot() }
   var selectedControlTab by rememberSaveable { mutableStateOf(EditorControlTab.Frame) }
+  var selectedPrimaryTool by rememberSaveable { mutableStateOf(EditorPrimaryTool.Edit) }
   var timelineInteracting by remember { mutableStateOf(false) }
   var visibleWindowStartMs by remember { mutableStateOf(0L) }
   var visibleWindowEndMs by remember { mutableStateOf(draft.sourceDurationMs) }
@@ -683,7 +719,28 @@ private fun EditorScreen(
   var audioSegments by rememberSaveable(draft.sourceUri) {
     mutableStateOf(listOf(AudioSegmentUi(id = "seg-0", startMs = 0L, endMs = draft.sourceDurationMs.coerceAtLeast(MIN_TRIM_GAP_MS * 2))))
   }
+  var textClips by rememberSaveable(draft.sourceUri) {
+    mutableStateOf(
+      listOf(
+        TextClipUi(
+          id = "text-0",
+          label = context.getString(R.string.editor_text_overlay_default),
+          startMs = draft.trimStartMs,
+          endMs = (draft.trimStartMs + 2500L).coerceAtMost(draft.trimEndMs),
+        ),
+      ),
+    )
+  }
+  var selectedTextClipId by rememberSaveable(draft.sourceUri) { mutableStateOf("text-0") }
   var selectedAudioSegmentId by rememberSaveable(draft.sourceUri) { mutableStateOf("seg-0") }
+  var previewZoom by rememberSaveable { mutableStateOf(1f) }
+  var previewFill by rememberSaveable { mutableStateOf(false) }
+  var toolPanelExpanded by rememberSaveable { mutableStateOf(true) }
+  var volumeAmount by rememberSaveable(draft.sourceUri) { mutableStateOf(1f) }
+  var fadeAmount by rememberSaveable(draft.sourceUri) { mutableStateOf(0.18f) }
+  var effectIntensity by rememberSaveable(draft.sourceUri) { mutableStateOf(0.42f) }
+  var filterStrength by rememberSaveable(draft.sourceUri) { mutableStateOf(0.36f) }
+  var undoRedoState by rememberSaveable { mutableStateOf(UndoRedoState()) }
   val timelineChrome = remember(draft.trimStartMs, draft.trimEndMs, draft.playheadMs, timelineInteracting) {
     TimelineChromeState(
       trimStartMs = draft.trimStartMs,
@@ -741,6 +798,31 @@ private fun EditorScreen(
     selectedTrack = EditorTrack.Video
     selectedTimelineTool = TimelineTool.Trim
     audioGain = 1f
+    textClips = listOf(
+      TextClipUi(
+        id = "text-0",
+        label = context.getString(R.string.editor_text_overlay_default),
+        startMs = draft.trimStartMs,
+        endMs = (draft.trimStartMs + 2500L).coerceAtMost(draft.trimEndMs),
+      ),
+    )
+    selectedTextClipId = textClips.firstOrNull()?.id ?: "text-0"
+    selectedPrimaryTool = EditorPrimaryTool.Edit
+    volumeAmount = 1f
+    fadeAmount = 0.18f
+    effectIntensity = 0.42f
+    filterStrength = 0.36f
+    previewZoom = 1f
+    previewFill = false
+    toolPanelExpanded = true
+    undoRedoState = UndoRedoState()
+  }
+
+  fun recordEditorAction(label: String) {
+    undoRedoState = undoRedoState.copy(
+      undoStack = (undoRedoState.undoStack + label).takeLast(12),
+      redoStack = emptyList(),
+    )
   }
 
   LaunchedEffect(draft.sourceUri) {
@@ -919,14 +1001,30 @@ private fun EditorScreen(
                   }
                 } else {
                   AndroidView(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                      .fillMaxSize()
+                      .pointerInput(draft.trimStartMs, draft.trimEndMs) {
+                        detectTransformGestures { _, pan, zoom, _ ->
+                          previewZoom = (previewZoom * zoom).coerceIn(1f, 3f)
+                          if (kotlin.math.abs(pan.x) > 6f) {
+                            val deltaMs = (pan.x * -6f).roundToLong()
+                            onPlayheadChange((draft.playheadMs + deltaMs).coerceIn(draft.trimStartMs, draft.trimEndMs))
+                          }
+                        }
+                      },
                     factory = { viewContext ->
                       PlayerView(viewContext).apply {
                         useController = false
+                        resizeMode = if (previewFill) 4 else 0
                         this.player = player
                       }
                     },
-                    update = { it.player = player },
+                    update = {
+                      it.player = player
+                      it.resizeMode = if (previewFill) 4 else 0
+                      it.scaleX = previewZoom
+                      it.scaleY = previewZoom
+                    },
                   )
                   EditorOverlayBadge(
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
@@ -936,6 +1034,35 @@ private fun EditorScreen(
                   EditorStatusPill(
                     modifier = Modifier.align(Alignment.TopEnd).padding(10.dp),
                     isLive = timelineChrome.isInteracting || isPlaying,
+                  )
+                  Text(
+                    text = stringResource(R.string.editor_preview_glass_hint),
+                    modifier = Modifier
+                      .align(Alignment.BottomStart)
+                      .padding(10.dp)
+                      .clip(RoundedCornerShape(14.dp))
+                      .background(Color.Black.copy(alpha = 0.32f))
+                      .padding(horizontal = 10.dp, vertical = 6.dp),
+                    color = ClipyOnDark.copy(alpha = 0.84f),
+                    style = MaterialTheme.typography.labelSmall,
+                  )
+                  Row(
+                    modifier = Modifier
+                      .align(Alignment.BottomEnd)
+                      .padding(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                  ) {
+                    AssistChip(onClick = { previewFill = false }, label = { Text(stringResource(R.string.editor_preview_fit)) })
+                    AssistChip(onClick = { previewFill = true }, label = { Text(stringResource(R.string.editor_preview_fill)) })
+                  }
+                  Box(
+                    modifier = Modifier
+                      .align(Alignment.BottomCenter)
+                      .padding(horizontal = 18.dp, vertical = 12.dp)
+                      .fillMaxWidth((draft.playheadMs - draft.trimStartMs).toFloat() / (draft.trimEndMs - draft.trimStartMs).coerceAtLeast(1L).toFloat())
+                      .height(3.dp)
+                      .clip(RoundedCornerShape(999.dp))
+                      .background(ClipyAccent.copy(alpha = 0.92f)),
                   )
                   Box(
                     modifier = Modifier
@@ -988,6 +1115,49 @@ private fun EditorScreen(
                 TimelineCompactBadge(primary = dockState.zoomLabel, secondary = stringResource(R.string.editor_timeline_ruler))
               }
 
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+              ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                  AssistChip(
+                    onClick = {
+                      val newId = "seg-${audioSegments.size}"
+                      val startMs = draft.playheadMs.coerceIn(0L, draft.sourceDurationMs.coerceAtLeast(MIN_TRIM_GAP_MS * 2) - MIN_TRIM_GAP_MS)
+                      val endMs = (startMs + 1800L).coerceAtMost(draft.sourceDurationMs.coerceAtLeast(startMs + MIN_TRIM_GAP_MS))
+                      audioSegments = audioSegments + AudioSegmentUi(newId, startMs, endMs)
+                      selectedAudioSegmentId = newId
+                      selectedTrack = EditorTrack.Audio
+                      selectedPrimaryTool = EditorPrimaryTool.Audio
+                      recordEditorAction(context.getString(R.string.editor_history_add_audio))
+                    },
+                    leadingIcon = { Icon(Icons.Rounded.MusicNote, contentDescription = null) },
+                    label = { Text(stringResource(R.string.editor_quick_add_audio)) },
+                  )
+                  AssistChip(
+                    onClick = {
+                      val newId = "text-${textClips.size}"
+                      val startMs = draft.playheadMs.coerceIn(draft.trimStartMs, draft.trimEndMs)
+                      val endMs = (startMs + 2200L).coerceAtMost(draft.trimEndMs)
+                      textClips = textClips + TextClipUi(newId, context.getString(R.string.editor_text_overlay_default), startMs, endMs)
+                      selectedTextClipId = newId
+                      selectedTrack = EditorTrack.Text
+                      selectedPrimaryTool = EditorPrimaryTool.Text
+                      recordEditorAction(context.getString(R.string.editor_history_add_text))
+                    },
+                    leadingIcon = { Icon(Icons.Rounded.TextFields, contentDescription = null) },
+                    label = { Text(stringResource(R.string.editor_quick_add_text)) },
+                  )
+                }
+                Surface(shape = RoundedCornerShape(999.dp), color = Color(0x33161C28)) {
+                  Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Layers, contentDescription = null, tint = ClipyAccent)
+                    Text(stringResource(R.string.editor_quick_layers), color = ClipyOnDark, style = MaterialTheme.typography.labelMedium)
+                  }
+                }
+              }
+
               Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
@@ -1024,6 +1194,8 @@ private fun EditorScreen(
                     audioTrimEndMs = audioTrimEndMs,
                     audioSegments = audioSegments,
                     selectedAudioSegmentId = selectedAudioSegmentId,
+                    textClips = textClips,
+                    selectedTextClipId = selectedTextClipId,
                     audioGain = audioGain,
                     isMuted = draft.isMuted,
                     onTrimStartChange = onTrimStartChange,
@@ -1035,6 +1207,7 @@ private fun EditorScreen(
                     onTrackSelected = { selectedTrack = it },
                     onToolSelected = { selectedTimelineTool = it },
                     onAudioSegmentSelected = { selectedAudioSegmentId = it },
+                    onTextClipSelected = { selectedTextClipId = it },
                     onAudioCut = {
                       val updated = splitAudioSegments(audioSegments, selectedAudioSegmentId, draft.playheadMs)
                       audioSegments = updated
@@ -1054,8 +1227,12 @@ private fun EditorScreen(
                   Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                  ) {
-                    EditorStatChip(label = stringResource(R.string.editor_timeline_focus_video), value = if (selectedTrack == EditorTrack.Video) stringResource(R.string.editor_timeline_video_track) else stringResource(R.string.editor_timeline_audio_track), modifier = Modifier.weight(1f))
+                    ) {
+                    EditorStatChip(label = stringResource(R.string.editor_timeline_focus_video), value = when (selectedTrack) {
+                      EditorTrack.Video -> stringResource(R.string.editor_timeline_video_track)
+                      EditorTrack.Audio -> stringResource(R.string.editor_timeline_audio_track)
+                      EditorTrack.Text -> stringResource(R.string.editor_timeline_text_track)
+                    }, modifier = Modifier.weight(1f))
                     EditorStatChip(label = stringResource(R.string.editor_duration_label), value = dockState.durationLabel, modifier = Modifier.weight(1f))
                     EditorStatChip(label = stringResource(R.string.editor_timeline_ruler), value = dockState.visibleWindowLabel, modifier = Modifier.weight(1f))
                   }
@@ -1075,33 +1252,79 @@ private fun EditorScreen(
           modifier = Modifier.fillMaxWidth().padding(14.dp),
           verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-          Text(stringResource(R.string.editor_tool_rail), style = MaterialTheme.typography.titleMedium)
-          Text(stringResource(R.string.editor_tools_compact), color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
-          EditorControlTabs(selected = selectedControlTab, onSelected = { selectedControlTab = it })
-          when (selectedControlTab) {
-            EditorControlTab.Frame -> {
-              EditorControlGroup(title = stringResource(R.string.section_frame)) {
-                ChipRow(items = CropRatio.entries.toList(), selected = draft.cropRatio, label = { Text(it.label) }, onSelected = onCropChange)
-              }
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+              Text(stringResource(R.string.editor_creator_rail_title), style = MaterialTheme.typography.titleMedium)
+              Text(stringResource(R.string.editor_context_panel_hint), color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
             }
-            EditorControlTab.Motion -> {
-              EditorControlGroup(title = stringResource(R.string.section_motion)) {
-                ChipRow(items = listOf(0.5f, 1f, 1.5f, 2f), selected = draft.speedMultiplier, label = { Text("${it}x") }, onSelected = onSpeedChange)
-              }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+              MiniActionButton(
+                icon = Icons.Rounded.Undo,
+                label = stringResource(R.string.editor_undo),
+                enabled = undoRedoState.canUndo,
+                onClick = {
+                  val label = undoRedoState.undoStack.lastOrNull() ?: return@MiniActionButton
+                  undoRedoState = undoRedoState.copy(
+                    undoStack = undoRedoState.undoStack.dropLast(1),
+                    redoStack = undoRedoState.redoStack + label,
+                  )
+                },
+              )
+              MiniActionButton(
+                icon = Icons.Rounded.Redo,
+                label = stringResource(R.string.editor_redo),
+                enabled = undoRedoState.canRedo,
+                onClick = {
+                  val label = undoRedoState.redoStack.lastOrNull() ?: return@MiniActionButton
+                  undoRedoState = undoRedoState.copy(
+                    undoStack = undoRedoState.undoStack + label,
+                    redoStack = undoRedoState.redoStack.dropLast(1),
+                  )
+                },
+              )
             }
-            EditorControlTab.Output -> {
-              EditorControlGroup(title = stringResource(R.string.section_output)) {
-                ChipRow(items = ExportFormat.entries.toList(), selected = draft.exportFormat, label = { Text(it.name.uppercase()) }, onSelected = onFormatChange)
-                Spacer(Modifier.height(10.dp))
-                if (draft.exportFormat == ExportFormat.Gif) {
-                  ChipRow(items = listOf(12, 18, 24, 30), selected = draft.gifFps, label = { Text("${it} FPS") }, onSelected = onGifFpsChange)
-                  Spacer(Modifier.height(10.dp))
-                  ChipRow(items = listOf("480p", "720p", "1080p"), selected = draft.gifResolution, label = { Text(it) }, onSelected = onGifResolutionChange)
-                } else {
-                  ChipRow(items = Mp4Quality.entries.toList(), selected = draft.mp4Quality, label = { Text(mp4QualityLabel(it)) }, onSelected = onMp4QualityChange)
-                }
-              }
-            }
+          }
+          PrimaryToolRail(
+            selected = selectedPrimaryTool,
+            onSelected = {
+              selectedPrimaryTool = it
+              toolPanelExpanded = true
+              recordEditorAction(context.getString(R.string.editor_history_tool_switch))
+            },
+          )
+          if (toolPanelExpanded) {
+            ContextToolPanel(
+              selectedPrimaryTool = selectedPrimaryTool,
+              cropRatio = draft.cropRatio,
+              speed = draft.speedMultiplier,
+              volumeAmount = volumeAmount,
+              fadeAmount = fadeAmount,
+              effectIntensity = effectIntensity,
+              filterStrength = filterStrength,
+              exportFormat = draft.exportFormat,
+              gifFps = draft.gifFps,
+              gifResolution = draft.gifResolution,
+              mp4Quality = draft.mp4Quality,
+              audioSplitEnabled = selectedAudioSegmentId != null,
+              onCropChange = onCropChange,
+              onSpeedChange = onSpeedChange,
+              onVolumeChange = {
+                volumeAmount = it
+                audioGain = it
+              },
+              onFadeChange = { fadeAmount = it },
+              onEffectIntensityChange = { effectIntensity = it },
+              onFilterStrengthChange = { filterStrength = it },
+              onFormatChange = onFormatChange,
+              onGifFpsChange = onGifFpsChange,
+              onGifResolutionChange = onGifResolutionChange,
+              onMp4QualityChange = onMp4QualityChange,
+              onCollapse = { toolPanelExpanded = false },
+            )
           }
           Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             CompactToggleCard(title = stringResource(R.string.toggle_mute), checked = draft.isMuted, onToggle = onToggleMute, modifier = Modifier.weight(1f))
@@ -1561,6 +1784,8 @@ private fun TimelineEditor(
   audioTrimEndMs: Long,
   audioSegments: List<AudioSegmentUi>,
   selectedAudioSegmentId: String?,
+  textClips: List<TextClipUi>,
+  selectedTextClipId: String?,
   audioGain: Float,
   isMuted: Boolean,
   onTrimStartChange: (Long) -> Unit,
@@ -1572,6 +1797,7 @@ private fun TimelineEditor(
   onTrackSelected: (EditorTrack) -> Unit,
   onToolSelected: (TimelineTool) -> Unit,
   onAudioSegmentSelected: (String) -> Unit,
+  onTextClipSelected: (String) -> Unit,
   onAudioCut: () -> Unit,
   onAudioGainChange: (Float) -> Unit,
   onInteractionChange: (Boolean) -> Unit,
@@ -1790,10 +2016,10 @@ private fun TimelineEditor(
     audioSegments.firstOrNull { it.id == selectedAudioSegmentId }
   }
 
-  val activeTrackTrimLabel = if (selectedTrack == EditorTrack.Video) {
-    formatTimelineWindow(timeline.trimStartMs, timeline.trimEndMs)
-  } else {
-    formatTimelineWindow(audioTrimStartMs, audioTrimEndMs)
+  val activeTrackTrimLabel = when (selectedTrack) {
+    EditorTrack.Video -> formatTimelineWindow(timeline.trimStartMs, timeline.trimEndMs)
+    EditorTrack.Audio -> formatTimelineWindow(audioTrimStartMs, audioTrimEndMs)
+    EditorTrack.Text -> formatTimelineWindow(timeline.trimStartMs, timeline.trimEndMs)
   }
   val playheadOffsetPx by remember(timeline.playheadMs, duration, trackWidthPx, currentScrollPx, viewportWidthPx) {
     derivedStateOf {
@@ -1833,7 +2059,7 @@ private fun TimelineEditor(
     Box(
       modifier = Modifier
         .fillMaxWidth()
-        .height(236.dp)
+        .height(298.dp)
         .onSizeChanged { viewportWidthPx = it.width }
         .clip(RoundedCornerShape(16.dp))
         .background(Color(0xFF080B11))
@@ -1909,6 +2135,26 @@ private fun TimelineEditor(
             durationMs = duration,
             trackWidthPx = trackWidthPx,
             onSegmentSelected = onAudioSegmentSelected,
+          )
+        }
+        TimelineTrackLane(
+          modifier = Modifier.fillMaxWidth().weight(0.9f),
+          title = stringResource(R.string.editor_timeline_text_track),
+          selected = selectedTrack == EditorTrack.Text,
+          iconLabel = stringResource(R.string.editor_timeline_text_icon),
+          subtitle = stringResource(R.string.editor_quick_add_text),
+          onSelect = { onTrackSelected(EditorTrack.Text) },
+        ) {
+          TextOverlayTrack(
+            modifier = Modifier.fillMaxSize().padding(horizontal = with(density) { edgePadding.toDp() }),
+            clips = textClips,
+            selectedClipId = selectedTextClipId,
+            currentScrollPx = currentScrollPx,
+            viewportWidthPx = viewportWidthPx,
+            durationMs = duration,
+            trackWidthPx = trackWidthPx,
+            selectedTrack = selectedTrack,
+            onClipSelected = onTextClipSelected,
           )
         }
       }
@@ -2063,7 +2309,7 @@ private fun TimelineEditor(
             .background(if (isUserInteracting) ClipyPrimary else ClipyAccent),
         )
       }
-      if (selectedTrack == EditorTrack.Audio && selectedTool == TimelineTool.Split) {
+      if (selectedTrack != EditorTrack.Video && selectedTool == TimelineTool.Split) {
         Box(
           modifier = Modifier
             .offset { IntOffset((playheadOffsetPx - 1.dp.toPx()).roundToInt(), 148.dp.roundToPx()) }
@@ -2261,6 +2507,7 @@ private fun TimelineTrackHeader(
     ) {
       TimelineFilterChip(selected = selectedTrack == EditorTrack.Video, onClick = { onTrackSelected(EditorTrack.Video) }, label = stringResource(R.string.editor_timeline_video_track))
       TimelineFilterChip(selected = selectedTrack == EditorTrack.Audio, onClick = { onTrackSelected(EditorTrack.Audio) }, label = stringResource(R.string.editor_timeline_audio_track))
+      TimelineFilterChip(selected = selectedTrack == EditorTrack.Text, onClick = { onTrackSelected(EditorTrack.Text) }, label = stringResource(R.string.editor_timeline_text_track))
       TimelineFilterChip(selected = selectedTool == TimelineTool.Trim, onClick = { onToolSelected(TimelineTool.Trim) }, label = stringResource(R.string.editor_timeline_trim_tool))
       TimelineFilterChip(selected = selectedTool == TimelineTool.Split, onClick = { onToolSelected(TimelineTool.Split) }, label = stringResource(R.string.editor_timeline_cut_tool))
       if (selectedTrack == EditorTrack.Audio) {
@@ -2305,6 +2552,7 @@ private fun TimelineActionRow(
           text = when (selectedTrack) {
             EditorTrack.Video -> stringResource(R.string.editor_timeline_focus_video)
             EditorTrack.Audio -> stringResource(R.string.editor_timeline_focus_audio)
+            EditorTrack.Text -> stringResource(R.string.editor_timeline_text_track)
           },
           color = ClipyOnDark,
           style = MaterialTheme.typography.labelLarge,
@@ -2336,6 +2584,199 @@ private fun TimelineActionRow(
         }
       }
     }
+  }
+}
+
+@Composable
+private fun TextOverlayTrack(
+  modifier: Modifier = Modifier,
+  clips: List<TextClipUi>,
+  selectedClipId: String?,
+  currentScrollPx: Float,
+  viewportWidthPx: Int,
+  durationMs: Long,
+  trackWidthPx: Float,
+  selectedTrack: EditorTrack,
+  onClipSelected: (String) -> Unit,
+) {
+  val density = LocalDensity.current
+  Box(modifier = modifier) {
+    Box(
+      modifier = Modifier
+        .fillMaxSize()
+        .clip(RoundedCornerShape(12.dp))
+        .background(if (selectedTrack == EditorTrack.Text) ClipyAccent.copy(alpha = 0.05f) else Color.Transparent),
+    )
+    clips.forEachIndexed { index, clip ->
+      val clipStartPx = (viewportWidthPx / 2f) + timelineMsToTrackPx(clip.startMs, durationMs, trackWidthPx) - currentScrollPx
+      val clipEndPx = (viewportWidthPx / 2f) + timelineMsToTrackPx(clip.endMs, durationMs, trackWidthPx) - currentScrollPx
+      Box(
+        modifier = Modifier
+          .offset { IntOffset(clipStartPx.roundToInt(), 10.dp.roundToPx()) }
+          .width(with(density) { (clipEndPx - clipStartPx).coerceAtLeast(52f).toDp() })
+          .height(32.dp)
+          .clip(RoundedCornerShape(14.dp))
+          .background(if (clip.id == selectedClipId) ClipyAccent.copy(alpha = 0.28f) else Color(0xFF22304C))
+          .border(1.dp, if (clip.id == selectedClipId) ClipyAccent else Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+          .clickable { onClipSelected(clip.id) }
+          .padding(horizontal = 10.dp),
+        contentAlignment = Alignment.CenterStart,
+      ) {
+        Text(
+          text = if (clip.label.isBlank()) stringResource(R.string.editor_text_overlay_label, index + 1) else clip.label,
+          color = ClipyOnDark,
+          style = MaterialTheme.typography.labelMedium,
+          maxLines = 1,
+        )
+      }
+    }
+  }
+}
+
+@Composable
+private fun MiniActionButton(
+  icon: androidx.compose.ui.graphics.vector.ImageVector,
+  label: String,
+  enabled: Boolean,
+  onClick: () -> Unit,
+) {
+  Surface(
+    shape = CircleShape,
+    color = if (enabled) Color(0xFF1A2230) else Color(0xFF121720),
+  ) {
+    IconButton(onClick = onClick, enabled = enabled) {
+      Icon(icon, contentDescription = label, tint = if (enabled) ClipyOnDark else ClipyMuted.copy(alpha = 0.45f))
+    }
+  }
+}
+
+@Composable
+private fun PrimaryToolRail(selected: EditorPrimaryTool, onSelected: (EditorPrimaryTool) -> Unit) {
+  Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    EditorPrimaryTool.entries.forEach { tool ->
+      val icon = when (tool) {
+        EditorPrimaryTool.Edit -> Icons.Rounded.FitScreen
+        EditorPrimaryTool.Audio -> Icons.Rounded.GraphicEq
+        EditorPrimaryTool.Text -> Icons.Rounded.TextFields
+        EditorPrimaryTool.Effects -> Icons.Rounded.AutoFixHigh
+        EditorPrimaryTool.Filters -> Icons.Rounded.FilterAlt
+      }
+      val label = when (tool) {
+        EditorPrimaryTool.Edit -> stringResource(R.string.editor_primary_tool_edit)
+        EditorPrimaryTool.Audio -> stringResource(R.string.editor_primary_tool_audio)
+        EditorPrimaryTool.Text -> stringResource(R.string.editor_primary_tool_text)
+        EditorPrimaryTool.Effects -> stringResource(R.string.editor_primary_tool_effects)
+        EditorPrimaryTool.Filters -> stringResource(R.string.editor_primary_tool_filters)
+      }
+      FilterChip(
+        selected = selected == tool,
+        onClick = { onSelected(tool) },
+        label = { Text(label) },
+        leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
+        modifier = Modifier.weight(1f),
+        colors = FilterChipDefaults.filterChipColors(
+          selectedContainerColor = ClipyAccent,
+          selectedLabelColor = Color.White,
+          selectedLeadingIconColor = Color.White,
+          containerColor = Color(0xFF131925),
+          labelColor = ClipyMuted,
+          iconColor = ClipyMuted,
+        ),
+      )
+    }
+  }
+}
+
+@Composable
+private fun ContextToolPanel(
+  selectedPrimaryTool: EditorPrimaryTool,
+  cropRatio: CropRatio,
+  speed: Float,
+  volumeAmount: Float,
+  fadeAmount: Float,
+  effectIntensity: Float,
+  filterStrength: Float,
+  exportFormat: ExportFormat,
+  gifFps: Int,
+  gifResolution: String,
+  mp4Quality: Mp4Quality,
+  audioSplitEnabled: Boolean,
+  onCropChange: (CropRatio) -> Unit,
+  onSpeedChange: (Float) -> Unit,
+  onVolumeChange: (Float) -> Unit,
+  onFadeChange: (Float) -> Unit,
+  onEffectIntensityChange: (Float) -> Unit,
+  onFilterStrengthChange: (Float) -> Unit,
+  onFormatChange: (ExportFormat) -> Unit,
+  onGifFpsChange: (Int) -> Unit,
+  onGifResolutionChange: (String) -> Unit,
+  onMp4QualityChange: (Mp4Quality) -> Unit,
+  onCollapse: () -> Unit,
+) {
+  Surface(shape = RoundedCornerShape(18.dp), color = Color(0xCC161C28)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text(
+          text = when (selectedPrimaryTool) {
+            EditorPrimaryTool.Edit -> stringResource(R.string.editor_primary_tool_edit)
+            EditorPrimaryTool.Audio -> stringResource(R.string.editor_primary_tool_audio)
+            EditorPrimaryTool.Text -> stringResource(R.string.editor_primary_tool_text)
+            EditorPrimaryTool.Effects -> stringResource(R.string.editor_primary_tool_effects)
+            EditorPrimaryTool.Filters -> stringResource(R.string.editor_primary_tool_filters)
+          },
+          style = MaterialTheme.typography.titleMedium,
+        )
+        TextButton(onClick = onCollapse) { Text(stringResource(R.string.dialog_cancel)) }
+      }
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        TimelineCompactBadge(primary = stringResource(R.string.editor_panel_live_preview), secondary = stringResource(R.string.editor_panel_snap))
+        TimelineCompactBadge(primary = stringResource(R.string.editor_panel_smooth), secondary = stringResource(R.string.editor_timeline_hint))
+      }
+      when (selectedPrimaryTool) {
+        EditorPrimaryTool.Edit -> {
+          ChipRow(items = CropRatio.entries.toList(), selected = cropRatio, label = { Text(it.label) }, onSelected = onCropChange)
+          SliderRow(label = stringResource(R.string.editor_context_trim), value = speed, valueLabel = String.format(java.util.Locale.US, "%.1fx", speed), onValueChange = onSpeedChange, valueRange = 0.5f..2f)
+        }
+        EditorPrimaryTool.Audio -> {
+          AssistChip(onClick = {}, label = { Text(if (audioSplitEnabled) stringResource(R.string.editor_split_ready) else stringResource(R.string.editor_split_wait)) })
+          SliderRow(label = stringResource(R.string.editor_context_volume), value = volumeAmount, valueLabel = String.format(java.util.Locale.US, "%.0f%%", volumeAmount * 100f), onValueChange = onVolumeChange, valueRange = 0f..1.5f)
+          SliderRow(label = stringResource(R.string.editor_context_fade), value = fadeAmount, valueLabel = String.format(java.util.Locale.US, "%.0f%%", fadeAmount * 100f), onValueChange = onFadeChange, valueRange = 0f..1f)
+        }
+        EditorPrimaryTool.Text -> {
+          ChipRow(items = listOf(stringResource(R.string.editor_context_text_style), stringResource(R.string.editor_context_text_position)), selected = stringResource(R.string.editor_context_text_style), label = { Text(it) }, onSelected = {})
+        }
+        EditorPrimaryTool.Effects -> {
+          SliderRow(label = stringResource(R.string.editor_context_effects_intensity), value = effectIntensity, valueLabel = String.format(java.util.Locale.US, "%.0f%%", effectIntensity * 100f), onValueChange = onEffectIntensityChange, valueRange = 0f..1f)
+        }
+        EditorPrimaryTool.Filters -> {
+          ChipRow(items = ExportFormat.entries.toList(), selected = exportFormat, label = { Text(it.name.uppercase()) }, onSelected = onFormatChange)
+          if (exportFormat == ExportFormat.Gif) {
+            ChipRow(items = listOf(12, 18, 24, 30), selected = gifFps, label = { Text("${it} FPS") }, onSelected = onGifFpsChange)
+            ChipRow(items = listOf("480p", "720p", "1080p"), selected = gifResolution, label = { Text(it) }, onSelected = onGifResolutionChange)
+          } else {
+            ChipRow(items = Mp4Quality.entries.toList(), selected = mp4Quality, label = { Text(mp4QualityLabel(it)) }, onSelected = onMp4QualityChange)
+          }
+          SliderRow(label = stringResource(R.string.editor_context_filters_strength), value = filterStrength, valueLabel = String.format(java.util.Locale.US, "%.0f%%", filterStrength * 100f), onValueChange = onFilterStrengthChange, valueRange = 0f..1f)
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun SliderRow(
+  label: String,
+  value: Float,
+  valueLabel: String,
+  onValueChange: (Float) -> Unit,
+  valueRange: ClosedFloatingPointRange<Float>,
+) {
+  Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+      Text(label, color = ClipyOnDark, style = MaterialTheme.typography.labelLarge)
+      Text(valueLabel, color = ClipyMuted, style = MaterialTheme.typography.labelMedium)
+    }
+    Slider(value = value.coerceIn(valueRange.start, valueRange.endInclusive), onValueChange = onValueChange, valueRange = valueRange)
   }
 }
 
