@@ -9,6 +9,13 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.collection.LruCache
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -354,73 +361,91 @@ fun ClipyApp(finishApp: () -> Unit) {
       )
     }
     composable(HOME) {
-      HomeScreen(
-        state = state,
-        finishApp = finishApp,
-        onOpenMediaPicker = {
-          viewModel.openMediaPicker(MediaTab.Videos)
-          navController.navigate(MEDIA_PICKER)
-        },
-        onOpenProject = {
-          viewModel.reuseHistoryRecord(it)
-          navController.navigate(EDITOR)
-        },
-        onOpenSettings = { navController.navigate(SETTINGS) },
-      )
+      AnimatedVisibility(
+        visible = true,
+        enter = fadeIn(tween(220)) + scaleIn(initialScale = 0.97f, animationSpec = tween(220)),
+        exit = fadeOut(tween(140)),
+      ) {
+        HomeScreen(
+          state = state,
+          finishApp = finishApp,
+          onOpenMediaPicker = {
+            viewModel.openMediaPicker(MediaTab.Videos)
+            navController.navigate(MEDIA_PICKER)
+          },
+          onOpenProject = {
+            viewModel.reuseHistoryRecord(it)
+            navController.navigate(EDITOR)
+          },
+          onOpenSettings = { navController.navigate(SETTINGS) },
+        )
+      }
     }
     composable(MEDIA_PICKER) {
-      MediaPickerScreen(
-        state = pickerState,
-        onBack = navController::popBackStack,
-        onRequestPermissionRefresh = viewModel::refreshMediaPermissionAndContent,
-        onSelectTab = viewModel::selectPickerTab,
-        onSelectAlbum = viewModel::selectPickerAlbum,
-        onToggleSelection = viewModel::togglePickerSelection,
-        onReorderSelection = viewModel::reorderPickerSelection,
-        onPreviewItem = viewModel::previewPickerItem,
-        onConfirmSelection = {
-          if (viewModel.confirmPickerSelection() != null) {
-            navController.navigate(EDITOR) {
-              popUpTo(MEDIA_PICKER) { inclusive = true }
+      AnimatedVisibility(
+        visible = true,
+        enter = fadeIn(tween(200)) + scaleIn(initialScale = 0.98f, animationSpec = tween(220)),
+        exit = fadeOut(tween(140)) + scaleOut(targetScale = 0.98f, animationSpec = tween(140)),
+      ) {
+        MediaPickerScreen(
+          state = pickerState,
+          onBack = navController::popBackStack,
+          onRequestPermissionRefresh = viewModel::refreshMediaPermissionAndContent,
+          onSelectTab = viewModel::selectPickerTab,
+          onSelectAlbum = viewModel::selectPickerAlbum,
+          onToggleSelection = viewModel::togglePickerSelection,
+          onReorderSelection = viewModel::reorderPickerSelection,
+          onPreviewItem = viewModel::previewPickerItem,
+          onConfirmSelection = {
+            if (viewModel.confirmPickerSelection() != null) {
+              navController.navigate(EDITOR) {
+                popUpTo(MEDIA_PICKER) { inclusive = true }
+              }
             }
-          }
-        },
-      )
+          },
+        )
+      }
     }
     composable(EDITOR) {
-      EditorScreen(
-        state = state,
-        onBack = navController::popBackStack,
-        onOpenMediaPicker = {
-          viewModel.openMediaPicker(MediaTab.Videos)
-          navController.navigate(MEDIA_PICKER)
-        },
-        onTrimStartChange = viewModel::updateTrimStart,
-        onTrimEndChange = viewModel::updateTrimEnd,
-        onCropChange = viewModel::updateCropRatio,
-        onSpeedChange = viewModel::updateSpeed,
-        onPlayheadChange = viewModel::updatePlayhead,
-        onStepBackward = viewModel::stepPlayheadBackward,
-        onStepForward = viewModel::stepPlayheadForward,
-        onTimelineZoomChange = viewModel::updateTimelineZoom,
-        onToggleMute = viewModel::toggleMuted,
-        onToggleReverse = viewModel::toggleReverse,
-        onToggleBoomerang = viewModel::toggleBoomerang,
-        onWatermarkChange = viewModel::updateWatermark,
-        onWatermarkPositionChange = viewModel::updateWatermarkPosition,
-        onFormatChange = viewModel::updateFormat,
-        onGifFpsChange = viewModel::updateGifFps,
-        onGifResolutionChange = viewModel::updateGifResolution,
-        onMp4QualityChange = viewModel::updateMp4Quality,
-        onOutputNameChange = viewModel::updateOutputName,
-        onOpenHistory = { navController.navigate(HISTORY) },
-        onOpenSettings = { navController.navigate(SETTINGS) },
-        onExport = {
-          if (viewModel.startExport()) {
-            navController.navigate(EXPORT)
-          }
-        },
-      )
+      AnimatedVisibility(
+        visible = true,
+        enter = slideInHorizontally(initialOffsetX = { it / 5 }, animationSpec = tween(240)) + fadeIn(tween(200)),
+        exit = slideOutHorizontally(targetOffsetX = { it / 6 }, animationSpec = tween(160)) + fadeOut(tween(140)),
+      ) {
+        EditorScreen(
+          state = state,
+          onBack = navController::popBackStack,
+          onOpenMediaPicker = {
+            viewModel.openMediaPicker(MediaTab.Videos)
+            navController.navigate(MEDIA_PICKER)
+          },
+          onTrimStartChange = viewModel::updateTrimStart,
+          onTrimEndChange = viewModel::updateTrimEnd,
+          onCropChange = viewModel::updateCropRatio,
+          onSpeedChange = viewModel::updateSpeed,
+          onPlayheadChange = viewModel::updatePlayhead,
+          onStepBackward = viewModel::stepPlayheadBackward,
+          onStepForward = viewModel::stepPlayheadForward,
+          onTimelineZoomChange = viewModel::updateTimelineZoom,
+          onToggleMute = viewModel::toggleMuted,
+          onToggleReverse = viewModel::toggleReverse,
+          onToggleBoomerang = viewModel::toggleBoomerang,
+          onWatermarkChange = viewModel::updateWatermark,
+          onWatermarkPositionChange = viewModel::updateWatermarkPosition,
+          onFormatChange = viewModel::updateFormat,
+          onGifFpsChange = viewModel::updateGifFps,
+          onGifResolutionChange = viewModel::updateGifResolution,
+          onMp4QualityChange = viewModel::updateMp4Quality,
+          onOutputNameChange = viewModel::updateOutputName,
+          onOpenHistory = { navController.navigate(HISTORY) },
+          onOpenSettings = { navController.navigate(SETTINGS) },
+          onExport = {
+            if (viewModel.startExport()) {
+              navController.navigate(EXPORT)
+            }
+          },
+        )
+      }
     }
     composable(SETTINGS) {
       SettingsScreen(
@@ -536,10 +561,10 @@ private fun IntroScreen(
 
   Scaffold(containerColor = ClipyBackground, contentWindowInsets = WindowInsets.safeDrawing) { padding ->
     Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .padding(padding)
-        .padding(20.dp),
+        modifier = Modifier
+          .fillMaxSize()
+          .padding(padding)
+          .padding(20.dp),
       verticalArrangement = Arrangement.SpaceBetween,
     ) {
       Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
@@ -674,113 +699,126 @@ private fun HomeScreen(
       }
     },
   ) { padding ->
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .padding(padding)
-        .padding(horizontal = 16.dp)
-        .verticalScroll(rememberScrollState()),
-      verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-      Spacer(Modifier.height(8.dp))
-      Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
-        color = Color(0xFF141922),
+    AnimatedContent(targetState = selectedDestination, label = "homeDestination") { destination ->
+      Column(
+        modifier = Modifier
+          .fillMaxSize()
+          .padding(padding)
+          .padding(horizontal = 16.dp)
+          .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
       ) {
-        Column(
-          modifier = Modifier
-            .fillMaxWidth()
-            .background(
-              Brush.verticalGradient(
-                listOf(Color(0xFF1A2232), Color(0xFF12161E)),
-              ),
-            )
-            .padding(horizontal = 20.dp, vertical = 22.dp),
-          horizontalAlignment = Alignment.CenterHorizontally,
-          verticalArrangement = Arrangement.spacedBy(12.dp),
+        Spacer(Modifier.height(8.dp))
+        Surface(
+          modifier = Modifier.fillMaxWidth(),
+          shape = RoundedCornerShape(28.dp),
+          color = Color(0xFF141922),
         ) {
-          Text(
-            stringResource(R.string.home_title),
-            color = ClipyOnDark,
-            style = MaterialTheme.typography.headlineMedium,
-            textAlign = TextAlign.Center,
-          )
-          Text(stringResource(R.string.tagline), color = ClipyMuted, textAlign = TextAlign.Center)
-          Button(
-            onClick = onOpenMediaPicker,
-            modifier = Modifier.fillMaxWidth().height(58.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary),
+          Column(
+            modifier = Modifier
+              .fillMaxWidth()
+              .background(
+                Brush.verticalGradient(
+                  listOf(Color(0xFF1A2232), Color(0xFF12161E)),
+                ),
+              )
+              .padding(horizontal = 20.dp, vertical = 22.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
           ) {
-            Icon(Icons.Rounded.Add, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.home_new_project))
+            Text(
+              stringResource(R.string.home_title),
+              color = ClipyOnDark,
+              style = MaterialTheme.typography.headlineMedium,
+              textAlign = TextAlign.Center,
+            )
+            Text(stringResource(R.string.tagline), color = ClipyMuted, textAlign = TextAlign.Center)
+            Button(
+              onClick = onOpenMediaPicker,
+              modifier = Modifier.fillMaxWidth().height(58.dp),
+              shape = RoundedCornerShape(16.dp),
+              colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary),
+            ) {
+              Icon(Icons.Rounded.Add, contentDescription = null)
+              Spacer(Modifier.width(8.dp))
+              Text(stringResource(R.string.home_new_project))
+            }
+            Text(stringResource(R.string.home_new_project_hint), color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
           }
-          Text(stringResource(R.string.home_new_project_hint), color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
         }
-      }
 
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-          Text(stringResource(R.string.home_recent_projects), color = ClipyOnDark, style = MaterialTheme.typography.titleLarge)
-          Text(stringResource(R.string.home_recent_projects_hint), color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
-        }
-        TimelineCompactBadge(primary = recentExports.size.toString(), secondary = stringResource(R.string.nav_history))
-      }
-
-      if (recentExports.isEmpty()) {
-        PremiumCard {
-          Text(stringResource(R.string.history_empty_title), style = MaterialTheme.typography.titleLarge)
-          Spacer(Modifier.height(8.dp))
-          Text(stringResource(R.string.history_empty_body), color = ClipyMuted)
-          Spacer(Modifier.height(14.dp))
-          Button(
-            onClick = onOpenMediaPicker,
+        if (destination == HomeDestination.Home) {
+          Row(
             modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
           ) {
-            Text(stringResource(R.string.home_new_project))
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+              Text(stringResource(R.string.home_recent_projects), color = ClipyOnDark, style = MaterialTheme.typography.titleLarge)
+              Text(stringResource(R.string.home_recent_projects_hint), color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
+            }
+            TimelineCompactBadge(primary = recentExports.size.toString(), secondary = stringResource(R.string.nav_history))
+          }
+
+          if (recentExports.isEmpty()) {
+            PremiumCard {
+              Text(stringResource(R.string.history_empty_title), style = MaterialTheme.typography.titleLarge)
+              Spacer(Modifier.height(8.dp))
+              Text(stringResource(R.string.history_empty_body), color = ClipyMuted)
+              Spacer(Modifier.height(14.dp))
+              Button(
+                onClick = onOpenMediaPicker,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary),
+              ) {
+                Text(stringResource(R.string.home_new_project))
+              }
+            }
+          } else {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 4.dp)) {
+              items(recentExports, key = { it.id }) { item ->
+                RecentProjectCard(item = item, onClick = { onOpenProject(item.id) })
+              }
+            }
+          }
+        } else {
+          HomeDestinationShell(
+            title = stringResource(
+              if (destination == HomeDestination.Templates) R.string.home_shell_templates_title else R.string.home_shell_profile_title,
+            ),
+            body = stringResource(
+              if (destination == HomeDestination.Templates) R.string.home_shell_templates_body else R.string.home_shell_profile_body,
+            ),
+          )
+        }
+
+        PremiumCard {
+          Text(stringResource(R.string.home_tools), style = MaterialTheme.typography.titleLarge)
+          Spacer(Modifier.height(14.dp))
+          Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            HomeToolShortcut(
+              modifier = Modifier.weight(1f),
+              icon = Icons.Rounded.FolderOpen,
+              title = stringResource(R.string.home_pick_video),
+              subtitle = stringResource(R.string.home_pick_hint),
+              onClick = onOpenMediaPicker,
+            )
+            HomeToolShortcut(
+              modifier = Modifier.weight(1f),
+              icon = Icons.Rounded.Settings,
+              title = stringResource(R.string.nav_settings),
+              subtitle = stringResource(R.string.home_settings_hint),
+              onClick = onOpenSettings,
+            )
+          }
+          Spacer(Modifier.height(10.dp))
+          OutlinedButton(onClick = { confirmExit = true }, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.nav_exit))
           }
         }
-      } else {
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 4.dp)) {
-          items(recentExports, key = { it.id }) { item ->
-            RecentProjectCard(item = item, onClick = { onOpenProject(item.id) })
-          }
-        }
-      }
 
-      PremiumCard {
-        Text(stringResource(R.string.home_tools), style = MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-          HomeToolShortcut(
-            modifier = Modifier.weight(1f),
-            icon = Icons.Rounded.FolderOpen,
-            title = stringResource(R.string.home_pick_video),
-            subtitle = stringResource(R.string.home_pick_hint),
-            onClick = onOpenMediaPicker,
-          )
-          HomeToolShortcut(
-            modifier = Modifier.weight(1f),
-            icon = Icons.Rounded.Settings,
-            title = stringResource(R.string.nav_settings),
-            subtitle = stringResource(R.string.home_settings_hint),
-            onClick = onOpenSettings,
-          )
-        }
-        Spacer(Modifier.height(10.dp))
-        OutlinedButton(onClick = { confirmExit = true }, modifier = Modifier.fillMaxWidth()) {
-          Text(stringResource(R.string.nav_exit))
-        }
+        Spacer(Modifier.height(8.dp))
       }
-
-      Spacer(Modifier.height(8.dp))
     }
   }
 
@@ -862,10 +900,19 @@ private fun RecentProjectCard(item: ExportRecordUi, onClick: () -> Unit) {
         modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
       ) {
-        Text(item.detailLabel, color = ClipyOnDark, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+        Text(stringResource(R.string.home_recent_meta_duration, item.detailLabel), color = ClipyOnDark, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
         Text(item.timestampLabel, color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
       }
     }
+  }
+}
+
+@Composable
+private fun HomeDestinationShell(title: String, body: String) {
+  PremiumCard {
+    Text(title, style = MaterialTheme.typography.titleLarge)
+    Spacer(Modifier.height(8.dp))
+    Text(body, color = ClipyMuted)
   }
 }
 
@@ -1578,101 +1625,108 @@ private fun EditorScreen(
         }
       }
 
-      Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        color = Color(0xFF121720),
-      ) {
-        Column(
-          modifier = Modifier.fillMaxWidth().padding(14.dp),
-          verticalArrangement = Arrangement.spacedBy(10.dp),
+      Box(modifier = Modifier.fillMaxWidth()) {
+        Surface(
+          modifier = Modifier.fillMaxWidth().padding(top = 28.dp),
+          shape = RoundedCornerShape(22.dp),
+          color = Color(0xFF121720),
         ) {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+          Column(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
           ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-              Text(stringResource(R.string.editor_creator_rail_title), style = MaterialTheme.typography.titleMedium)
-              Text(stringResource(R.string.editor_context_panel_hint), color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(stringResource(R.string.editor_creator_rail_title), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.editor_context_panel_hint), color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
+              }
+              TimelineCompactBadge(primary = undoRedoState.lastActionLabel ?: stringResource(R.string.editor_history_idle), secondary = stringResource(R.string.editor_tool_rail))
             }
-            TimelineCompactBadge(primary = undoRedoState.lastActionLabel ?: stringResource(R.string.editor_history_idle), secondary = stringResource(R.string.editor_tool_rail))
-          }
-          PrimaryToolRail(
-            selected = selectedPrimaryTool,
-            onSelected = {
-              selectedPrimaryTool = it
-              toolPanelExpanded = true
-              recordEditorAction(context.getString(R.string.editor_history_tool_switch))
-            },
-          )
-          if (toolPanelExpanded) {
-            ContextToolPanel(
-              selectedPrimaryTool = selectedPrimaryTool,
-              cropRatio = draft.cropRatio,
-              speed = draft.speedMultiplier,
-              volumeAmount = volumeAmount,
-              fadeAmount = fadeAmount,
-              effectIntensity = effectIntensity,
-              filterStrength = filterStrength,
-              exportFormat = draft.exportFormat,
-              gifFps = draft.gifFps,
-              gifResolution = draft.gifResolution,
-              mp4Quality = draft.mp4Quality,
-              audioSplitEnabled = selectedAudioSegmentId != null,
-              onCropChange = onCropChange,
-              onSpeedChange = onSpeedChange,
-              onVolumeChange = {
-                volumeAmount = it
-                audioGain = it
+            PrimaryToolRail(
+              selected = selectedPrimaryTool,
+              onSelected = {
+                selectedPrimaryTool = it
+                toolPanelExpanded = true
+                recordEditorAction(context.getString(R.string.editor_history_tool_switch))
               },
-              onFadeChange = { fadeAmount = it },
-              onEffectIntensityChange = { effectIntensity = it },
-              onFilterStrengthChange = { filterStrength = it },
-              onFormatChange = onFormatChange,
-              onGifFpsChange = onGifFpsChange,
-              onGifResolutionChange = onGifResolutionChange,
-              onMp4QualityChange = onMp4QualityChange,
-              onCollapse = { toolPanelExpanded = false },
             )
-          }
-          Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            CompactToggleCard(title = stringResource(R.string.toggle_mute), checked = draft.isMuted, onToggle = onToggleMute, modifier = Modifier.weight(1f))
-            CompactToggleCard(title = stringResource(R.string.toggle_reverse), checked = draft.isReversed, onToggle = onToggleReverse, modifier = Modifier.weight(1f))
-            CompactToggleCard(title = stringResource(R.string.toggle_boomerang), checked = draft.isBoomerang, onToggle = onToggleBoomerang, modifier = Modifier.weight(1f))
+            if (toolPanelExpanded) {
+              ContextToolPanel(
+                selectedPrimaryTool = selectedPrimaryTool,
+                cropRatio = draft.cropRatio,
+                speed = draft.speedMultiplier,
+                volumeAmount = volumeAmount,
+                fadeAmount = fadeAmount,
+                effectIntensity = effectIntensity,
+                filterStrength = filterStrength,
+                exportFormat = draft.exportFormat,
+                gifFps = draft.gifFps,
+                gifResolution = draft.gifResolution,
+                mp4Quality = draft.mp4Quality,
+                audioSplitEnabled = selectedAudioSegmentId != null,
+                onCropChange = onCropChange,
+                onSpeedChange = onSpeedChange,
+                onVolumeChange = {
+                  volumeAmount = it
+                  audioGain = it
+                },
+                onFadeChange = { fadeAmount = it },
+                onEffectIntensityChange = { effectIntensity = it },
+                onFilterStrengthChange = { filterStrength = it },
+                onFormatChange = onFormatChange,
+                onGifFpsChange = onGifFpsChange,
+                onGifResolutionChange = onGifResolutionChange,
+                onMp4QualityChange = onMp4QualityChange,
+                onCollapse = { toolPanelExpanded = false },
+              )
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+              CompactToggleCard(title = stringResource(R.string.toggle_mute), checked = draft.isMuted, onToggle = onToggleMute, modifier = Modifier.weight(1f))
+              CompactToggleCard(title = stringResource(R.string.toggle_reverse), checked = draft.isReversed, onToggle = onToggleReverse, modifier = Modifier.weight(1f))
+              CompactToggleCard(title = stringResource(R.string.toggle_boomerang), checked = draft.isBoomerang, onToggle = onToggleBoomerang, modifier = Modifier.weight(1f))
+            }
           }
         }
-      }
-
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End,
-      ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          MiniActionButton(
-            icon = Icons.Rounded.Undo,
-            label = stringResource(R.string.editor_undo),
-            enabled = undoRedoState.canUndo,
-            onClick = {
-              val label = undoRedoState.undoStack.lastOrNull() ?: return@MiniActionButton
-              undoRedoState = undoRedoState.copy(
-                undoStack = undoRedoState.undoStack.dropLast(1),
-                redoStack = undoRedoState.redoStack + label,
-              )
-            },
-          )
-          MiniActionButton(
-            icon = Icons.Rounded.Redo,
-            label = stringResource(R.string.editor_redo),
-            enabled = undoRedoState.canRedo,
-            onClick = {
-              val label = undoRedoState.redoStack.lastOrNull() ?: return@MiniActionButton
-              undoRedoState = undoRedoState.copy(
-                undoStack = undoRedoState.undoStack + label,
-                redoStack = undoRedoState.redoStack.dropLast(1),
-              )
-            },
-          )
+        Row(
+          modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+          horizontalArrangement = Arrangement.End,
+        ) {
+          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MiniActionButton(
+              icon = Icons.Rounded.Undo,
+              label = stringResource(R.string.editor_undo),
+              enabled = undoRedoState.canUndo,
+              onClick = {
+                val label = undoRedoState.undoStack.lastOrNull() ?: return@MiniActionButton
+                undoRedoState = undoRedoState.copy(
+                  undoStack = undoRedoState.undoStack.dropLast(1),
+                  redoStack = undoRedoState.redoStack + label,
+                )
+              },
+            )
+            MiniActionButton(
+              icon = Icons.Rounded.Redo,
+              label = stringResource(R.string.editor_redo),
+              enabled = undoRedoState.canRedo,
+              onClick = {
+                val label = undoRedoState.redoStack.lastOrNull() ?: return@MiniActionButton
+                undoRedoState = undoRedoState.copy(
+                  undoStack = undoRedoState.undoStack + label,
+                  redoStack = undoRedoState.redoStack.dropLast(1),
+                )
+              },
+            )
+            MiniActionButton(
+              icon = Icons.Rounded.Add,
+              label = stringResource(R.string.home_new_project),
+              enabled = true,
+              onClick = onOpenMediaPicker,
+            )
+          }
         }
       }
 

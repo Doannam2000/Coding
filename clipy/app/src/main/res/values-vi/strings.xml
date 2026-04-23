@@ -38,6 +38,11 @@
     <string name="home_nav_home">Trang chu</string>
     <string name="home_nav_templates">Mau</string>
     <string name="home_nav_profile">Ho so</string>
+    <string name="home_shell_templates_title">Muc mau dang duoc hoan thien</string>
+    <string name="home_shell_templates_body">Tam thoi giu phan nay nhe de luong lam viec chinh van tap trung vao nhap media va bien tap nhanh.</string>
+    <string name="home_shell_profile_title">Ho so duoc giu toi gian trong lan cap nhat nay</string>
+    <string name="home_shell_profile_body">Cai dat, ngon ngu va hanh vi luu cuc bo da bao phu be mat tai khoan cua MVP hien tai.</string>
+    <string name="home_recent_meta_duration">Thoi luong %1$s</string>
     <string name="editor_ready">San sang de xuat</string>
     <string name="editor_gif_hint">Thoi luong duoc gioi han de de chia se gon nhe.</string>
     <string name="editor_mp4_hint">Chat luong MP4 duoc can chinh cho bai dang mang xa hoi.</string>
@@ -218,6 +223,8 @@
     <string name="media_picker_selected_count">Da chon %1$d</string>
     <string name="media_picker_selection_limit">Toi da %1$d muc</string>
     <string name="media_picker_remove">Bo khoi lua chon</string>
+    <string name="media_picker_hold_preview">Giu de xem truoc</string>
+    <string name="media_picker_reorder_hint">Keo danh sach da chon de sap xep lai truoc khi bien tap.</string>
     <string name="media_picker_permission_title">Cho phep Clipy doc thu vien media</string>
     <string name="media_picker_permission_body">Clipy can quyen truy cap media cuc bo de hien thi video va anh moi nhat trong bo chon nhanh.</string>
     <string name="media_picker_permission_action">Cap quyen</string>

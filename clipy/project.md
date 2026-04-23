@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-23 23:29 UTC
+- Last updated: 2026-04-23 23:36 UTC
 - App: Clipy
 - Slug: clipy
 - Tagline: Fast social-ready video edits and GIF exports in seconds.
 - Target users: Content creators, TikTok/Reels users, meme makers, casual users needing fast video editing
-- Design direction: Preserve the existing CapCut-style dark creator workflow and tighten it into a cohesive 3-screen flow: dense but readable controls, strong media-first hierarchy, restrained blue emphasis for active states, 12-16dp rounded surfaces, and fast motion that prioritizes continuity from Home to Picker to Editor without changing the established full-screen dark picker/editor architecture.
+- Design direction: Dark, creator-focused mobile editing flow that tightens the existing Clipy home-to-picker-to-editor journey into a more cohesive CapCut-inspired experience. Preserve the current dark landing visual language, emphasize fast project entry and direct manipulation in the editor, and use restrained blue highlights, rounded media surfaces, and motion-led transitions to make the flow feel polished without changing the app's underlying architecture.
 - Core constraints: Android only, no backend, lightweight but powerful, limit GIF size/duration, smooth UX, handle large videos safely
 Design style must align with: Modern dark creator-tool UI, clean layout, smooth animations, rounded cards, premium feel
 Typography should align with: Inter
@@ -360,6 +360,157 @@ OUTPUT
 - Full UI design for 3 screens
 - Ready for implementation
 - Clear component hierarchy
+Additional follow-up requirement: Design a modern mobile video editing app with a full flow identical to CapCut:
+Home Screen → Media Picker → Video Editor.
+
+GLOBAL STYLE:
+- Dark mode (#0F0F0F background)
+- Clean, minimal, creator-focused UI
+- Accent color: #2563EB (active / highlight)
+- Rounded corners (12–16dp)
+- Smooth animations, 60fps interactions
+- High contrast text (white / gray)
+
+-----------------------------------
+1. HOME SCREEN (Landing)
+-----------------------------------
+
+Layout:
+- Top:
+  + App logo / title (left)
+  + Profile / Settings icon (right)
+
+- Center:
+  + Large primary button:
+    "New Project"
+    (rounded, blue #2563EB, strong CTA)
+  + Subtitle: "Create your video"
+
+- Below:
+  + Recent Projects (horizontal list)
+    * Thumbnail preview
+    * Video duration
+    * Last edited time
+
+- Bottom:
+  + Simple navigation (Home / Templates / Profile)
+
+UX:
+- Tap "New Project" → go to Media Picker
+- Smooth fade/scale transition
+- Clean, uncluttered
+
+-----------------------------------
+2. MEDIA PICKER (Select Photos/Videos)
+-----------------------------------
+
+Layout:
+- Top bar:
+  + Close (X)
+  + Title: "Videos"
+  + "Next" button (disabled until selection)
+
+- Tabs:
+  + Videos | Photos
+  + Active tab highlighted
+
+- Grid:
+  + 3–4 columns
+  + Square thumbnails
+  + Each item:
+    * Video preview
+    * Duration (bottom-right overlay)
+    * Selection order badge (1,2,3...)
+
+- First item:
+  + Camera shortcut
+
+- Bottom:
+  + Selected items preview strip (horizontal)
+  + Drag to reorder
+
+UX:
+- Multi-select
+- Blue border when selected (#2563EB)
+- Smooth scrolling (lazy load)
+- Tap "Next" → go to Editor
+
+-----------------------------------
+3. VIDEO EDITOR (Core CapCut UI)
+-----------------------------------
+
+Layout:
+
+A. Top Preview:
+- Video player (rounded corners)
+- Play/Pause center button
+- Timeline scrub overlay
+- Gesture:
+  + Tap to play/pause
+  + Pinch to zoom
+
+B. Timeline (MAIN FOCUS):
+- Horizontal scroll
+- Multi-layer tracks:
+  + Video track (thumbnails)
+  + Audio track (waveform)
+  + Text / sticker layers
+- Features:
+  + Drag clips
+  + Trim (resize edges)
+  + Split at playhead
+- Current playhead (center vertical line)
+
+C. Bottom Toolbar:
+- Tabs:
+  Edit | Audio | Text | Effects | Filters
+- Active tab highlighted (blue)
+
+D. Editing Panel:
+- Context tools:
+  + Trim
+  + Split
+  + Speed
+  + Volume
+  + Fade
+- Sliders with real-time preview
+
+E. Floating Controls:
+- Undo / Redo
+- Add (+) button
+
+UX:
+- Timeline must be ultra smooth (no lag)
+- Dragging clips must feel like CapCut
+- Snap alignment when editing
+- Real-time preview updates
+
+-----------------------------------
+TRANSITIONS
+-----------------------------------
+- Home → Picker:
+  Fade + scale up
+
+- Picker → Editor:
+  Slide in from right
+
+- Back navigation:
+  Smooth reverse animation
+
+-----------------------------------
+CONSTRAINTS
+-----------------------------------
+- Must feel identical to CapCut UX
+- No lag in timeline interaction
+- Clean spacing, no overlapping UI
+- Mobile-first (Android & iOS)
+
+-----------------------------------
+OUTPUT
+-----------------------------------
+- Full UI design for 3 screens
+- Ready for implementation
+- Clear component hierarchy
 
 ### Core Features
 - Splash screen followed by onboarding and main app flow
@@ -390,5 +541,5 @@ OUTPUT
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Keep project and editor session state in the existing ViewModel-driven flow, continue passing selected media from the current picker into the editor, persist recent-project metadata through the app's existing local project storage approach, and avoid introducing broader storage changes beyond what is needed for editor timeline/project state.
+- storage: Continue using the existing ViewModel-driven local project flow and current media-picker-to-editor handoff, persisting recent-project/editor state through the app's current local storage approach while avoiding any broader storage redesign unless required for timeline interaction state.
 <!-- AUTO-GENERATED:CORE_END -->

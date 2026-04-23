@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -39,6 +40,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -205,7 +207,7 @@ fun MediaPickerScreen(
 
   Scaffold(
     containerColor = ClipyBackground,
-    contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
+    contentWindowInsets = WindowInsets(0, 0, 0, 0),
     topBar = {
       Column(
         modifier = Modifier
@@ -272,15 +274,16 @@ fun MediaPickerScreen(
             }
           }
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
           MediaTab.entries.forEach { tab ->
             val active = state.activeTab == tab
-            Column(
+            Surface(
               modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
-                .clickable { onSelectTab(tab) }
-                .padding(vertical = 2.dp),
-              horizontalAlignment = Alignment.CenterHorizontally,
+                .widthIn(min = 88.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .clickable { onSelectTab(tab) },
+              shape = RoundedCornerShape(14.dp),
+              color = if (active) ClipyPrimary.copy(alpha = 0.14f) else Color(0xFF13151A),
             ) {
               Text(
                 text = stringResource(
@@ -290,16 +293,9 @@ fun MediaPickerScreen(
                     MediaTab.Live -> R.string.media_picker_tab_live
                   },
                 ),
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
                 color = if (active) ClipyPrimary else Color(0xFF9CA3AF),
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal),
-              )
-              Spacer(Modifier.height(6.dp))
-              Box(
-                modifier = Modifier
-                  .width(28.dp)
-                  .height(2.dp)
-                  .clip(CircleShape)
-                  .background(if (active) ClipyPrimary else Color.Transparent),
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium),
               )
             }
           }
@@ -337,6 +333,11 @@ fun MediaPickerScreen(
                 )
               }
             }
+            Text(
+              text = stringResource(R.string.media_picker_reorder_hint),
+              color = ClipyMuted,
+              style = MaterialTheme.typography.bodySmall,
+            )
             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(end = 4.dp)) {
               items(state.selectedItems, key = { it.id }) { item ->
                 var dragAmount by remember(item.id) { mutableFloatStateOf(0f) }
@@ -618,6 +619,17 @@ private fun MediaGridCell(item: MediaGridItemUiModel, onClick: () -> Unit, onLon
           Text(formatDuration(item.durationMs ?: 0L), color = Color.White, style = MaterialTheme.typography.labelSmall)
         }
       }
+      Text(
+        text = stringResource(R.string.media_picker_hold_preview),
+        modifier = Modifier
+          .align(Alignment.BottomStart)
+          .padding(6.dp)
+          .clip(RoundedCornerShape(999.dp))
+          .background(Color.Black.copy(alpha = 0.38f))
+          .padding(horizontal = 7.dp, vertical = 3.dp),
+        color = Color.White.copy(alpha = 0.92f),
+        style = MaterialTheme.typography.labelSmall,
+      )
       if (item.type == "live") {
         Text(
           text = stringResource(R.string.media_picker_live_badge),
