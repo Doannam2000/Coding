@@ -196,4 +196,26 @@
     <string name="mp4_quality_fast">Fast 720p</string>
     <string name="mp4_quality_balanced">Balanced 1080p</string>
     <string name="mp4_quality_crisp">Crisp source</string>
+    <string name="media_picker_close">Close media picker</string>
+    <string name="media_picker_title_videos">Videos</string>
+    <string name="media_picker_title_photos">Photos</string>
+    <string name="media_picker_title_live">Live</string>
+    <string name="media_picker_next">Next</string>
+    <string name="media_picker_recent">Recent</string>
+    <string name="media_picker_album">Album</string>
+    <string name="media_picker_tab_videos">Videos</string>
+    <string name="media_picker_tab_photos">Photos</string>
+    <string name="media_picker_tab_live">Live</string>
+    <string name="media_picker_selected_count">%1$d selected</string>
+    <string name="media_picker_selection_limit">Max %1$d items</string>
+    <string name="media_picker_remove">Remove from selection</string>
+    <string name="media_picker_permission_title">Allow Clipy to read your media library</string>
+    <string name="media_picker_permission_body">Clipy needs local media access to show your newest videos and photos in the fast picker.</string>
+    <string name="media_picker_permission_action">Grant access</string>
+    <string name="media_picker_empty_videos">No videos found in this album yet.</string>
+    <string name="media_picker_empty_photos">No photos found in this album yet.</string>
+    <string name="media_picker_empty_live">No live media found in this album yet.</string>
+    <string name="media_picker_camera">Camera</string>
+    <string name="media_picker_camera_unavailable">Camera capture is not wired into this MVP yet.</string>
+    <string name="media_picker_live_badge">LIVE</string>
 </resources>

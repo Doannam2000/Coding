@@ -196,4 +196,26 @@
     <string name="mp4_quality_fast">Nhanh 720p</string>
     <string name="mp4_quality_balanced">Can bang 1080p</string>
     <string name="mp4_quality_crisp">Net theo nguon</string>
+    <string name="media_picker_close">Dong bo chon media</string>
+    <string name="media_picker_title_videos">Video</string>
+    <string name="media_picker_title_photos">Anh</string>
+    <string name="media_picker_title_live">Live</string>
+    <string name="media_picker_next">Tiep</string>
+    <string name="media_picker_recent">Gan day</string>
+    <string name="media_picker_album">Album</string>
+    <string name="media_picker_tab_videos">Video</string>
+    <string name="media_picker_tab_photos">Anh</string>
+    <string name="media_picker_tab_live">Live</string>
+    <string name="media_picker_selected_count">Da chon %1$d</string>
+    <string name="media_picker_selection_limit">Toi da %1$d muc</string>
+    <string name="media_picker_remove">Bo khoi lua chon</string>
+    <string name="media_picker_permission_title">Cho phep Clipy doc thu vien media</string>
+    <string name="media_picker_permission_body">Clipy can quyen truy cap media cuc bo de hien thi video va anh moi nhat trong bo chon nhanh.</string>
+    <string name="media_picker_permission_action">Cap quyen</string>
+    <string name="media_picker_empty_videos">Chua co video nao trong album nay.</string>
+    <string name="media_picker_empty_photos">Chua co anh nao trong album nay.</string>
+    <string name="media_picker_empty_live">Chua co media live nao trong album nay.</string>
+    <string name="media_picker_camera">May anh</string>
+    <string name="media_picker_camera_unavailable">Chuc nang mo may anh chua duoc noi vao MVP nay.</string>
+    <string name="media_picker_live_badge">LIVE</string>
 </resources>

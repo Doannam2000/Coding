@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-23 18:37 UTC
+- Last updated: 2026-04-23 22:24 UTC
 - App: Clipy
 - Slug: clipy
 - Tagline: Fast social-ready video edits and GIF exports in seconds.
 - Target users: Content creators, TikTok/Reels users, meme makers, casual users needing fast video editing
-- Design direction: Refine the existing creator workspace into a premium CapCut-inspired editing shell with a dark cinematic foundation, crisp blue active states, glass overlays on the preview stage, and a timeline-first layout that feels fast, touch-native, and approachable for beginner creators without changing the broader app architecture.
+- Design direction: Extend the current dark, creator-focused Clipy language into a CapCut-identical media picker: matte black foundation, dense edge-to-edge content, restrained blue selection states, compact rounded surfaces, and fast utility-first chrome that keeps attention on the media grid and selected-order workflow.
 - Core constraints: Android only, no backend, lightweight but powerful, limit GIF size/duration, smooth UX, handle large videos safely
 Design style must align with: Modern dark creator-tool UI, clean layout, smooth animations, rounded cards, premium feel
 Typography should align with: Inter
@@ -142,6 +142,73 @@ Output:
 - Full UI layout with all components
 - Clean spacing, no overlapping elements
 - Production-ready design system
+Additional follow-up requirement: Design a mobile video picker screen identical to CapCut.
+
+Style:
+- Dark mode (#0F0F0F background)
+- Clean, minimal, modern
+- Accent color: #2563EB (selected state)
+- Rounded corners (8–12dp)
+- Subtle shadows and overlays
+- High contrast text (white/gray)
+
+Layout:
+
+1. Top Bar:
+- Left: Close (X)
+- Center: Title "Photos" or "Videos"
+- Right: "Next" button (disabled until selection)
+- Optional dropdown to switch Albums
+
+2. Tab / Filter:
+- Tabs: Videos | Photos | Live
+- Active tab highlighted (underline or blue text)
+- Smooth swipe between tabs
+
+3. Media Grid:
+- 3–4 columns responsive grid
+- Square thumbnails (1:1)
+- Each item:
+  + Video thumbnail preview
+  + Duration label (bottom-right, semi-transparent black bg)
+  + Checkbox or number badge when selected
+- Lazy loading for performance
+
+4. Selection Behavior:
+- Tap to select (multi-select supported)
+- Show order number (1,2,3...) like CapCut
+- Selected item:
+  + Blue border (#2563EB)
+  + Slight scale animation
+- Max selection limit (optional)
+
+5. Bottom Panel:
+- Show selected items horizontally (preview strip)
+- Drag to reorder selected videos
+- "Add" or "Next" button (primary CTA)
+
+6. Interaction:
+- Smooth scrolling (no lag)
+- Instant selection feedback
+- Gesture friendly (tap, drag)
+- Fast loading thumbnails
+
+7. Extra UX:
+- Show "Camera" item at first position
+- Show album selector (Recent, Downloads, WhatsApp...)
+- Support long press to preview video
+- Auto-scroll to newest items
+
+Constraints:
+- Must feel identical to CapCut media picker
+- Extremely smooth performance (60fps)
+- No UI overlap or clutter
+- Optimized for large media libraries
+
+Output:
+- Full mobile UI screen
+- Clean spacing and hierarchy
+- Production-ready layout
 
 ### Core Features
 - Splash screen followed by onboarding and main app flow
@@ -165,12 +232,11 @@ Output:
 - Explicit exit action within the app shell
 
 ### Main Screens
-- Editor Screen
-- Timeline Editor
-- Tool Workspace
+- Media Picker Screen
+- Selected Media Tray
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Keep existing Room/DataStore behavior unchanged; continue storing the remaining CapCut-style interaction polish, gesture feedback, render details, and tool-panel state in editor-local/viewmodel memory unless an existing project-save path already supports these fields without widening app behavior.
+- storage: Keep persisted behavior narrow: load device media through Android media APIs and hold picker tab, album, grid, preview, and selection ordering state in ViewModel memory; only pass finalized selected asset references into the existing editor import path unless current project persistence already stores imported media metadata.
 <!-- AUTO-GENERATED:CORE_END -->

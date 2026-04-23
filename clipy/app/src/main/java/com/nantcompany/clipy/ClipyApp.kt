@@ -8,8 +8,6 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.widget.Toast
 import androidx.collection.LruCache
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -181,6 +179,8 @@ import com.nantcompany.clipy.model.mimeType
 import com.nantcompany.clipy.model.snapTimelineMs
 import com.nantcompany.clipy.model.TimelineSnapshot
 import com.nantcompany.clipy.ui.ClipyViewModel
+import com.nantcompany.clipy.ui.MediaPickerScreen
+import com.nantcompany.clipy.ui.MediaTab
 import com.nantcompany.clipy.theme.ClipyAccent
 import com.nantcompany.clipy.theme.ClipyBackground
 import com.nantcompany.clipy.theme.ClipyMuted
@@ -207,6 +207,7 @@ private const val SETTINGS = "settings"
 private const val HISTORY = "history"
 private const val EXPORT = "export"
 private const val LANGUAGE = "language"
+private const val MEDIA_PICKER = "media_picker"
 private const val PERFORMANCE_CACHE_MB = 256
 private const val MIN_TRIM_GAP_MS = 250L
 private const val TIMELINE_PREVIEW_SEEK_THROTTLE_MS = 90L
@@ -317,6 +318,7 @@ fun ClipyApp(finishApp: () -> Unit) {
   val app = context.applicationContext as Application
   val viewModel: ClipyViewModel = viewModel(factory = ClipyViewModel.factory(app))
   val state by viewModel.appState.collectAsStateWithLifecycle()
+  val pickerState by viewModel.pickerState.collectAsStateWithLifecycle()
   val navController = rememberNavController()
   var splashResolved by rememberSaveable { mutableStateOf(false) }
 
@@ -350,18 +352,41 @@ fun ClipyApp(finishApp: () -> Unit) {
       HomeScreen(
         state = state,
         finishApp = finishApp,
-        onImportVideo = {
-          viewModel.importVideo(it)
-          navController.navigate(EDITOR)
+        onOpenMediaPicker = {
+          viewModel.openMediaPicker(MediaTab.Videos)
+          navController.navigate(MEDIA_PICKER)
         },
         onOpenHistory = { navController.navigate(HISTORY) },
         onOpenSettings = { navController.navigate(SETTINGS) },
+      )
+    }
+    composable(MEDIA_PICKER) {
+      MediaPickerScreen(
+        state = pickerState,
+        onBack = navController::popBackStack,
+        onRequestPermissionRefresh = viewModel::refreshMediaPermissionAndContent,
+        onSelectTab = viewModel::selectPickerTab,
+        onSelectAlbum = viewModel::selectPickerAlbum,
+        onToggleSelection = viewModel::togglePickerSelection,
+        onReorderSelection = viewModel::reorderPickerSelection,
+        onPreviewItem = viewModel::previewPickerItem,
+        onConfirmSelection = {
+          if (viewModel.confirmPickerSelection() != null) {
+            navController.navigate(EDITOR) {
+              popUpTo(MEDIA_PICKER) { inclusive = true }
+            }
+          }
+        },
       )
     }
     composable(EDITOR) {
       EditorScreen(
         state = state,
         onBack = navController::popBackStack,
+        onOpenMediaPicker = {
+          viewModel.openMediaPicker(MediaTab.Videos)
+          navController.navigate(MEDIA_PICKER)
+        },
         onTrimStartChange = viewModel::updateTrimStart,
         onTrimEndChange = viewModel::updateTrimEnd,
         onCropChange = viewModel::updateCropRatio,
@@ -581,21 +606,12 @@ private fun IntroScreen(
 private fun HomeScreen(
   state: AppSnapshot,
   finishApp: () -> Unit,
-  onImportVideo: (Uri) -> Unit,
+  onOpenMediaPicker: () -> Unit,
   onOpenHistory: () -> Unit,
   onOpenSettings: () -> Unit,
 ) {
-  val context = LocalContext.current
   var confirmExit by rememberSaveable { mutableStateOf(false) }
   val recentExports = remember(state.history) { state.history.take(3) }
-  val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-    uri?.let {
-      runCatching {
-        context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-      }
-      onImportVideo(it)
-    }
-  }
 
   Scaffold(
     containerColor = ClipyBackground,
@@ -621,7 +637,7 @@ private fun HomeScreen(
         Text(stringResource(R.string.tagline), color = ClipyMuted)
         Spacer(Modifier.height(18.dp))
         Button(
-          onClick = { picker.launch(arrayOf("video/*")) },
+          onClick = onOpenMediaPicker,
           modifier = Modifier.fillMaxWidth().height(56.dp),
           colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary),
         ) {
@@ -681,6 +697,7 @@ private fun HomeScreen(
 private fun EditorScreen(
   state: AppSnapshot,
   onBack: () -> Unit,
+  onOpenMediaPicker: () -> Unit,
   onTrimStartChange: (Long) -> Unit,
   onTrimEndChange: (Long) -> Unit,
   onCropChange: (CropRatio) -> Unit,
@@ -900,6 +917,7 @@ private fun EditorScreen(
           }
         },
         actions = {
+          IconButton(onClick = onOpenMediaPicker) { Icon(Icons.Rounded.FolderOpen, contentDescription = stringResource(R.string.editor_pick_video)) }
           IconButton(onClick = onOpenHistory) { Icon(Icons.Rounded.History, contentDescription = stringResource(R.string.nav_history)) }
           IconButton(onClick = onOpenSettings) { Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.nav_settings)) }
         },
