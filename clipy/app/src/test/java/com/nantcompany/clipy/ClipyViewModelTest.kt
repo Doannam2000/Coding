@@ -5,10 +5,18 @@ import com.nantcompany.clipy.model.ExportFormat
 import com.nantcompany.clipy.model.Mp4Quality
 import com.nantcompany.clipy.model.ProjectDraft
 import com.nantcompany.clipy.model.buildExportPlan
+import com.nantcompany.clipy.model.boundedTrimEndMs
+import com.nantcompany.clipy.model.boundedTrimStartMs
+import com.nantcompany.clipy.model.editorTimelineUiState
 import com.nantcompany.clipy.model.sanitizeTimeline
 import com.nantcompany.clipy.model.sanitizeOutputName
+import com.nantcompany.clipy.model.shouldDispatchTimelinePreviewSeek
 import com.nantcompany.clipy.model.snapTimelineMs
 import com.nantcompany.clipy.model.timelineScrollForPlayhead
+import com.nantcompany.clipy.model.timelineStripFrameCount
+import com.nantcompany.clipy.model.timelinePrefetchRange
+import com.nantcompany.clipy.model.timelineMsToTrackPx
+import com.nantcompany.clipy.model.timelineTrackPxToMs
 import com.nantcompany.clipy.model.timelineThumbnailCount
 import com.nantcompany.clipy.model.validateExport
 import org.junit.Assert.assertEquals
@@ -105,5 +113,109 @@ class ClipyViewModelTest {
   fun timelineHelpers_scaleWithZoomAndCenterPlayhead() {
     assertTrue(timelineThumbnailCount(4f, 1080) > timelineThumbnailCount(1f, 1080))
     assertEquals(440, timelineScrollForPlayhead(0.5f, 1200, 320))
+  }
+
+  @Test
+  fun timelineTrackMapping_roundTripsAcrossDuration() {
+    val offsetPx = timelineMsToTrackPx(timeMs = 5_000L, durationMs = 10_000L, trackWidthPx = 800f)
+
+    assertEquals(400f, offsetPx)
+    assertEquals(5_000L, timelineTrackPxToMs(offsetPx = offsetPx, durationMs = 10_000L, trackWidthPx = 800f))
+  }
+
+  @Test
+  fun timelineStripFrameCount_scalesWithZoomAndDuration() {
+    assertTrue(timelineStripFrameCount(durationMs = 18_000L, zoom = 4f) > timelineStripFrameCount(durationMs = 18_000L, zoom = 1f))
+    assertTrue(timelineStripFrameCount(durationMs = 18_000L, zoom = 1f) > timelineStripFrameCount(durationMs = 3_000L, zoom = 1f))
+  }
+
+  @Test
+  fun timelinePrefetchRange_expandsAroundVisibleWindowAndClamps() {
+    assertEquals(0..7, timelinePrefetchRange(visibleStartIndex = 2, visibleEndIndex = 4, frameCount = 16, preloadCount = 3))
+    assertEquals(0..2, timelinePrefetchRange(visibleStartIndex = 0, visibleEndIndex = 1, frameCount = 3, preloadCount = 4))
+  }
+
+  @Test
+  fun boundedTrimHelpers_preserveMinimumGap() {
+    assertEquals(
+      3_750L,
+      boundedTrimStartMs(
+        offsetPx = 390f,
+        durationMs = 4_000L,
+        trackWidthPx = 400f,
+        currentTrimEndMs = 4_000L,
+      ),
+    )
+
+    assertEquals(
+      250L,
+      boundedTrimEndMs(
+        offsetPx = 20f,
+        durationMs = 4_000L,
+        trackWidthPx = 400f,
+        currentTrimStartMs = 0L,
+      ),
+    )
+  }
+
+  @Test
+  fun editorTimelineUiState_clampsVisibleWindowAndPendingSeek() {
+    val timeline = sanitizeTimeline(
+      durationMs = 10_000L,
+      trimStartMs = 1_000L,
+      trimEndMs = 8_000L,
+      playheadMs = 4_000L,
+      zoom = 2f,
+    )
+
+    val uiState = editorTimelineUiState(
+      timeline = timeline,
+      visibleWindowStartMs = -500L,
+      visibleWindowEndMs = 12_000L,
+      isDraggingStartHandle = true,
+      pendingSeekMs = 99_000L,
+    )
+
+    assertEquals(0L, uiState.visibleWindowStartMs)
+    assertEquals(10_000L, uiState.visibleWindowEndMs)
+    assertEquals(8_000L, uiState.pendingSeekMs)
+    assertTrue(uiState.isDraggingStartHandle)
+    assertFalse(uiState.isDraggingEndHandle)
+  }
+
+  @Test
+  fun timelinePreviewSeekDispatch_throttlesOnlyWhileInteracting() {
+    assertFalse(
+      shouldDispatchTimelinePreviewSeek(
+        targetMs = 1_020L,
+        lastDispatchedMs = 1_000L,
+        isInteracting = true,
+        elapsedSinceLastDispatchMs = 40L,
+        frameStepMs = 33L,
+        throttleMs = 90L,
+      ),
+    )
+
+    assertTrue(
+      shouldDispatchTimelinePreviewSeek(
+        targetMs = 1_100L,
+        lastDispatchedMs = 1_000L,
+        isInteracting = true,
+        elapsedSinceLastDispatchMs = 100L,
+        frameStepMs = 33L,
+        throttleMs = 90L,
+      ),
+    )
+
+    assertTrue(
+      shouldDispatchTimelinePreviewSeek(
+        targetMs = 1_050L,
+        lastDispatchedMs = 1_000L,
+        isInteracting = false,
+        elapsedSinceLastDispatchMs = 0L,
+        frameStepMs = 33L,
+        throttleMs = 90L,
+      ),
+    )
   }
 }

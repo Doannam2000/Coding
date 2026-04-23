@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-23 01:44 UTC
+- Last updated: 2026-04-23 14:05 UTC
 - App: Clipy
 - Slug: clipy
 - Tagline: Fast social-ready video edits and GIF exports in seconds.
 - Target users: Content creators, TikTok/Reels users, meme makers, casual users needing fast video editing
-- Design direction: Premium dark creator-tool interface with a fast single-screen workflow, using Material 3 foundations, soft-corner surfaces, high-contrast media-focused layouts, and restrained motion that feels polished without adding implementation risk.
+- Design direction: Refine the existing editor into a darker, tighter, CapCut-inspired composition while preserving the app's current Material 3 foundation: a dominant media preview on top, a compact control rail, and a high-clarity timeline dock with strong selection contrast, precise trim affordances, and smooth motion feedback. Emphasize density, alignment, and immediate manipulation rather than decorative changes.
 - Core constraints: Android only, no backend, lightweight but powerful, limit GIF size/duration, smooth UX, handle large videos safely
 Design style must align with: Modern dark creator-tool UI, clean layout, smooth animations, rounded cards, premium feel
 Typography should align with: Inter
@@ -21,6 +21,9 @@ Feature priorities update: Implement the basic MVP first: pick video from galler
 Feature priorities update: Add basic crop ratio presets for 1:1, 4:5, 9:16, and 16:9 so users can export clips for different social platforms
 Additional follow-up requirement: Add mute toggle so users can choose whether exported MP4 keeps or removes original audio
 Feature priorities update: Redesign the video editor UI and timeline to closely match CapCut style: large video preview on top, thumbnail timeline strip below, draggable start and end trim handles, central playhead, smooth horizontal scrolling, pinch-to-zoom timeline, dimmed unselected areas, highlighted selected range, real-time synced preview while dragging, looping preview for selected segment, and polished animations until the interaction feels as smooth and responsive as CapCut
+Additional follow-up requirement: [fixbug] Fix the editor UI because it does not match CapCut style and the timeline feels laggy when swiping. Redesign the layout to look closer to CapCut with a cleaner preview area, thumbnail strip, selected range highlight, draggable trim handles, and central playhead. Optimize timeline rendering, gesture handling, thumbnail caching, lazy loading, and preview sync so horizontal swiping becomes smooth, responsive, and stable like CapCut.
+Additional follow-up requirement: [fixbug] Fix the editor UI because it does not match CapCut style and the timeline feels laggy when swiping. Redesign the layout to look closer to CapCut with a cleaner preview area, thumbnail strip, selected range highlight, draggable trim handles, and central playhead. Optimize timeline rendering, gesture handling, thumbnail caching, lazy loading, and preview sync so horizontal swiping becomes smooth, responsive, and stable like CapCut.
+Additional follow-up requirement: [fixbug] Fix the editor UI because it does not match CapCut style and the timeline feels laggy when swiping. Redesign the layout to look closer to CapCut with a cleaner preview area, thumbnail strip, selected range highlight, draggable trim handles, and central playhead. Optimize timeline rendering, gesture handling, thumbnail caching, lazy loading, and preview sync so horizontal swiping becomes smooth, responsive, and stable like CapCut.
 
 ### Core Features
 - Splash screen followed by onboarding and main app flow
@@ -44,15 +47,11 @@ Feature priorities update: Redesign the video editor UI and timeline to closely 
 - Explicit exit action within the app shell
 
 ### Main Screens
-- Splash Screen
-- Intro Screen
-- Language Selection Screen
 - Main Editor Screen
-- Export Progress Screen
-- History & Settings Screen
+- Trim Timeline Component
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Room for export history, DataStore for preferences and onboarding/language state, MediaStore plus content URI permissions for input/output file access
+- storage: Keep existing Room and DataStore usage unchanged; add only editor-local UI state and in-memory thumbnail caching around the current media/editor implementation
 <!-- AUTO-GENERATED:CORE_END -->

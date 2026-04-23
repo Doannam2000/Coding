@@ -14,8 +14,7 @@
         android:theme="@style/Theme.MyApplication">
         <activity
             android:name="com.nantcompany.clipy.MainActivity"
-            android:exported="true"
-            tools:ignore="Instantiatable">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

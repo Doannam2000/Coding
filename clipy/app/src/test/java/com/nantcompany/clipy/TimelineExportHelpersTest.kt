@@ -8,6 +8,7 @@ import com.nantcompany.clipy.model.buildExportPlan
 import com.nantcompany.clipy.model.resolutionPreset
 import com.nantcompany.clipy.model.shouldPersistUri
 import com.nantcompany.clipy.model.thumbnailCaptureTimesMs
+import com.nantcompany.clipy.model.timelineVisibleWindowMs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -50,5 +51,17 @@ class TimelineExportHelpersTest {
   fun uriPersistence_onlyAppliesToContentUris() {
     assertTrue(shouldPersistUri("content://media/external/video/media/1"))
     assertFalse(shouldPersistUri("file:///storage/emulated/0/DCIM/clip.mp4"))
+  }
+
+  @Test
+  fun timelineVisibleWindow_mapsVisibleCellRangeToDuration() {
+    val window = timelineVisibleWindowMs(
+      visibleStartIndex = 3,
+      visibleEndIndex = 7,
+      frameCount = 11,
+      durationMs = 10_000L,
+    )
+
+    assertEquals(3_000L..7_000L, window)
   }
 }

@@ -3,6 +3,7 @@ package com.nantcompany.clipy.model
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import kotlin.math.ceil
+import kotlin.math.roundToLong
 import kotlin.math.roundToInt
 
 enum class AppLanguage(val code: String) {
@@ -135,6 +136,27 @@ data class TimelineSnapshot(
   val zoom: Float,
 )
 
+data class EditorTimelineUiState(
+  val clipDurationMs: Long,
+  val trimStartMs: Long,
+  val trimEndMs: Long,
+  val playheadMs: Long,
+  val visibleWindowStartMs: Long,
+  val visibleWindowEndMs: Long,
+  val isDraggingStartHandle: Boolean,
+  val isDraggingEndHandle: Boolean,
+  val isScrubbingTimeline: Boolean,
+  val pendingSeekMs: Long? = null,
+)
+
+data class TimelineInteractionState(
+  val pixelsPerMs: Float,
+  val dragAnchorMs: Long,
+  val lastPreviewSeekMs: Long,
+  val minTrimDurationMs: Long,
+  val isUserScrolling: Boolean,
+)
+
 data class ExportValidation(
   val isValid: Boolean,
   val message: String? = null,
@@ -233,10 +255,115 @@ fun timelineThumbnailCount(zoom: Float, viewportWidthPx: Int): Int {
   return (baseCount + (zoom - 1f).coerceAtLeast(0f).roundToInt() * 3).coerceIn(6, 36)
 }
 
+fun timelineStripFrameCount(durationMs: Long, zoom: Float): Int {
+  val seconds = (durationMs.coerceAtLeast(1L) / 1_000f).coerceAtLeast(3f)
+  return (seconds * (zoom.coerceIn(1f, 6f) * 2.4f)).roundToInt().coerceIn(12, 120)
+}
+
+fun timelinePrefetchRange(
+  visibleStartIndex: Int,
+  visibleEndIndex: Int,
+  frameCount: Int,
+  preloadCount: Int = 3,
+): IntRange {
+  if (frameCount <= 0) return IntRange.EMPTY
+  val boundedStart = visibleStartIndex.coerceIn(0, frameCount - 1)
+  val boundedEnd = visibleEndIndex.coerceIn(boundedStart, frameCount - 1)
+  val first = (boundedStart - preloadCount.coerceAtLeast(0)).coerceAtLeast(0)
+  val last = (boundedEnd + preloadCount.coerceAtLeast(0)).coerceAtMost(frameCount - 1)
+  return first..last
+}
+
+fun timelineVisibleWindowMs(
+  visibleStartIndex: Int,
+  visibleEndIndex: Int,
+  frameCount: Int,
+  durationMs: Long,
+): LongRange {
+  val boundedDuration = durationMs.coerceAtLeast(0L)
+  if (frameCount <= 1 || boundedDuration == 0L) return 0L..boundedDuration
+
+  val lastFrameIndex = (frameCount - 1).coerceAtLeast(1)
+  val startFraction = visibleStartIndex.coerceIn(0, lastFrameIndex) / lastFrameIndex.toFloat()
+  val endFraction = visibleEndIndex.coerceIn(0, lastFrameIndex) / lastFrameIndex.toFloat()
+  val startMs = (boundedDuration * startFraction).roundToLong().coerceIn(0L, boundedDuration)
+  val endMs = (boundedDuration * endFraction).roundToLong().coerceIn(startMs, boundedDuration)
+  return startMs..endMs
+}
+
+fun timelineMsToTrackPx(timeMs: Long, durationMs: Long, trackWidthPx: Float): Float {
+  if (durationMs <= 0L || trackWidthPx <= 0f) return 0f
+  val clampedTime = timeMs.coerceIn(0L, durationMs)
+  return (clampedTime / durationMs.toFloat()) * trackWidthPx
+}
+
+fun timelineTrackPxToMs(offsetPx: Float, durationMs: Long, trackWidthPx: Float): Long {
+  if (durationMs <= 0L || trackWidthPx <= 0f) return 0L
+  val clampedOffset = offsetPx.coerceIn(0f, trackWidthPx)
+  return ((clampedOffset / trackWidthPx) * durationMs).roundToLong().coerceIn(0L, durationMs)
+}
+
+fun shouldDispatchTimelinePreviewSeek(
+  targetMs: Long,
+  lastDispatchedMs: Long,
+  isInteracting: Boolean,
+  elapsedSinceLastDispatchMs: Long,
+  frameStepMs: Long,
+  throttleMs: Long,
+): Boolean {
+  val minimumDelta = frameStepMs.coerceAtLeast(1L)
+  val enoughDelta = kotlin.math.abs(targetMs - lastDispatchedMs) >= minimumDelta
+  return enoughDelta && (!isInteracting || elapsedSinceLastDispatchMs >= throttleMs.coerceAtLeast(0L))
+}
+
+fun boundedTrimStartMs(
+  offsetPx: Float,
+  durationMs: Long,
+  trackWidthPx: Float,
+  currentTrimEndMs: Long,
+  minTrimGapMs: Long = MIN_TRIM_GAP_MS,
+): Long {
+  val maxStart = (currentTrimEndMs - minTrimGapMs).coerceAtLeast(0L)
+  return snapTimelineMs(timelineTrackPxToMs(offsetPx, durationMs, trackWidthPx)).coerceIn(0L, maxStart)
+}
+
+fun boundedTrimEndMs(
+  offsetPx: Float,
+  durationMs: Long,
+  trackWidthPx: Float,
+  currentTrimStartMs: Long,
+  minTrimGapMs: Long = MIN_TRIM_GAP_MS,
+): Long {
+  val minEnd = (currentTrimStartMs + minTrimGapMs).coerceAtMost(durationMs.coerceAtLeast(minTrimGapMs))
+  return snapTimelineMs(timelineTrackPxToMs(offsetPx, durationMs, trackWidthPx)).coerceIn(minEnd, durationMs)
+}
+
 fun timelineScrollForPlayhead(playheadFraction: Float, contentWidthPx: Int, viewportWidthPx: Int): Int {
   val rawTarget = (contentWidthPx * playheadFraction) - (viewportWidthPx / 2f)
   return rawTarget.roundToInt().coerceAtLeast(0)
 }
+
+fun editorTimelineUiState(
+  timeline: TimelineSnapshot,
+  visibleWindowStartMs: Long = 0L,
+  visibleWindowEndMs: Long = timeline.durationMs,
+  isDraggingStartHandle: Boolean = false,
+  isDraggingEndHandle: Boolean = false,
+  isScrubbingTimeline: Boolean = false,
+  pendingSeekMs: Long? = null,
+): EditorTimelineUiState =
+  EditorTimelineUiState(
+    clipDurationMs = timeline.durationMs,
+    trimStartMs = timeline.trimStartMs,
+    trimEndMs = timeline.trimEndMs,
+    playheadMs = timeline.playheadMs,
+    visibleWindowStartMs = visibleWindowStartMs.coerceIn(0L, timeline.durationMs),
+    visibleWindowEndMs = visibleWindowEndMs.coerceIn(visibleWindowStartMs.coerceAtLeast(0L), timeline.durationMs),
+    isDraggingStartHandle = isDraggingStartHandle,
+    isDraggingEndHandle = isDraggingEndHandle,
+    isScrubbingTimeline = isScrubbingTimeline,
+    pendingSeekMs = pendingSeekMs?.coerceIn(timeline.trimStartMs, timeline.trimEndMs),
+  )
 
 fun resolutionPreset(label: String, cropRatio: CropRatio): ResolutionPreset {
   val shortEdge = when (label) {
