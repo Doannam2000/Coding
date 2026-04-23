@@ -63,9 +63,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SkipNext
@@ -74,6 +78,7 @@ import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.AutoAwesomeMosaic
 import androidx.compose.material.icons.rounded.FilterAlt
 import androidx.compose.material.icons.rounded.FitScreen
 import androidx.compose.material.icons.rounded.Layers
@@ -356,7 +361,10 @@ fun ClipyApp(finishApp: () -> Unit) {
           viewModel.openMediaPicker(MediaTab.Videos)
           navController.navigate(MEDIA_PICKER)
         },
-        onOpenHistory = { navController.navigate(HISTORY) },
+        onOpenProject = {
+          viewModel.reuseHistoryRecord(it)
+          navController.navigate(EDITOR)
+        },
         onOpenSettings = { navController.navigate(SETTINGS) },
       )
     }
@@ -607,76 +615,172 @@ private fun HomeScreen(
   state: AppSnapshot,
   finishApp: () -> Unit,
   onOpenMediaPicker: () -> Unit,
-  onOpenHistory: () -> Unit,
+  onOpenProject: (Long) -> Unit,
   onOpenSettings: () -> Unit,
 ) {
   var confirmExit by rememberSaveable { mutableStateOf(false) }
-  val recentExports = remember(state.history) { state.history.take(3) }
+  var selectedDestination by rememberSaveable { mutableStateOf(HomeDestination.Home) }
+  val recentExports = remember(state.history) { state.history.take(6) }
 
   Scaffold(
     containerColor = ClipyBackground,
     contentWindowInsets = WindowInsets.safeDrawing,
     topBar = {
-      CenterAlignedTopAppBar(
-        title = { Text("Clipy") },
-        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = ClipyBackground),
-      )
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .statusBarsPadding()
+          .padding(horizontal = 20.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+          Surface(
+            modifier = Modifier.size(42.dp),
+            shape = RoundedCornerShape(14.dp),
+            color = Color(0xFF151A24),
+          ) {
+            Box(contentAlignment = Alignment.Center) {
+              Text("C", color = ClipyOnDark, style = MaterialTheme.typography.titleLarge)
+            }
+          }
+          Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("Clipy", color = ClipyOnDark, style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.home_creator_label), color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
+          }
+        }
+        IconButton(onClick = onOpenSettings) {
+          Icon(Icons.Rounded.AccountCircle, contentDescription = stringResource(R.string.nav_settings), tint = ClipyOnDark)
+        }
+      }
+    },
+    bottomBar = {
+      Surface(color = Color(0xF2141820)) {
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+          horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+          HomeDestination.entries.forEach { destination ->
+            HomeDestinationItem(
+              destination = destination,
+              selected = selectedDestination == destination,
+              onClick = { selectedDestination = destination },
+            )
+          }
+        }
+      }
     },
   ) { padding ->
     Column(
       modifier = Modifier
         .fillMaxSize()
         .padding(padding)
-        .padding(16.dp)
+        .padding(horizontal = 16.dp)
         .verticalScroll(rememberScrollState()),
-      verticalArrangement = Arrangement.spacedBy(14.dp),
+      verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-      PremiumCard {
-        Text(stringResource(R.string.home_title), style = MaterialTheme.typography.headlineMedium)
-        Spacer(Modifier.height(8.dp))
-        Text(stringResource(R.string.tagline), color = ClipyMuted)
-        Spacer(Modifier.height(18.dp))
-        Button(
-          onClick = onOpenMediaPicker,
-          modifier = Modifier.fillMaxWidth().height(56.dp),
-          colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary),
+      Spacer(Modifier.height(8.dp))
+      Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        color = Color(0xFF141922),
+      ) {
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .background(
+              Brush.verticalGradient(
+                listOf(Color(0xFF1A2232), Color(0xFF12161E)),
+              ),
+            )
+            .padding(horizontal = 20.dp, vertical = 22.dp),
+          horizontalAlignment = Alignment.CenterHorizontally,
+          verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-          Icon(Icons.Rounded.FolderOpen, contentDescription = null)
-          Spacer(Modifier.width(8.dp))
-          Text(stringResource(R.string.home_pick_video))
+          Text(
+            stringResource(R.string.home_title),
+            color = ClipyOnDark,
+            style = MaterialTheme.typography.headlineMedium,
+            textAlign = TextAlign.Center,
+          )
+          Text(stringResource(R.string.tagline), color = ClipyMuted, textAlign = TextAlign.Center)
+          Button(
+            onClick = onOpenMediaPicker,
+            modifier = Modifier.fillMaxWidth().height(58.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary),
+          ) {
+            Icon(Icons.Rounded.Add, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.home_new_project))
+          }
+          Text(stringResource(R.string.home_new_project_hint), color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
         }
-        Spacer(Modifier.height(10.dp))
-        Text(stringResource(R.string.home_pick_hint), color = ClipyMuted)
       }
 
-      SectionCard(title = stringResource(R.string.home_recent_exports)) {
-        if (recentExports.isEmpty()) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+          Text(stringResource(R.string.home_recent_projects), color = ClipyOnDark, style = MaterialTheme.typography.titleLarge)
+          Text(stringResource(R.string.home_recent_projects_hint), color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
+        }
+        TimelineCompactBadge(primary = recentExports.size.toString(), secondary = stringResource(R.string.nav_history))
+      }
+
+      if (recentExports.isEmpty()) {
+        PremiumCard {
+          Text(stringResource(R.string.history_empty_title), style = MaterialTheme.typography.titleLarge)
+          Spacer(Modifier.height(8.dp))
           Text(stringResource(R.string.history_empty_body), color = ClipyMuted)
-        } else {
-          recentExports.forEach { item ->
-            HistoryItemCard(item = item, onReuse = {}, showReuseAction = false)
-            Spacer(Modifier.height(10.dp))
+          Spacer(Modifier.height(14.dp))
+          Button(
+            onClick = onOpenMediaPicker,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary),
+          ) {
+            Text(stringResource(R.string.home_new_project))
+          }
+        }
+      } else {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 4.dp)) {
+          items(recentExports, key = { it.id }) { item ->
+            RecentProjectCard(item = item, onClick = { onOpenProject(item.id) })
           }
         }
       }
 
-      SectionCard(title = stringResource(R.string.home_tools)) {
-        OutlinedButton(onClick = onOpenHistory, modifier = Modifier.fillMaxWidth()) {
-          Icon(Icons.Rounded.History, contentDescription = null)
-          Spacer(Modifier.width(8.dp))
-          Text(stringResource(R.string.nav_history))
-        }
-        Spacer(Modifier.height(10.dp))
-        OutlinedButton(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
-          Icon(Icons.Rounded.Settings, contentDescription = null)
-          Spacer(Modifier.width(8.dp))
-          Text(stringResource(R.string.nav_settings))
+      PremiumCard {
+        Text(stringResource(R.string.home_tools), style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(14.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+          HomeToolShortcut(
+            modifier = Modifier.weight(1f),
+            icon = Icons.Rounded.FolderOpen,
+            title = stringResource(R.string.home_pick_video),
+            subtitle = stringResource(R.string.home_pick_hint),
+            onClick = onOpenMediaPicker,
+          )
+          HomeToolShortcut(
+            modifier = Modifier.weight(1f),
+            icon = Icons.Rounded.Settings,
+            title = stringResource(R.string.nav_settings),
+            subtitle = stringResource(R.string.home_settings_hint),
+            onClick = onOpenSettings,
+          )
         }
         Spacer(Modifier.height(10.dp))
         OutlinedButton(onClick = { confirmExit = true }, modifier = Modifier.fillMaxWidth()) {
           Text(stringResource(R.string.nav_exit))
         }
       }
+
+      Spacer(Modifier.height(8.dp))
     }
   }
 
@@ -688,6 +792,108 @@ private fun HomeScreen(
       title = { Text(stringResource(R.string.dialog_exit_title)) },
       text = { Text(stringResource(R.string.dialog_exit_body)) },
     )
+  }
+}
+
+private enum class HomeDestination {
+  Home,
+  Templates,
+  Profile,
+}
+
+@Composable
+private fun HomeDestinationItem(destination: HomeDestination, selected: Boolean, onClick: () -> Unit) {
+  val icon = when (destination) {
+    HomeDestination.Home -> Icons.Rounded.Home
+    HomeDestination.Templates -> Icons.Rounded.AutoAwesomeMosaic
+    HomeDestination.Profile -> Icons.Rounded.Person
+  }
+  val label = when (destination) {
+    HomeDestination.Home -> stringResource(R.string.home_nav_home)
+    HomeDestination.Templates -> stringResource(R.string.home_nav_templates)
+    HomeDestination.Profile -> stringResource(R.string.home_nav_profile)
+  }
+  Column(
+    modifier = Modifier
+      .clip(RoundedCornerShape(14.dp))
+      .clickable { onClick() }
+      .padding(horizontal = 14.dp, vertical = 8.dp),
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.spacedBy(4.dp),
+  ) {
+    Icon(icon, contentDescription = label, tint = if (selected) ClipyPrimary else ClipyMuted)
+    Text(label, color = if (selected) ClipyOnDark else ClipyMuted, style = MaterialTheme.typography.labelMedium)
+  }
+}
+
+@Composable
+private fun RecentProjectCard(item: ExportRecordUi, onClick: () -> Unit) {
+  Card(
+    modifier = Modifier.width(220.dp).clickable(onClick = onClick),
+    shape = RoundedCornerShape(20.dp),
+    colors = CardDefaults.cardColors(containerColor = Color(0xFF151A22)),
+  ) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+      Box(
+        modifier = Modifier
+          .fillMaxWidth()
+          .aspectRatio(16f / 9f)
+          .background(Brush.linearGradient(listOf(Color(0xFF202B40), Color(0xFF141A24), Color(0xFF0E1118)))),
+      ) {
+        Box(
+          modifier = Modifier
+            .align(Alignment.TopEnd)
+            .padding(10.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(Color.Black.copy(alpha = 0.34f))
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        ) {
+          Text(item.detailLabel, color = ClipyOnDark, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        }
+        Column(
+          modifier = Modifier.align(Alignment.BottomStart).padding(12.dp),
+          verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+          Text(item.formatLabel, color = ClipyAccent, style = MaterialTheme.typography.labelMedium)
+          Text(item.outputName, color = ClipyOnDark, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+        }
+      }
+      Column(
+        modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+      ) {
+        Text(item.detailLabel, color = ClipyOnDark, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+        Text(item.timestampLabel, color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
+      }
+    }
+  }
+}
+
+@Composable
+private fun HomeToolShortcut(
+  modifier: Modifier = Modifier,
+  icon: androidx.compose.ui.graphics.vector.ImageVector,
+  title: String,
+  subtitle: String,
+  onClick: () -> Unit,
+) {
+  Surface(
+    modifier = modifier.clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick),
+    shape = RoundedCornerShape(18.dp),
+    color = Color(0xFF11161E),
+  ) {
+    Column(
+      modifier = Modifier.padding(14.dp),
+      verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+      Surface(shape = CircleShape, color = Color(0x1F2563EB)) {
+        Box(modifier = Modifier.padding(10.dp), contentAlignment = Alignment.Center) {
+          Icon(icon, contentDescription = null, tint = ClipyPrimary)
+        }
+      }
+      Text(title, color = ClipyOnDark, style = MaterialTheme.typography.titleSmall)
+      Text(subtitle, color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
+    }
   }
 }
 
