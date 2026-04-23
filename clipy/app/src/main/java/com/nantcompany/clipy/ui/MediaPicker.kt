@@ -722,8 +722,9 @@ private fun PreviewOverlay(item: MediaGridItemUiModel, onDismiss: () -> Unit) {
 @Composable
 private fun MediaThumbnail(uri: String, type: String, modifier: Modifier = Modifier) {
   val context = LocalContext.current
-  val bitmap by produceState<Bitmap?>(initialValue = null, uri, type) {
-    value = withContext(Dispatchers.IO) { loadThumbnailBitmap(context, uri, type, 420) }
+  var bitmap by remember(uri, type) { mutableStateOf<Bitmap?>(null) }
+  LaunchedEffect(uri, type) {
+    bitmap = withContext(Dispatchers.IO) { loadThumbnailBitmap(context, uri, type, 420) }
   }
   Box(modifier = modifier.background(Color(0xFF1A1D22)), contentAlignment = Alignment.Center) {
     bitmap?.let {
