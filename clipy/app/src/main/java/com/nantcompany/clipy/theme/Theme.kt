@@ -1,4 +1,4 @@
-package com.example.clipy.theme
+package com.nantcompany.clipy.theme
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme

@@ -1,4 +1,4 @@
-package com.example.clipy
+package com.nantcompany.clipy
 
 import android.app.Application
 import android.content.ActivityNotFoundException
@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.widget.Toast
+import androidx.collection.LruCache
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -55,6 +56,7 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -80,6 +82,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -114,34 +118,38 @@ import androidx.media3.ui.PlayerView
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.clipy.clipy.data.ClipyRepository.AppSnapshot
-import com.example.clipy.clipy.model.AppLanguage
-import com.example.clipy.clipy.model.CropRatio
-import com.example.clipy.clipy.model.ExportFormat
-import com.example.clipy.clipy.model.ExportRecordUi
-import com.example.clipy.clipy.model.Mp4Quality
-import com.example.clipy.clipy.model.SaveBehavior
-import com.example.clipy.clipy.model.thumbnailCaptureTimesMs
-import com.example.clipy.clipy.model.timelineFrameStepMs
-import com.example.clipy.clipy.model.timelineScrollForPlayhead
-import com.example.clipy.clipy.model.timelineThumbnailCount
-import com.example.clipy.clipy.model.timelineSnapshot
-import com.example.clipy.clipy.model.UserPreferences
-import com.example.clipy.clipy.model.WatermarkPosition
-import com.example.clipy.clipy.model.exportMimeType
-import com.example.clipy.clipy.model.mimeType
-import com.example.clipy.clipy.model.snapTimelineMs
-import com.example.clipy.clipy.ui.ClipyViewModel
-import com.example.clipy.theme.ClipyAccent
-import com.example.clipy.theme.ClipyBackground
-import com.example.clipy.theme.ClipyMuted
-import com.example.clipy.theme.ClipyOnDark
-import com.example.clipy.theme.ClipyPrimary
-import com.example.clipy.theme.ClipySecondary
-import com.example.clipy.theme.ClipySuccess
+import com.nantcompany.clipy.data.ClipyRepository.AppSnapshot
+import com.nantcompany.clipy.model.AppLanguage
+import com.nantcompany.clipy.model.CropRatio
+import com.nantcompany.clipy.model.ExportFormat
+import com.nantcompany.clipy.model.ExportRecordUi
+import com.nantcompany.clipy.model.Mp4Quality
+import com.nantcompany.clipy.model.SaveBehavior
+import com.nantcompany.clipy.model.thumbnailCaptureTimesMs
+import com.nantcompany.clipy.model.timelineFrameStepMs
+import com.nantcompany.clipy.model.timelineScrollForPlayhead
+import com.nantcompany.clipy.model.timelineThumbnailCount
+import com.nantcompany.clipy.model.timelineSnapshot
+import com.nantcompany.clipy.model.UserPreferences
+import com.nantcompany.clipy.model.WatermarkPosition
+import com.nantcompany.clipy.model.exportMimeType
+import com.nantcompany.clipy.model.mimeType
+import com.nantcompany.clipy.model.snapTimelineMs
+import com.nantcompany.clipy.model.TimelineSnapshot
+import com.nantcompany.clipy.ui.ClipyViewModel
+import com.nantcompany.clipy.theme.ClipyAccent
+import com.nantcompany.clipy.theme.ClipyBackground
+import com.nantcompany.clipy.theme.ClipyMuted
+import com.nantcompany.clipy.theme.ClipyOnDark
+import com.nantcompany.clipy.theme.ClipyPrimary
+import com.nantcompany.clipy.theme.ClipySecondary
+import com.nantcompany.clipy.theme.ClipySuccess
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.isActive
 import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
@@ -153,6 +161,22 @@ private const val HISTORY = "history"
 private const val EXPORT = "export"
 private const val LANGUAGE = "language"
 private const val PERFORMANCE_CACHE_MB = 256
+private const val MIN_TRIM_GAP_MS = 250L
+
+private val timelineThumbnailCache = object : LruCache<String, Bitmap>(48) {}
+
+@Stable
+private data class TimelineGestureAnchor(
+  val trimStartMs: Long,
+  val trimEndMs: Long,
+  val playheadMs: Long,
+)
+
+private enum class TimelineDragTarget {
+  Start,
+  End,
+  Playhead,
+}
 
 @Composable
 fun ClipyApp(finishApp: () -> Unit) {
@@ -225,6 +249,7 @@ fun ClipyApp(finishApp: () -> Unit) {
         onBack = navController::popBackStack,
         onSave = viewModel::saveSettings,
         onOpenLanguage = { navController.navigate(LANGUAGE) },
+        onClearHistory = viewModel::clearHistory,
         onExit = finishApp,
       )
     }
@@ -242,6 +267,7 @@ fun ClipyApp(finishApp: () -> Unit) {
       HistoryScreen(
         state = state,
         onBack = navController::popBackStack,
+        onClearHistory = viewModel::clearHistory,
         onReuse = {
           viewModel.reuseHistoryRecord(it)
           navController.popBackStack()
@@ -625,11 +651,13 @@ private fun SettingsScreen(
   onBack: () -> Unit,
   onSave: (UserPreferences) -> Unit,
   onOpenLanguage: () -> Unit,
+  onClearHistory: () -> Unit,
   onExit: () -> Unit,
 ) {
   val context = LocalContext.current
   var edited by remember(preferences) { mutableStateOf(preferences) }
   var confirmExit by rememberSaveable { mutableStateOf(false) }
+  var confirmClearHistory by rememberSaveable { mutableStateOf(false) }
   var cacheLimitMb by rememberSaveable { mutableStateOf(PERFORMANCE_CACHE_MB) }
 
   Scaffold(
@@ -695,6 +723,13 @@ private fun SettingsScreen(
         Spacer(Modifier.height(8.dp))
         Text(settingsVersionLabel(), color = ClipyMuted, style = MaterialTheme.typography.bodyMedium)
       }
+      SectionCard(title = stringResource(R.string.settings_clear_history)) {
+        Text(stringResource(R.string.settings_clear_history_body), color = ClipyMuted)
+        Spacer(Modifier.height(12.dp))
+        OutlinedButton(onClick = { confirmClearHistory = true }, modifier = Modifier.fillMaxWidth()) {
+          Text(stringResource(R.string.settings_clear_history_action))
+        }
+      }
       Button(
         onClick = { onSave(edited); onBack() },
         modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -715,6 +750,23 @@ private fun SettingsScreen(
       dismissButton = { TextButton(onClick = { confirmExit = false }) { Text(stringResource(R.string.dialog_cancel)) } },
       title = { Text(stringResource(R.string.dialog_close_title)) },
       text = { Text(stringResource(R.string.dialog_close_body)) },
+    )
+  }
+
+  if (confirmClearHistory) {
+    AlertDialog(
+      onDismissRequest = { confirmClearHistory = false },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            onClearHistory()
+            confirmClearHistory = false
+          },
+        ) { Text(stringResource(R.string.settings_clear_history_action)) }
+      },
+      dismissButton = { TextButton(onClick = { confirmClearHistory = false }) { Text(stringResource(R.string.dialog_cancel)) } },
+      title = { Text(stringResource(R.string.settings_clear_history)) },
+      text = { Text(stringResource(R.string.settings_clear_history_confirm)) },
     )
   }
 }
@@ -768,13 +820,30 @@ private fun LanguageScreen(selectedLanguage: String, onBack: () -> Unit, onApply
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HistoryScreen(state: AppSnapshot, onBack: () -> Unit, onReuse: (Long) -> Unit) {
+private fun HistoryScreen(state: AppSnapshot, onBack: () -> Unit, onClearHistory: () -> Unit, onReuse: (Long) -> Unit) {
+  var filter by rememberSaveable { mutableStateOf(HistoryFilter.All) }
+  var confirmClearHistory by rememberSaveable { mutableStateOf(false) }
+  val filteredHistory = remember(state.history, filter) {
+    when (filter) {
+      HistoryFilter.All -> state.history
+      HistoryFilter.Gif -> state.history.filter { it.formatLabel.equals("GIF", ignoreCase = true) }
+      HistoryFilter.Mp4 -> state.history.filter { it.formatLabel.equals("MP4", ignoreCase = true) }
+    }
+  }
+
   Scaffold(
     containerColor = ClipyBackground,
     topBar = {
       CenterAlignedTopAppBar(
         title = { Text(stringResource(R.string.history_title)) },
         navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.back)) } },
+        actions = {
+          if (state.history.isNotEmpty()) {
+            IconButton(onClick = { confirmClearHistory = true }) {
+              Icon(Icons.Rounded.DeleteSweep, contentDescription = stringResource(R.string.settings_clear_history_action))
+            }
+          }
+        },
         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = ClipyBackground),
       )
     },
@@ -787,18 +856,49 @@ private fun HistoryScreen(state: AppSnapshot, onBack: () -> Unit, onReuse: (Long
         .verticalScroll(rememberScrollState()),
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-      if (state.history.isEmpty()) {
+      if (state.history.isNotEmpty()) {
+        ChipRow(
+          items = HistoryFilter.entries.toList(),
+          selected = filter,
+          label = { Text(historyFilterLabel(it)) },
+          onSelected = { filter = it },
+        )
+      }
+      if (filteredHistory.isEmpty()) {
         PremiumCard {
-          Text(stringResource(R.string.history_empty_title), style = MaterialTheme.typography.titleLarge)
+          Text(
+            stringResource(if (state.history.isEmpty()) R.string.history_empty_title else R.string.history_filter_empty_title),
+            style = MaterialTheme.typography.titleLarge,
+          )
           Spacer(Modifier.height(8.dp))
-          Text(stringResource(R.string.history_empty_body), color = ClipyMuted)
+          Text(
+            stringResource(if (state.history.isEmpty()) R.string.history_empty_body else R.string.history_filter_empty_body),
+            color = ClipyMuted,
+          )
         }
       } else {
-        state.history.forEach { item ->
+        filteredHistory.forEach { item ->
           HistoryItemCard(item = item, onReuse = { onReuse(item.id) })
         }
       }
     }
+  }
+
+  if (confirmClearHistory) {
+    AlertDialog(
+      onDismissRequest = { confirmClearHistory = false },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            onClearHistory()
+            confirmClearHistory = false
+          },
+        ) { Text(stringResource(R.string.settings_clear_history_action)) }
+      },
+      dismissButton = { TextButton(onClick = { confirmClearHistory = false }) { Text(stringResource(R.string.dialog_cancel)) } },
+      title = { Text(stringResource(R.string.settings_clear_history)) },
+      text = { Text(stringResource(R.string.settings_clear_history_confirm)) },
+    )
   }
 }
 
@@ -810,6 +910,19 @@ private fun ExportScreen(state: AppSnapshot, onBack: () -> Unit, onCancel: () ->
   val latestExport = latestExportRecord(state)
   val outputUri = job.outputUri ?: latestExport?.outputUri.orEmpty()
   val saveBehavior = saveBehaviorLabel(state.preferences.saveBehavior)
+  var sharedOutputUri by rememberSaveable { mutableStateOf<String?>(null) }
+
+  LaunchedEffect(job.status, outputUri, state.preferences.saveBehavior) {
+    if (
+      job.status == "Success" &&
+      state.preferences.saveBehavior == SaveBehavior.ShareFirst &&
+      outputUri.isNotBlank() &&
+      sharedOutputUri != outputUri
+    ) {
+      sharedOutputUri = outputUri
+      shareUri(context, Uri.parse(outputUri), state.draft.exportFormat.mimeType())
+    }
+  }
 
   Scaffold(
     containerColor = ClipyBackground,
@@ -944,7 +1057,7 @@ private fun ToggleRow(title: String, checked: Boolean, onToggle: () -> Unit) {
 @Composable
 private fun TimelineEditor(
   sourceUri: String,
-  timeline: com.example.clipy.clipy.model.TimelineSnapshot,
+  timeline: TimelineSnapshot,
   onTrimStartChange: (Long) -> Unit,
   onTrimEndChange: (Long) -> Unit,
   onPlayheadChange: (Long) -> Unit,
@@ -955,6 +1068,16 @@ private fun TimelineEditor(
   val density = LocalDensity.current
   val scrollState = rememberScrollState()
   var viewportWidthPx by remember { mutableStateOf(with(density) { 320.dp.roundToPx() }) }
+  var activeDragTarget by remember { mutableStateOf<TimelineDragTarget?>(null) }
+  var gestureAnchor by remember(timeline) {
+    mutableStateOf(
+      TimelineGestureAnchor(
+        trimStartMs = timeline.trimStartMs,
+        trimEndMs = timeline.trimEndMs,
+        playheadMs = timeline.playheadMs,
+      ),
+    )
+  }
   val contentWidth = (520.dp * timeline.zoom)
   val contentWidthPx = with(density) { contentWidth.roundToPx() }
   val handleWidth = 18.dp
@@ -964,11 +1087,18 @@ private fun TimelineEditor(
   val playheadFraction = timeline.playheadMs / duration.toFloat()
   val thumbnailCount = remember(duration, timeline.zoom, viewportWidthPx) { timelineThumbnailCount(timeline.zoom, viewportWidthPx) }
   val thumbnailTimes = remember(timeline, thumbnailCount) { thumbnailCaptureTimesMs(timeline, thumbnailCount) }
+  val contentWidthPxFloat = with(density) { contentWidth.toPx() }.coerceAtLeast(1f)
 
-  LaunchedEffect(playheadFraction, contentWidthPx, viewportWidthPx) {
-    val target = timelineScrollForPlayhead(playheadFraction, contentWidthPx, viewportWidthPx)
-    val maxValue = (contentWidthPx - viewportWidthPx).coerceAtLeast(0)
-    scrollState.animateScrollTo(target.coerceIn(0, maxValue))
+  LaunchedEffect(scrollState, activeDragTarget, timeline.durationMs) {
+    snapshotFlow { Triple(timeline.playheadMs, contentWidthPx, viewportWidthPx) }
+      .distinctUntilChanged()
+      .collect { (playheadMs, currentContentWidthPx, currentViewportWidthPx) ->
+        if (activeDragTarget != null) return@collect
+        val centeredFraction = playheadMs / timeline.durationMs.coerceAtLeast(1L).toFloat()
+        val target = timelineScrollForPlayhead(centeredFraction, currentContentWidthPx, currentViewportWidthPx)
+        val maxValue = (currentContentWidthPx - currentViewportWidthPx).coerceAtLeast(0)
+        scrollState.animateScrollTo(target.coerceIn(0, maxValue))
+      }
   }
 
   Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1008,10 +1138,23 @@ private fun TimelineEditor(
             .offset { IntOffset(with(density) { (contentWidth.toPx() * startFraction).roundToInt() }, 0) }
             .background(ClipyAccent.copy(alpha = 0.9f))
             .pointerInput(timeline) {
-              detectDragGestures { change, dragAmount ->
+              detectDragGestures(
+                onDragStart = {
+                  activeDragTarget = TimelineDragTarget.Start
+                  gestureAnchor = TimelineGestureAnchor(timeline.trimStartMs, timeline.trimEndMs, timeline.playheadMs)
+                },
+                onDragEnd = {
+                  activeDragTarget = null
+                },
+                onDragCancel = {
+                  activeDragTarget = null
+                },
+              ) { change, dragAmount ->
                 change.consume()
-                val fractionDelta = dragAmount.x / with(density) { contentWidth.toPx() }
-                val target = snapTimelineMs((timeline.trimStartMs + (timeline.durationMs * fractionDelta)).roundToLong())
+                val deltaMs = (timeline.durationMs * (dragAmount.x / contentWidthPxFloat)).roundToLong()
+                val maxStart = max(0L, gestureAnchor.trimEndMs - MIN_TRIM_GAP_MS)
+                val target = snapTimelineMs((gestureAnchor.trimStartMs + deltaMs).coerceIn(0L, maxStart))
+                gestureAnchor = gestureAnchor.copy(trimStartMs = target)
                 onTrimStartChange(target)
               }
             },
@@ -1023,10 +1166,23 @@ private fun TimelineEditor(
             .offset { IntOffset((with(density) { contentWidth.toPx() } * endFraction).roundToInt() - with(density) { handleWidth.toPx().roundToInt() }, 0) }
             .background(ClipyAccent.copy(alpha = 0.9f))
             .pointerInput(timeline) {
-              detectDragGestures { change, dragAmount ->
+              detectDragGestures(
+                onDragStart = {
+                  activeDragTarget = TimelineDragTarget.End
+                  gestureAnchor = TimelineGestureAnchor(timeline.trimStartMs, timeline.trimEndMs, timeline.playheadMs)
+                },
+                onDragEnd = {
+                  activeDragTarget = null
+                },
+                onDragCancel = {
+                  activeDragTarget = null
+                },
+              ) { change, dragAmount ->
                 change.consume()
-                val fractionDelta = dragAmount.x / with(density) { contentWidth.toPx() }
-                val target = snapTimelineMs((timeline.trimEndMs + (timeline.durationMs * fractionDelta)).roundToLong())
+                val deltaMs = (timeline.durationMs * (dragAmount.x / contentWidthPxFloat)).roundToLong()
+                val minEnd = min(timeline.durationMs, gestureAnchor.trimStartMs + MIN_TRIM_GAP_MS)
+                val target = snapTimelineMs((gestureAnchor.trimEndMs + deltaMs).coerceIn(minEnd, timeline.durationMs))
+                gestureAnchor = gestureAnchor.copy(trimEndMs = target)
                 onTrimEndChange(target)
               }
             },
@@ -1038,10 +1194,22 @@ private fun TimelineEditor(
             .offset { IntOffset((with(density) { contentWidth.toPx() } * playheadFraction).roundToInt(), 0) }
             .background(ClipyPrimary)
             .pointerInput(timeline) {
-              detectDragGestures { change, dragAmount ->
+              detectDragGestures(
+                onDragStart = {
+                  activeDragTarget = TimelineDragTarget.Playhead
+                  gestureAnchor = TimelineGestureAnchor(timeline.trimStartMs, timeline.trimEndMs, timeline.playheadMs)
+                },
+                onDragEnd = {
+                  activeDragTarget = null
+                },
+                onDragCancel = {
+                  activeDragTarget = null
+                },
+              ) { change, dragAmount ->
                 change.consume()
-                val fractionDelta = dragAmount.x / with(density) { contentWidth.toPx() }
-                val target = snapTimelineMs((timeline.playheadMs + (timeline.durationMs * fractionDelta)).roundToLong())
+                val deltaMs = (timeline.durationMs * (dragAmount.x / contentWidthPxFloat)).roundToLong()
+                val target = snapTimelineMs((gestureAnchor.playheadMs + deltaMs).coerceIn(timeline.trimStartMs, timeline.trimEndMs))
+                gestureAnchor = gestureAnchor.copy(playheadMs = target)
                 onPlayheadChange(target)
               }
             },
@@ -1055,14 +1223,15 @@ private fun TimelineEditor(
 @Composable
 private fun TimelineThumbnail(sourceUri: String, captureTimeMs: Long, modifier: Modifier = Modifier) {
   val context = LocalContext.current
-  var thumbnail by remember(sourceUri, captureTimeMs) { mutableStateOf<Bitmap?>(null) }
+  val cacheKey = remember(sourceUri, captureTimeMs) { "$sourceUri@$captureTimeMs" }
+  var thumbnail by remember(cacheKey) { mutableStateOf(timelineThumbnailCache.get(cacheKey)) }
 
   LaunchedEffect(sourceUri, captureTimeMs) {
     if (sourceUri.isBlank()) {
       thumbnail = null
       return@LaunchedEffect
     }
-    thumbnail = runCatching {
+    thumbnail = timelineThumbnailCache.get(cacheKey) ?: runCatching {
       val retriever = MediaMetadataRetriever()
       try {
         retriever.setDataSource(context, Uri.parse(sourceUri))
@@ -1070,7 +1239,7 @@ private fun TimelineThumbnail(sourceUri: String, captureTimeMs: Long, modifier: 
       } finally {
         runCatching { retriever.release() }
       }
-    }.getOrNull()
+    }.getOrNull()?.also { timelineThumbnailCache.put(cacheKey, it) }
   }
 
   Box(
@@ -1101,6 +1270,12 @@ private fun <T> ChipRow(items: List<T>, selected: T, label: @Composable (T) -> U
       FilterChip(selected = item == selected, onClick = { onSelected(item) }, label = { label(item) })
     }
   }
+}
+
+private enum class HistoryFilter {
+  All,
+  Gif,
+  Mp4,
 }
 
 @Composable
@@ -1177,6 +1352,16 @@ private fun saveBehaviorLabel(saveBehavior: SaveBehavior): String =
       SaveBehavior.AppFolder -> R.string.save_behavior_app_folder
       SaveBehavior.PromptEachTime -> R.string.save_behavior_prompt
       SaveBehavior.ShareFirst -> R.string.save_behavior_share_first
+    },
+  )
+
+@Composable
+private fun historyFilterLabel(filter: HistoryFilter): String =
+  stringResource(
+    when (filter) {
+      HistoryFilter.All -> R.string.history_filter_all
+      HistoryFilter.Gif -> R.string.history_filter_gif
+      HistoryFilter.Mp4 -> R.string.history_filter_mp4
     },
   )
 

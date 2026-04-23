@@ -72,6 +72,10 @@
     <string name="save_behavior_share_first">Mo chia se truoc</string>
     <string name="settings_about">Gioi thieu</string>
     <string name="settings_about_body">Quy trinh sang tao uu tien rieng tu voi lich su cuc bo va mau xuat co the tai su dung.</string>
+    <string name="settings_clear_history">Xoa lich su</string>
+    <string name="settings_clear_history_body">Xoa cac ban ghi xuat da luu khoi lich su cuc bo khi ban muon bat dau lai tu dau.</string>
+    <string name="settings_clear_history_action">Xoa lich su cuc bo</string>
+    <string name="settings_clear_history_confirm">Thao tac nay xoa cac ban ghi xuat khoi lich su Clipy. Cac tep da xuat van duoc giu tren thiet bi.</string>
     <string name="settings_version">Phien ban %1$s</string>
     <string name="settings_save">Luu cai dat</string>
     <string name="settings_exit">Thoat ung dung</string>
@@ -81,6 +85,11 @@
     <string name="history_title">Lich su xuat</string>
     <string name="history_empty_title">Chua co lan xuat nao</string>
     <string name="history_empty_body">Hoan thanh GIF hoac MP4 dau tien de tao lich su cuc bo co the tai su dung.</string>
+    <string name="history_filter_all">Tat ca</string>
+    <string name="history_filter_gif">GIF</string>
+    <string name="history_filter_mp4">MP4</string>
+    <string name="history_filter_empty_title">Khong co ban ghi phu hop bo loc</string>
+    <string name="history_filter_empty_body">Hay doi bo loc hoac tao mot ban xuat moi de hien thi tai day.</string>
     <string name="history_reuse">Dung lai thiet lap</string>
     <string name="export_title">Tien trinh xuat</string>
     <string name="export_saved_locally">Da luu cuc bo</string>

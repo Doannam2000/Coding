@@ -1,4 +1,4 @@
-package com.example.clipy.theme
+package com.nantcompany.clipy.theme
 
 import androidx.compose.ui.graphics.Color
 

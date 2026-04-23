@@ -1,4 +1,4 @@
-package com.example.clipy.clipy.model
+package com.nantcompany.clipy.model
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey

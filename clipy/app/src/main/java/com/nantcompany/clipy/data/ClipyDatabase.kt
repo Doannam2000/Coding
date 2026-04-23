@@ -1,8 +1,8 @@
-package com.example.clipy.clipy.data
+package com.nantcompany.clipy.data
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
-import com.example.clipy.clipy.model.ExportRecord
+import com.nantcompany.clipy.model.ExportRecord
 
 @Database(entities = [ExportRecord::class], version = 1, exportSchema = false)
 abstract class ClipyDatabase : RoomDatabase() {

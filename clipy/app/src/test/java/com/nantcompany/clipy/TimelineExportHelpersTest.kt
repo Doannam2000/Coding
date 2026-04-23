@@ -1,13 +1,13 @@
-package com.example.clipy.clipy
+package com.nantcompany.clipy
 
-import com.example.clipy.clipy.model.CropRatio
-import com.example.clipy.clipy.model.ExportFormat
-import com.example.clipy.clipy.model.ProjectDraft
-import com.example.clipy.clipy.model.TimelineSnapshot
-import com.example.clipy.clipy.model.buildExportPlan
-import com.example.clipy.clipy.model.resolutionPreset
-import com.example.clipy.clipy.model.shouldPersistUri
-import com.example.clipy.clipy.model.thumbnailCaptureTimesMs
+import com.nantcompany.clipy.model.CropRatio
+import com.nantcompany.clipy.model.ExportFormat
+import com.nantcompany.clipy.model.ProjectDraft
+import com.nantcompany.clipy.model.TimelineSnapshot
+import com.nantcompany.clipy.model.buildExportPlan
+import com.nantcompany.clipy.model.resolutionPreset
+import com.nantcompany.clipy.model.shouldPersistUri
+import com.nantcompany.clipy.model.thumbnailCaptureTimesMs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

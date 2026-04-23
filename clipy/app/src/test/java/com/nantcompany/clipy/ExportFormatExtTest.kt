@@ -1,8 +1,8 @@
-package com.example.clipy.clipy
+package com.nantcompany.clipy
 
-import com.example.clipy.clipy.model.ExportFormat
-import com.example.clipy.clipy.model.exportMimeType
-import com.example.clipy.clipy.model.mimeType
+import com.nantcompany.clipy.model.ExportFormat
+import com.nantcompany.clipy.model.exportMimeType
+import com.nantcompany.clipy.model.mimeType
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

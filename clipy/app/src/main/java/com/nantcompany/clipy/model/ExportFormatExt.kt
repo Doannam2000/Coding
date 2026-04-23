@@ -1,4 +1,4 @@
-package com.example.clipy.clipy.model
+package com.nantcompany.clipy.model
 
 fun ExportFormat.mimeType(): String =
   when (this) {

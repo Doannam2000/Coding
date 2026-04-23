@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-22 17:50 UTC
+- Last updated: 2026-04-23 00:20 UTC
 - App: Clipy
 - Slug: clipy
 - Tagline: Fast social-ready video edits and GIF exports in seconds.
 - Target users: Content creators, TikTok/Reels users, meme makers, casual users needing fast video editing
-- Design direction: Premium dark creator-tool aesthetic with fast, focused editing surfaces. Use a cinematic charcoal base, vivid electric accents, rounded cards, dense but readable control clusters, and restrained motion that makes timeline and export actions feel precise rather than playful. Material 3 structure should remain intact, but with tighter spacing, stronger contrast, and a more studio-like tone suited to short-form video creators.
+- Design direction: Premium dark creator-tool aesthetic with restrained neon accents, large rounded surfaces, high-contrast playback areas, and compact control clusters optimized for quick single-session edits. The UI should feel fast and intentional rather than playful, using Material 3 structure with custom tonal elevation and a cinematic preview-first hierarchy.
 - Core constraints: Android only, no backend, lightweight but powerful, limit GIF size/duration, smooth UX, handle large videos safely
 Design style must align with: Modern dark creator-tool UI, clean layout, smooth animations, rounded cards, premium feel
 Typography should align with: Inter
@@ -17,6 +17,7 @@ Use Android applicationId/package name: com.nantcompany.clipy
 Feature priorities update: Add draggable trim timeline like CapCut with thumbnail preview, start/end handles, playhead, and real-time synced video preview
 Feature priorities update: Add a CapCut-style timeline editor with draggable start and end handles, thumbnail preview strip, movable playhead, and real-time synced video preview. Continue refining UX, gestures, and animations until the interaction feels as smooth and responsive as CapCut timeline editing.
 Feature priorities update: Implement a CapCut-style timeline editor with pinch-to-zoom, smooth draggable scrolling, draggable start/end trim handles, frame-by-frame stepping, snap-to-keyframe cutting, looping preview for selected range, real-time synced video preview via ExoPlayer seek, and optimized thumbnail caching/lazy loading for ultra-smooth performance
+Feature priorities update: Implement the basic MVP first: pick video from gallery, preview video playback, draggable start and end trim selection, real-time synced preview while trimming, export as short MP4, export as GIF, save output to device, share exported file, simple export progress UI, and basic export history
 
 ### Core Features
 - Splash screen followed by onboarding and main app flow
@@ -43,13 +44,12 @@ Feature priorities update: Implement a CapCut-style timeline editor with pinch-t
 - Splash Screen
 - Intro & Language Selection
 - Main Editor
-- Export Setup & Progress
-- Export Result & Share
-- History
+- Export Settings & Progress
+- Export History
 - Settings
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Room for export history and job state, DataStore for language/default export preferences, MediaStore plus content URIs for source/output access, and local disk cache for timeline thumbnails
+- storage: Room for export history, DataStore for preferences, MediaStore/content URIs for source and output files
 <!-- AUTO-GENERATED:CORE_END -->

@@ -1,19 +1,18 @@
-package com.example.clipy.clipy.ui
+package com.nantcompany.clipy.ui
 
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.clipy.clipy.data.ClipyRepository
-import com.example.clipy.clipy.data.ClipyRepository.AppSnapshot
-import com.example.clipy.clipy.model.AppLanguage
-import com.example.clipy.clipy.model.CropRatio
-import com.example.clipy.clipy.model.ExportFormat
-import com.example.clipy.clipy.model.Mp4Quality
-import com.example.clipy.clipy.model.SaveBehavior
-import com.example.clipy.clipy.model.UserPreferences
-import com.example.clipy.clipy.model.WatermarkPosition
+import com.nantcompany.clipy.data.ClipyRepository
+import com.nantcompany.clipy.data.ClipyRepository.AppSnapshot
+import com.nantcompany.clipy.model.AppLanguage
+import com.nantcompany.clipy.model.CropRatio
+import com.nantcompany.clipy.model.ExportFormat
+import com.nantcompany.clipy.model.Mp4Quality
+import com.nantcompany.clipy.model.UserPreferences
+import com.nantcompany.clipy.model.WatermarkPosition
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -118,6 +117,10 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
 
   fun reuseHistoryRecord(recordId: Long) {
     viewModelScope.launch { repository.reuseHistoryRecord(recordId) }
+  }
+
+  fun clearHistory() {
+    viewModelScope.launch { repository.clearHistory() }
   }
 
   fun startExport(): Boolean {

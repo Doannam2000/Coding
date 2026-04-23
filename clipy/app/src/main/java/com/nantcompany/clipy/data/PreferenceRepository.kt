@@ -1,4 +1,4 @@
-package com.example.clipy.clipy.data
+package com.nantcompany.clipy.data
 
 import android.content.Context
 import androidx.datastore.core.DataStore
@@ -8,11 +8,11 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.example.clipy.clipy.model.AppLanguage
-import com.example.clipy.clipy.model.CropRatio
-import com.example.clipy.clipy.model.Mp4Quality
-import com.example.clipy.clipy.model.SaveBehavior
-import com.example.clipy.clipy.model.UserPreferences
+import com.nantcompany.clipy.model.AppLanguage
+import com.nantcompany.clipy.model.CropRatio
+import com.nantcompany.clipy.model.Mp4Quality
+import com.nantcompany.clipy.model.SaveBehavior
+import com.nantcompany.clipy.model.UserPreferences
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 

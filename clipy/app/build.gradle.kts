@@ -7,10 +7,10 @@ plugins {
 }
 
 android {
-    namespace = "com.example.clipy"
+    namespace = "com.nantcompany.clipy"
     compileSdk = 35
     defaultConfig {
-        applicationId = "com.example.clipy"
+        applicationId = "com.nantcompany.clipy"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -69,11 +69,9 @@ dependencies {
 
   // Compose
   implementation(libs.androidx.compose.ui)
-  implementation(libs.androidx.compose.ui.text.google.fonts)
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.compose.material3)
   implementation(libs.androidx.compose.material.icons.extended)
-  implementation(libs.ffmpeg.kit.full.gpl)
   // Tooling
   debugImplementation(libs.androidx.compose.ui.tooling)
   // Instrumented tests

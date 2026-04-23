@@ -1,24 +1,24 @@
-package com.example.clipy.clipy.data
+package com.nantcompany.clipy.data
 
 import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import androidx.room.Room
-import com.example.clipy.clipy.model.AppLanguage
-import com.example.clipy.clipy.model.CropRatio
-import com.example.clipy.clipy.model.ExportFormat
-import com.example.clipy.clipy.model.ExportJobState
-import com.example.clipy.clipy.model.ExportRecord
-import com.example.clipy.clipy.model.ExportRecordUi
-import com.example.clipy.clipy.model.Mp4Quality
-import com.example.clipy.clipy.model.ProjectDraft
-import com.example.clipy.clipy.model.SaveBehavior
-import com.example.clipy.clipy.model.sanitizeTimeline
-import com.example.clipy.clipy.model.sanitizeOutputName
-import com.example.clipy.clipy.model.snapToNearestKeyframe
-import com.example.clipy.clipy.model.shouldPersistUri
-import com.example.clipy.clipy.model.UserPreferences
-import com.example.clipy.clipy.model.validateExport
+import com.nantcompany.clipy.model.AppLanguage
+import com.nantcompany.clipy.model.CropRatio
+import com.nantcompany.clipy.model.ExportFormat
+import com.nantcompany.clipy.model.ExportJobState
+import com.nantcompany.clipy.model.ExportRecord
+import com.nantcompany.clipy.model.ExportRecordUi
+import com.nantcompany.clipy.model.Mp4Quality
+import com.nantcompany.clipy.model.ProjectDraft
+import com.nantcompany.clipy.model.SaveBehavior
+import com.nantcompany.clipy.model.sanitizeTimeline
+import com.nantcompany.clipy.model.sanitizeOutputName
+import com.nantcompany.clipy.model.snapToNearestKeyframe
+import com.nantcompany.clipy.model.shouldPersistUri
+import com.nantcompany.clipy.model.UserPreferences
+import com.nantcompany.clipy.model.validateExport
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -188,6 +188,10 @@ class ClipyRepository private constructor(context: Context) {
         outputName = "${record.outputName}_redo",
       )
     }
+  }
+
+  suspend fun clearHistory() {
+    dao.clearHistory()
   }
 
   suspend fun startExport() {
