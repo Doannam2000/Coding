@@ -24,6 +24,11 @@
     <string name="nav_history">History</string>
     <string name="nav_settings">Settings</string>
     <string name="nav_exit">Exit</string>
+    <string name="home_title">Start a new export</string>
+    <string name="home_pick_video">Pick video</string>
+    <string name="home_pick_hint">Import a clip from your device, then move into the fast edit workspace.</string>
+    <string name="home_recent_exports">Recent exports</string>
+    <string name="home_tools">Library and app tools</string>
     <string name="editor_ready">Ready for export</string>
     <string name="editor_gif_hint">Duration capped for compact sharing.</string>
     <string name="editor_mp4_hint">MP4 quality stays tuned for social posting.</string>

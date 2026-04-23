@@ -155,6 +155,7 @@ import kotlin.math.roundToLong
 
 private const val SPLASH = "splash"
 private const val INTRO = "intro"
+private const val HOME = "home"
 private const val EDITOR = "editor"
 private const val SETTINGS = "settings"
 private const val HISTORY = "history"
@@ -193,7 +194,7 @@ fun ClipyApp(finishApp: () -> Unit) {
 
   LaunchedEffect(state.preferences.onboardingCompleted, splashResolved) {
     if (splashResolved) {
-      navController.navigate(if (state.preferences.onboardingCompleted) EDITOR else INTRO) {
+      navController.navigate(if (state.preferences.onboardingCompleted) HOME else INTRO) {
         popUpTo(SPLASH) { inclusive = true }
       }
     }
@@ -208,14 +209,26 @@ fun ClipyApp(finishApp: () -> Unit) {
         selectedLanguage = state.preferences.languageCode,
         onContinue = {
           viewModel.completeOnboarding(it)
-          navController.navigate(EDITOR) { popUpTo(INTRO) { inclusive = true } }
+          navController.navigate(HOME) { popUpTo(INTRO) { inclusive = true } }
         },
+      )
+    }
+    composable(HOME) {
+      HomeScreen(
+        state = state,
+        finishApp = finishApp,
+        onImportVideo = {
+          viewModel.importVideo(it)
+          navController.navigate(EDITOR)
+        },
+        onOpenHistory = { navController.navigate(HISTORY) },
+        onOpenSettings = { navController.navigate(SETTINGS) },
       )
     }
     composable(EDITOR) {
       EditorScreen(
         state = state,
-        onImportVideo = viewModel::importVideo,
+        onBack = navController::popBackStack,
         onTrimStartChange = viewModel::updateTrimStart,
         onTrimEndChange = viewModel::updateTrimEnd,
         onCropChange = viewModel::updateCropRatio,
@@ -415,9 +428,108 @@ private fun IntroScreen(selectedLanguage: String, onContinue: (AppLanguage) -> U
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+private fun HomeScreen(
+  state: AppSnapshot,
+  finishApp: () -> Unit,
+  onImportVideo: (Uri) -> Unit,
+  onOpenHistory: () -> Unit,
+  onOpenSettings: () -> Unit,
+) {
+  val context = LocalContext.current
+  var confirmExit by rememberSaveable { mutableStateOf(false) }
+  val recentExports = remember(state.history) { state.history.take(3) }
+  val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    uri?.let {
+      runCatching {
+        context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      }
+      onImportVideo(it)
+    }
+  }
+
+  Scaffold(
+    containerColor = ClipyBackground,
+    contentWindowInsets = WindowInsets.safeDrawing,
+    topBar = {
+      CenterAlignedTopAppBar(
+        title = { Text("Clipy") },
+        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = ClipyBackground),
+      )
+    },
+  ) { padding ->
+    Column(
+      modifier = Modifier
+        .fillMaxSize()
+        .padding(padding)
+        .padding(16.dp)
+        .verticalScroll(rememberScrollState()),
+      verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+      PremiumCard {
+        Text(stringResource(R.string.home_title), style = MaterialTheme.typography.headlineMedium)
+        Spacer(Modifier.height(8.dp))
+        Text(stringResource(R.string.tagline), color = ClipyMuted)
+        Spacer(Modifier.height(18.dp))
+        Button(
+          onClick = { picker.launch(arrayOf("video/*")) },
+          modifier = Modifier.fillMaxWidth().height(56.dp),
+          colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary),
+        ) {
+          Icon(Icons.Rounded.FolderOpen, contentDescription = null)
+          Spacer(Modifier.width(8.dp))
+          Text(stringResource(R.string.home_pick_video))
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(stringResource(R.string.home_pick_hint), color = ClipyMuted)
+      }
+
+      SectionCard(title = stringResource(R.string.home_recent_exports)) {
+        if (recentExports.isEmpty()) {
+          Text(stringResource(R.string.history_empty_body), color = ClipyMuted)
+        } else {
+          recentExports.forEach { item ->
+            HistoryItemCard(item = item, onReuse = {}, showReuseAction = false)
+            Spacer(Modifier.height(10.dp))
+          }
+        }
+      }
+
+      SectionCard(title = stringResource(R.string.home_tools)) {
+        OutlinedButton(onClick = onOpenHistory, modifier = Modifier.fillMaxWidth()) {
+          Icon(Icons.Rounded.History, contentDescription = null)
+          Spacer(Modifier.width(8.dp))
+          Text(stringResource(R.string.nav_history))
+        }
+        Spacer(Modifier.height(10.dp))
+        OutlinedButton(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
+          Icon(Icons.Rounded.Settings, contentDescription = null)
+          Spacer(Modifier.width(8.dp))
+          Text(stringResource(R.string.nav_settings))
+        }
+        Spacer(Modifier.height(10.dp))
+        OutlinedButton(onClick = { confirmExit = true }, modifier = Modifier.fillMaxWidth()) {
+          Text(stringResource(R.string.nav_exit))
+        }
+      }
+    }
+  }
+
+  if (confirmExit) {
+    AlertDialog(
+      onDismissRequest = { confirmExit = false },
+      confirmButton = { TextButton(onClick = finishApp) { Text(stringResource(R.string.nav_exit)) } },
+      dismissButton = { TextButton(onClick = { confirmExit = false }) { Text(stringResource(R.string.dialog_stay)) } },
+      title = { Text(stringResource(R.string.dialog_exit_title)) },
+      text = { Text(stringResource(R.string.dialog_exit_body)) },
+    )
+  }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 private fun EditorScreen(
   state: AppSnapshot,
-  onImportVideo: (Uri) -> Unit,
+  onBack: () -> Unit,
   onTrimStartChange: (Long) -> Unit,
   onTrimEndChange: (Long) -> Unit,
   onCropChange: (CropRatio) -> Unit,
@@ -441,14 +553,6 @@ private fun EditorScreen(
   onExport: () -> Unit,
 ) {
   val context = LocalContext.current
-  val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-    uri?.let {
-      runCatching {
-        context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-      }
-      onImportVideo(it)
-    }
-  }
   val draft = state.draft
   val player = remember { ExoPlayer.Builder(context).build() }
   val timeline = remember(draft) { draft.timelineSnapshot() }
@@ -492,6 +596,11 @@ private fun EditorScreen(
     topBar = {
       CenterAlignedTopAppBar(
         title = { Text("Clipy") },
+        navigationIcon = {
+          IconButton(onClick = onBack) {
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.back))
+          }
+        },
         actions = {
           IconButton(onClick = onOpenHistory) { Icon(Icons.Rounded.History, contentDescription = stringResource(R.string.nav_history)) }
           IconButton(onClick = onOpenSettings) { Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.nav_settings)) }
@@ -570,12 +679,6 @@ private fun EditorScreen(
         Text(draft.displayName, color = ClipyMuted)
         Spacer(Modifier.height(8.dp))
         Text("${draft.trimStartMs} - ${draft.trimEndMs} ms • ${draft.sourceDurationMs} ms source", color = ClipyMuted, fontSize = 12.sp)
-        Spacer(Modifier.height(12.dp))
-        OutlinedButton(onClick = { picker.launch(arrayOf("video/*")) }, modifier = Modifier.fillMaxWidth()) {
-          Icon(Icons.Rounded.FolderOpen, contentDescription = null)
-          Spacer(Modifier.width(8.dp))
-          Text(stringResource(R.string.editor_pick_video))
-        }
       }
 
       SectionCard(title = stringResource(R.string.section_trim)) {
@@ -994,7 +1097,7 @@ private fun ExportScreen(state: AppSnapshot, onBack: () -> Unit, onCancel: () ->
 }
 
 @Composable
-private fun HistoryItemCard(item: ExportRecordUi, onReuse: () -> Unit) {
+private fun HistoryItemCard(item: ExportRecordUi, onReuse: () -> Unit, showReuseAction: Boolean = true) {
   val context = LocalContext.current
   PremiumCard {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -1019,9 +1122,11 @@ private fun HistoryItemCard(item: ExportRecordUi, onReuse: () -> Unit) {
          Text(stringResource(R.string.open))
        }
     }
-    Spacer(Modifier.height(10.dp))
-    Button(onClick = onReuse, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary)) {
-      Text(stringResource(R.string.history_reuse))
+    if (showReuseAction) {
+      Spacer(Modifier.height(10.dp))
+      Button(onClick = onReuse, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary)) {
+        Text(stringResource(R.string.history_reuse))
+      }
     }
   }
 }

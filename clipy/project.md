@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-23 00:20 UTC
+- Last updated: 2026-04-23 00:51 UTC
 - App: Clipy
 - Slug: clipy
 - Tagline: Fast social-ready video edits and GIF exports in seconds.
 - Target users: Content creators, TikTok/Reels users, meme makers, casual users needing fast video editing
-- Design direction: Premium dark creator-tool aesthetic with restrained neon accents, large rounded surfaces, high-contrast playback areas, and compact control clusters optimized for quick single-session edits. The UI should feel fast and intentional rather than playful, using Material 3 structure with custom tonal elevation and a cinematic preview-first hierarchy.
+- Design direction: Premium dark creator-tool aesthetic with Material 3 foundations, emphasizing speed, clarity, and confident editing controls. Surfaces should feel polished and modern with rounded cards, high-contrast media areas, restrained gradients, and motion that reinforces timeline scrubbing, export progress, and route transitions without adding visual noise.
 - Core constraints: Android only, no backend, lightweight but powerful, limit GIF size/duration, smooth UX, handle large videos safely
 Design style must align with: Modern dark creator-tool UI, clean layout, smooth animations, rounded cards, premium feel
 Typography should align with: Inter
@@ -18,6 +18,7 @@ Feature priorities update: Add draggable trim timeline like CapCut with thumbnai
 Feature priorities update: Add a CapCut-style timeline editor with draggable start and end handles, thumbnail preview strip, movable playhead, and real-time synced video preview. Continue refining UX, gestures, and animations until the interaction feels as smooth and responsive as CapCut timeline editing.
 Feature priorities update: Implement a CapCut-style timeline editor with pinch-to-zoom, smooth draggable scrolling, draggable start/end trim handles, frame-by-frame stepping, snap-to-keyframe cutting, looping preview for selected range, real-time synced video preview via ExoPlayer seek, and optimized thumbnail caching/lazy loading for ultra-smooth performance
 Feature priorities update: Implement the basic MVP first: pick video from gallery, preview video playback, draggable start and end trim selection, real-time synced preview while trimming, export as short MP4, export as GIF, save output to device, share exported file, simple export progress UI, and basic export history
+Feature priorities update: Add basic crop ratio presets for 1:1, 4:5, 9:16, and 16:9 so users can export clips for different social platforms
 
 ### Core Features
 - Splash screen followed by onboarding and main app flow
@@ -41,15 +42,15 @@ Feature priorities update: Implement the basic MVP first: pick video from galler
 - Explicit exit action within the app shell
 
 ### Main Screens
-- Splash Screen
-- Intro & Language Selection
-- Main Editor
-- Export Settings & Progress
-- Export History
-- Settings
+- Splash
+- Intro & Language
+- Home
+- Editor
+- Export Progress
+- History & Settings
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Room for export history, DataStore for preferences, MediaStore/content URIs for source and output files
+- storage: Room for export history, DataStore for preferences and onboarding/language state, MediaStore plus content URIs for source/output file access
 <!-- AUTO-GENERATED:CORE_END -->

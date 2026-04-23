@@ -24,6 +24,11 @@
     <string name="nav_history">Lich su</string>
     <string name="nav_settings">Cai dat</string>
     <string name="nav_exit">Thoat</string>
+    <string name="home_title">Bat dau ban xuat moi</string>
+    <string name="home_pick_video">Chon video</string>
+    <string name="home_pick_hint">Nhap clip tu thiet bi roi chuyen vao khong gian bien tap nhanh.</string>
+    <string name="home_recent_exports">Ban xuat gan day</string>
+    <string name="home_tools">Thu vien va cong cu ung dung</string>
     <string name="editor_ready">San sang de xuat</string>
     <string name="editor_gif_hint">Thoi luong duoc gioi han de de chia se gon nhe.</string>
     <string name="editor_mp4_hint">Chat luong MP4 duoc can chinh cho bai dang mang xa hoi.</string>
