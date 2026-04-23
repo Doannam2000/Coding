@@ -2032,11 +2032,41 @@ private fun EditorStatChip(label: String, value: String, modifier: Modifier = Mo
 }
 
 @Composable
+private fun CompactToggleCard(
+  title: String,
+  checked: Boolean,
+  onToggle: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  FilterChip(
+    selected = checked,
+    onClick = onToggle,
+    modifier = modifier,
+    label = {
+      Text(
+        text = title,
+        maxLines = 1,
+      )
+    },
+  )
+}
+
+@Composable
 private fun EditorControlGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
   Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
     Text(title, color = ClipyMuted, style = MaterialTheme.typography.labelLarge)
     content()
   }
+}
+
+private fun formatTimelineWindow(startMs: Long, endMs: Long): String =
+  "${formatDurationMs(startMs)} - ${formatDurationMs(endMs)}"
+
+private fun formatDurationMs(durationMs: Long): String {
+  val totalSeconds = (durationMs.coerceAtLeast(0L) / 1000L).toInt()
+  val minutes = totalSeconds / 60
+  val seconds = totalSeconds % 60
+  return String.format(java.util.Locale.US, "%d:%02d", minutes, seconds)
 }
 
 private fun timelineFramesKey(sourceUri: String, timeline: TimelineSnapshot): String =
