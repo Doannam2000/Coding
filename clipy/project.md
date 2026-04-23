@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-23 14:05 UTC
+- Last updated: 2026-04-23 17:17 UTC
 - App: Clipy
 - Slug: clipy
 - Tagline: Fast social-ready video edits and GIF exports in seconds.
 - Target users: Content creators, TikTok/Reels users, meme makers, casual users needing fast video editing
-- Design direction: Refine the existing editor into a darker, tighter, CapCut-inspired composition while preserving the app's current Material 3 foundation: a dominant media preview on top, a compact control rail, and a high-clarity timeline dock with strong selection contrast, precise trim affordances, and smooth motion feedback. Emphasize density, alignment, and immediate manipulation rather than decorative changes.
+- Design direction: Incrementally evolve the existing editor into a tighter CapCut-inspired composition: a dominant preview, dense precision timeline dock, restrained chrome, and premium contrast layering. Keep the current dark editor language, but sharpen hierarchy with smaller controls, cleaner spacing, stronger center alignment, and more tactile edit states so trimming, scrolling, zooming, and audio editing feel exact and deliberate rather than decorative.
 - Core constraints: Android only, no backend, lightweight but powerful, limit GIF size/duration, smooth UX, handle large videos safely
 Design style must align with: Modern dark creator-tool UI, clean layout, smooth animations, rounded cards, premium feel
 Typography should align with: Inter
@@ -24,6 +24,8 @@ Feature priorities update: Redesign the video editor UI and timeline to closely 
 Additional follow-up requirement: [fixbug] Fix the editor UI because it does not match CapCut style and the timeline feels laggy when swiping. Redesign the layout to look closer to CapCut with a cleaner preview area, thumbnail strip, selected range highlight, draggable trim handles, and central playhead. Optimize timeline rendering, gesture handling, thumbnail caching, lazy loading, and preview sync so horizontal swiping becomes smooth, responsive, and stable like CapCut.
 Additional follow-up requirement: [fixbug] Fix the editor UI because it does not match CapCut style and the timeline feels laggy when swiping. Redesign the layout to look closer to CapCut with a cleaner preview area, thumbnail strip, selected range highlight, draggable trim handles, and central playhead. Optimize timeline rendering, gesture handling, thumbnail caching, lazy loading, and preview sync so horizontal swiping becomes smooth, responsive, and stable like CapCut.
 Additional follow-up requirement: [fixbug] Fix the editor UI because it does not match CapCut style and the timeline feels laggy when swiping. Redesign the layout to look closer to CapCut with a cleaner preview area, thumbnail strip, selected range highlight, draggable trim handles, and central playhead. Optimize timeline rendering, gesture handling, thumbnail caching, lazy loading, and preview sync so horizontal swiping becomes smooth, responsive, and stable like CapCut.
+Additional follow-up requirement: Redesign and polish the editor UI to be small, clean, modern, and visually close to CapCut with pixel-level accuracy. Implement a full timeline system including video track with thumbnail strip, draggable trim handles, central playhead, smooth scrolling, and zoom. Add a separate audio track below the video timeline with waveform visualization and support trimming, cutting, and adjusting audio independently. Improve spacing, typography, colors, and interactions so the UI feels minimal, premium, and identical to CapCut experience.
+Additional follow-up requirement: Redesign and polish the editor UI to be small, clean, modern, and visually close to CapCut with pixel-level accuracy. Implement a full timeline system including video track with thumbnail strip, draggable trim handles, central playhead, smooth scrolling, and zoom. Add a separate audio track below the video timeline with waveform visualization and support trimming, cutting, and adjusting audio independently. Improve spacing, typography, colors, and interactions so the UI feels minimal, premium, and identical to CapCut experience.
 
 ### Core Features
 - Splash screen followed by onboarding and main app flow
@@ -47,11 +49,12 @@ Additional follow-up requirement: [fixbug] Fix the editor UI because it does not
 - Explicit exit action within the app shell
 
 ### Main Screens
-- Main Editor Screen
-- Trim Timeline Component
+- Editor Screen
+- Timeline Dock
+- Audio Editing Surface
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Keep existing Room and DataStore usage unchanged; add only editor-local UI state and in-memory thumbnail caching around the current media/editor implementation
+- storage: Keep existing Room/DataStore and editor persistence behavior unchanged; add editor-local timeline, zoom, waveform, and audio-segment state in memory, persisting audio edit metadata only through the current project/editor save path if it already exists
 <!-- AUTO-GENERATED:CORE_END -->

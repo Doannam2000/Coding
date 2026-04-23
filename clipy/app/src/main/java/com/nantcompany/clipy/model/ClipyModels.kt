@@ -136,6 +136,45 @@ data class TimelineSnapshot(
   val zoom: Float,
 )
 
+data class AudioSegmentUi(
+  val id: String,
+  val startMs: Long,
+  val endMs: Long,
+)
+
+data class WaveformSampleUiModel(
+  val timeMs: Long,
+  val amplitude: Float,
+  val bucketIndex: Int,
+  val isSelected: Boolean,
+)
+
+data class TimelineTickUiModel(
+  val timeMs: Long,
+  val isMajor: Boolean,
+)
+
+data class AudioTrackUiState(
+  val trackDurationMs: Long,
+  val trimStartMs: Long,
+  val trimEndMs: Long,
+  val selectedSegmentId: String?,
+  val segmentIds: List<String>,
+  val isDraggingStartHandle: Boolean,
+  val isDraggingEndHandle: Boolean,
+  val isCutMode: Boolean,
+  val gain: Float,
+  val isMuted: Boolean,
+)
+
+data class TimelineSelectionState(
+  val selectedTrack: String,
+  val selectedTool: String,
+  val activeSegmentId: String?,
+  val isUserInteracting: Boolean,
+  val pendingSettlePlayheadMs: Long?,
+)
+
 data class EditorTimelineUiState(
   val clipDurationMs: Long,
   val trimStartMs: Long,
@@ -364,6 +403,85 @@ fun editorTimelineUiState(
     isScrubbingTimeline = isScrubbingTimeline,
     pendingSeekMs = pendingSeekMs?.coerceIn(timeline.trimStartMs, timeline.trimEndMs),
   )
+
+fun buildWaveformSamples(
+  durationMs: Long,
+  bucketCount: Int,
+  trimStartMs: Long,
+  trimEndMs: Long,
+  seed: Int,
+): List<WaveformSampleUiModel> {
+  val safeDuration = durationMs.coerceAtLeast(MIN_TRIM_GAP_MS * 2)
+  val safeCount = bucketCount.coerceIn(8, 240)
+  val stepMs = safeDuration / safeCount.toFloat()
+  return List(safeCount) { index ->
+    val base = kotlin.math.abs(kotlin.math.sin(((index + 1) * 0.47f) + (seed % 13)))
+    val detail = kotlin.math.abs(kotlin.math.cos(((index + 3) * 0.21f) + (seed % 7)))
+    val amplitude = ((base * 0.72f) + (detail * 0.28f)).coerceIn(0.08f, 1f)
+    val timeMs = (index * stepMs).roundToLong().coerceIn(0L, safeDuration)
+    WaveformSampleUiModel(
+      timeMs = timeMs,
+      amplitude = amplitude,
+      bucketIndex = index,
+      isSelected = timeMs in trimStartMs.coerceAtLeast(0L)..trimEndMs.coerceAtMost(safeDuration),
+    )
+  }
+}
+
+fun buildTimelineTicks(
+  visibleStartMs: Long,
+  visibleEndMs: Long,
+  durationMs: Long,
+  targetTickCount: Int = 8,
+): List<TimelineTickUiModel> {
+  val safeDuration = durationMs.coerceAtLeast(1L)
+  val safeStart = visibleStartMs.coerceIn(0L, safeDuration)
+  val safeEnd = visibleEndMs.coerceIn(safeStart, safeDuration)
+  val visibleSpan = (safeEnd - safeStart).coerceAtLeast(1L)
+  val roughStep = (visibleSpan / targetTickCount.coerceAtLeast(2).toLong()).coerceAtLeast(250L)
+  val normalizedStep = when {
+    roughStep <= 250L -> 250L
+    roughStep <= 500L -> 500L
+    roughStep <= 1_000L -> 1_000L
+    roughStep <= 2_000L -> 2_000L
+    roughStep <= 5_000L -> 5_000L
+    else -> 10_000L
+  }
+  val firstTick = (safeStart / normalizedStep) * normalizedStep
+  val lastTick = ((safeEnd + normalizedStep - 1) / normalizedStep) * normalizedStep
+  return generateSequence(firstTick) { current ->
+    (current + normalizedStep).takeIf { it <= lastTick }
+  }
+    .map { tickMs ->
+      TimelineTickUiModel(
+        timeMs = tickMs.coerceIn(0L, safeDuration),
+        isMajor = tickMs % (normalizedStep * 2) == 0L,
+      )
+    }
+    .distinctBy { it.timeMs }
+    .toList()
+}
+
+fun splitAudioSegments(
+  segments: List<AudioSegmentUi>,
+  selectedSegmentId: String?,
+  playheadMs: Long,
+  minSegmentDurationMs: Long = MIN_TRIM_GAP_MS,
+): List<AudioSegmentUi> {
+  if (segments.isEmpty()) return emptyList()
+  return segments.flatMap { segment ->
+    if (segment.id != selectedSegmentId) return@flatMap listOf(segment)
+    val splitPoint = playheadMs.coerceIn(segment.startMs + minSegmentDurationMs, segment.endMs - minSegmentDurationMs)
+    if (splitPoint <= segment.startMs || splitPoint >= segment.endMs) {
+      listOf(segment)
+    } else {
+      listOf(
+        AudioSegmentUi(id = "${segment.id}-a", startMs = segment.startMs, endMs = splitPoint),
+        AudioSegmentUi(id = "${segment.id}-b", startMs = splitPoint, endMs = segment.endMs),
+      )
+    }
+  }
+}
 
 fun resolutionPreset(label: String, cropRatio: CropRatio): ResolutionPreset {
   val shortEdge = when (label) {

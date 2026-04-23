@@ -5,6 +5,7 @@ import com.nantcompany.clipy.model.ExportFormat
 import com.nantcompany.clipy.model.ProjectDraft
 import com.nantcompany.clipy.model.TimelineSnapshot
 import com.nantcompany.clipy.model.buildExportPlan
+import com.nantcompany.clipy.model.buildTimelineTicks
 import com.nantcompany.clipy.model.resolutionPreset
 import com.nantcompany.clipy.model.shouldPersistUri
 import com.nantcompany.clipy.model.thumbnailCaptureTimesMs
@@ -63,5 +64,18 @@ class TimelineExportHelpersTest {
     )
 
     assertEquals(3_000L..7_000L, window)
+  }
+
+  @Test
+  fun buildTimelineTicks_normalizesVisibleWindowIntoReadableSteps() {
+    val ticks = buildTimelineTicks(
+      visibleStartMs = 1_200L,
+      visibleEndMs = 4_900L,
+      durationMs = 12_000L,
+      targetTickCount = 6,
+    )
+
+    assertEquals(listOf(1_000L, 2_000L, 3_000L, 4_000L, 5_000L), ticks.map { it.timeMs })
+    assertEquals(listOf(false, true, false, true, false), ticks.map { it.isMajor })
   }
 }

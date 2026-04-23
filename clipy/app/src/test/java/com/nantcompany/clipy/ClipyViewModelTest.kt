@@ -4,6 +4,8 @@ import com.nantcompany.clipy.model.CropRatio
 import com.nantcompany.clipy.model.ExportFormat
 import com.nantcompany.clipy.model.Mp4Quality
 import com.nantcompany.clipy.model.ProjectDraft
+import com.nantcompany.clipy.model.AudioSegmentUi
+import com.nantcompany.clipy.model.buildWaveformSamples
 import com.nantcompany.clipy.model.buildExportPlan
 import com.nantcompany.clipy.model.boundedTrimEndMs
 import com.nantcompany.clipy.model.boundedTrimStartMs
@@ -11,6 +13,7 @@ import com.nantcompany.clipy.model.editorTimelineUiState
 import com.nantcompany.clipy.model.sanitizeTimeline
 import com.nantcompany.clipy.model.sanitizeOutputName
 import com.nantcompany.clipy.model.shouldDispatchTimelinePreviewSeek
+import com.nantcompany.clipy.model.splitAudioSegments
 import com.nantcompany.clipy.model.snapTimelineMs
 import com.nantcompany.clipy.model.timelineScrollForPlayhead
 import com.nantcompany.clipy.model.timelineStripFrameCount
@@ -217,5 +220,36 @@ class ClipyViewModelTest {
         throttleMs = 90L,
       ),
     )
+  }
+
+  @Test
+  fun buildWaveformSamples_marksSelectedTrimWindow() {
+    val samples = buildWaveformSamples(
+      durationMs = 10_000L,
+      bucketCount = 20,
+      trimStartMs = 2_000L,
+      trimEndMs = 6_000L,
+      seed = 17,
+    )
+
+    assertEquals(20, samples.size)
+    assertTrue(samples.any { it.isSelected })
+    assertTrue(samples.first { it.isSelected }.timeMs >= 2_000L)
+    assertTrue(samples.last { it.isSelected }.timeMs <= 6_000L)
+  }
+
+  @Test
+  fun splitAudioSegments_splitsOnlySelectedSegment() {
+    val segments = splitAudioSegments(
+      segments = listOf(AudioSegmentUi("seg-0", 0L, 8_000L)),
+      selectedSegmentId = "seg-0",
+      playheadMs = 3_000L,
+    )
+
+    assertEquals(2, segments.size)
+    assertEquals(0L, segments[0].startMs)
+    assertEquals(3_000L, segments[0].endMs)
+    assertEquals(3_000L, segments[1].startMs)
+    assertEquals(8_000L, segments[1].endMs)
   }
 }

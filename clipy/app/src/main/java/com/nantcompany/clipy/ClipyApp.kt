@@ -19,6 +19,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -27,10 +28,13 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -79,6 +83,7 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -109,6 +114,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -134,6 +140,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.nantcompany.clipy.data.ClipyRepository.AppSnapshot
 import com.nantcompany.clipy.model.AppLanguage
+import com.nantcompany.clipy.model.AudioSegmentUi
+import com.nantcompany.clipy.model.buildWaveformSamples
+import com.nantcompany.clipy.model.buildTimelineTicks
 import com.nantcompany.clipy.model.boundedTrimEndMs
 import com.nantcompany.clipy.model.boundedTrimStartMs
 import com.nantcompany.clipy.model.CropRatio
@@ -143,6 +152,7 @@ import com.nantcompany.clipy.model.Mp4Quality
 import com.nantcompany.clipy.model.SaveBehavior
 import com.nantcompany.clipy.model.editorTimelineUiState
 import com.nantcompany.clipy.model.shouldDispatchTimelinePreviewSeek
+import com.nantcompany.clipy.model.splitAudioSegments
 import com.nantcompany.clipy.model.timelineFrameStepMs
 import com.nantcompany.clipy.model.timelineMsToTrackPx
 import com.nantcompany.clipy.model.timelinePrefetchRange
@@ -150,6 +160,7 @@ import com.nantcompany.clipy.model.timelineStripFrameCount
 import com.nantcompany.clipy.model.timelineTrackPxToMs
 import com.nantcompany.clipy.model.timelineVisibleWindowMs
 import com.nantcompany.clipy.model.timelineSnapshot
+import com.nantcompany.clipy.model.TimelineTickUiModel
 import com.nantcompany.clipy.model.UserPreferences
 import com.nantcompany.clipy.model.WatermarkPosition
 import com.nantcompany.clipy.model.exportMimeType
@@ -226,6 +237,7 @@ private data class TimelineDockState(
   val playheadLabel: String,
   val durationLabel: String,
   val zoomLabel: String,
+  val visibleWindowLabel: String,
 )
 
 @Stable
@@ -248,6 +260,17 @@ private enum class EditorControlTab {
   Frame,
   Motion,
   Output,
+}
+
+private enum class EditorTrack {
+  Video,
+  Audio,
+}
+
+private enum class TimelineTool {
+  Trim,
+  Split,
+  Gain,
 }
 
 @Composable
@@ -652,6 +675,15 @@ private fun EditorScreen(
   var pendingSeekMs by remember { mutableStateOf<Long?>(null) }
   var syncedPlayerPositionMs by remember { mutableStateOf(-1L) }
   var isPlaying by remember { mutableStateOf(false) }
+  var selectedTrack by rememberSaveable { mutableStateOf(EditorTrack.Video) }
+  var selectedTimelineTool by rememberSaveable { mutableStateOf(TimelineTool.Trim) }
+  var audioTrimStartMs by rememberSaveable(draft.sourceUri) { mutableStateOf(draft.trimStartMs) }
+  var audioTrimEndMs by rememberSaveable(draft.sourceUri) { mutableStateOf(draft.trimEndMs) }
+  var audioGain by rememberSaveable(draft.sourceUri) { mutableStateOf(1f) }
+  var audioSegments by rememberSaveable(draft.sourceUri) {
+    mutableStateOf(listOf(AudioSegmentUi(id = "seg-0", startMs = 0L, endMs = draft.sourceDurationMs.coerceAtLeast(MIN_TRIM_GAP_MS * 2))))
+  }
+  var selectedAudioSegmentId by rememberSaveable(draft.sourceUri) { mutableStateOf("seg-0") }
   val timelineChrome = remember(draft.trimStartMs, draft.trimEndMs, draft.playheadMs, timelineInteracting) {
     TimelineChromeState(
       trimStartMs = draft.trimStartMs,
@@ -694,7 +726,21 @@ private fun EditorScreen(
       playheadLabel = timelineUi.playheadLabel,
       durationLabel = formatDurationMs(draft.sourceDurationMs),
       zoomLabel = String.format(java.util.Locale.US, "%.1fx", timeline.zoom),
+      visibleWindowLabel = formatTimelineWindow(visibleWindowStartMs, visibleWindowEndMs),
     )
+  }
+
+  LaunchedEffect(draft.sourceUri, draft.sourceDurationMs, draft.trimStartMs, draft.trimEndMs) {
+    audioTrimStartMs = draft.trimStartMs.coerceIn(0L, draft.sourceDurationMs)
+    audioTrimEndMs = draft.trimEndMs.coerceIn(
+      audioTrimStartMs + MIN_TRIM_GAP_MS,
+      draft.sourceDurationMs.coerceAtLeast(audioTrimStartMs + MIN_TRIM_GAP_MS),
+    )
+    audioSegments = listOf(AudioSegmentUi(id = "seg-0", startMs = 0L, endMs = draft.sourceDurationMs.coerceAtLeast(MIN_TRIM_GAP_MS * 2)))
+    selectedAudioSegmentId = audioSegments.firstOrNull()?.id ?: "seg-0"
+    selectedTrack = EditorTrack.Video
+    selectedTimelineTool = TimelineTool.Trim
+    audioGain = 1f
   }
 
   LaunchedEffect(draft.sourceUri) {
@@ -802,22 +848,22 @@ private fun EditorScreen(
       modifier = Modifier
         .fillMaxSize()
         .padding(padding)
-        .padding(horizontal = 12.dp, vertical = 10.dp)
+        .padding(horizontal = 12.dp, vertical = 8.dp)
         .verticalScroll(rememberScrollState()),
-      verticalArrangement = Arrangement.spacedBy(10.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
       Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(24.dp),
         color = Color(0xFF090C11),
         tonalElevation = 0.dp,
       ) {
         Column(
           modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(28.dp))
-            .padding(horizontal = 12.dp, vertical = 12.dp),
-          verticalArrangement = Arrangement.spacedBy(10.dp),
+            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(24.dp))
+            .padding(horizontal = 10.dp, vertical = 10.dp),
+          verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
           Row(
             modifier = Modifier.fillMaxWidth(),
@@ -825,7 +871,7 @@ private fun EditorScreen(
             verticalAlignment = Alignment.CenterVertically,
           ) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-              Text(draft.displayName, color = ClipyOnDark, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+              Text(draft.displayName, color = ClipyOnDark, style = MaterialTheme.typography.titleSmall, maxLines = 1)
               Text(stringResource(R.string.editor_workspace_hint), color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -840,18 +886,18 @@ private fun EditorScreen(
 
           Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            color = Color(0xFF0D1117),
+            shape = RoundedCornerShape(22.dp),
+            color = Color(0xFF0C1016),
           ) {
             Column(
-              modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-              verticalArrangement = Arrangement.spacedBy(10.dp),
+              modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+              verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
               Box(
                 modifier = Modifier
                   .fillMaxWidth()
                   .aspectRatio(9f / 16f)
-                  .clip(RoundedCornerShape(24.dp))
+                  .clip(RoundedCornerShape(22.dp))
                   .background(
                     Brush.verticalGradient(
                       listOf(
@@ -861,7 +907,7 @@ private fun EditorScreen(
                       ),
                     ),
                   )
-                  .border(1.dp, Color.White.copy(alpha = 0.04f), RoundedCornerShape(24.dp)),
+                  .border(1.dp, Color.White.copy(alpha = 0.04f), RoundedCornerShape(22.dp)),
                 contentAlignment = Alignment.Center,
               ) {
                 if (draft.sourceUri.isBlank()) {
@@ -883,19 +929,19 @@ private fun EditorScreen(
                     update = { it.player = player },
                   )
                   EditorOverlayBadge(
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
                     title = dockState.playheadLabel,
                     subtitle = dockState.trimLabel,
                   )
                   EditorStatusPill(
-                    modifier = Modifier.align(Alignment.TopEnd).padding(12.dp),
+                    modifier = Modifier.align(Alignment.TopEnd).padding(10.dp),
                     isLive = timelineChrome.isInteracting || isPlaying,
                   )
                   Box(
                     modifier = Modifier
                       .align(Alignment.Center)
                       .fillMaxHeight()
-                      .width(2.dp)
+                      .width(1.dp)
                       .background(ClipyOnDark.copy(alpha = 0.92f)),
                   )
                 }
@@ -903,12 +949,12 @@ private fun EditorScreen(
 
               Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
               ) {
                 Row(
                   modifier = Modifier.weight(1f),
-                  horizontalArrangement = Arrangement.spacedBy(10.dp),
+                  horizontalArrangement = Arrangement.spacedBy(8.dp),
                   verticalAlignment = Alignment.CenterVertically,
                 ) {
                   TransportIconButton(
@@ -936,43 +982,65 @@ private fun EditorScreen(
                   horizontalAlignment = Alignment.CenterHorizontally,
                   verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                  Text(dockState.playheadLabel, color = ClipyOnDark, style = MaterialTheme.typography.titleLarge)
+                  Text(dockState.playheadLabel, color = ClipyOnDark, style = MaterialTheme.typography.titleMedium)
                   Text(dockState.trimLabel, color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
                 }
-                AssistChip(
-                  onClick = {},
-                  label = { Text(stringResource(R.string.editor_timeline_zoom, timeline.zoom)) },
-                  leadingIcon = { Box(Modifier.size(8.dp).clip(CircleShape).background(ClipyAccent)) },
-                )
+                TimelineCompactBadge(primary = dockState.zoomLabel, secondary = stringResource(R.string.editor_timeline_ruler))
               }
 
               Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                color = Color(0xFF141923),
+                shape = RoundedCornerShape(20.dp),
+                color = Color(0xFF10141C),
               ) {
                 Column(
-                  modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
-                  verticalArrangement = Arrangement.spacedBy(10.dp),
+                  modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+                  verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                   Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                   ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                      Text(stringResource(R.string.editor_trim_label), color = ClipyOnDark, style = MaterialTheme.typography.titleSmall)
-                      Text(dockState.trimLabel, color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
-                    }
-                    Text(dockState.zoomLabel, color = ClipySecondary, style = MaterialTheme.typography.labelLarge)
+                    TimelineMetaBadge(label = stringResource(R.string.editor_trim_label), value = if (selectedTrack == EditorTrack.Video) dockState.trimLabel else formatTimelineWindow(audioTrimStartMs, audioTrimEndMs), modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(6.dp))
+                    TimelineMetaBadge(label = stringResource(R.string.editor_playhead_label), value = dockState.playheadLabel, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(6.dp))
+                    TimelineMetaBadge(label = stringResource(R.string.editor_timeline_zoom, timeline.zoom), value = dockState.zoomLabel, modifier = Modifier.weight(1f))
                   }
+                  Text(
+                    text = stringResource(R.string.editor_timeline_precision),
+                    color = ClipyMuted,
+                    style = MaterialTheme.typography.labelMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                  )
                   TimelineEditor(
                     sourceUri = draft.sourceUri,
                     timeline = timeline,
+                    selectedTrack = selectedTrack,
+                    selectedTool = selectedTimelineTool,
+                    audioTrimStartMs = audioTrimStartMs,
+                    audioTrimEndMs = audioTrimEndMs,
+                    audioSegments = audioSegments,
+                    selectedAudioSegmentId = selectedAudioSegmentId,
+                    audioGain = audioGain,
+                    isMuted = draft.isMuted,
                     onTrimStartChange = onTrimStartChange,
                     onTrimEndChange = onTrimEndChange,
+                    onAudioTrimStartChange = { audioTrimStartMs = it.coerceIn(0L, audioTrimEndMs - MIN_TRIM_GAP_MS) },
+                    onAudioTrimEndChange = { audioTrimEndMs = it.coerceIn(audioTrimStartMs + MIN_TRIM_GAP_MS, draft.sourceDurationMs) },
                     onPlayheadChange = onPlayheadChange,
                     onZoomChange = onTimelineZoomChange,
+                    onTrackSelected = { selectedTrack = it },
+                    onToolSelected = { selectedTimelineTool = it },
+                    onAudioSegmentSelected = { selectedAudioSegmentId = it },
+                    onAudioCut = {
+                      val updated = splitAudioSegments(audioSegments, selectedAudioSegmentId, draft.playheadMs)
+                      audioSegments = updated
+                      selectedAudioSegmentId = updated.lastOrNull { draft.playheadMs in it.startMs..it.endMs }?.id ?: updated.lastOrNull()?.id ?: selectedAudioSegmentId
+                    },
+                    onAudioGainChange = { audioGain = it.coerceIn(0f, 1.5f) },
                     onInteractionChange = {
                       timelineInteracting = it
                       if (!it) pendingSeekMs = null
@@ -985,11 +1053,11 @@ private fun EditorScreen(
                   )
                   Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                   ) {
-                    EditorStatChip(label = stringResource(R.string.editor_trim_label), value = dockState.trimLabel, modifier = Modifier.weight(1f))
-                    EditorStatChip(label = stringResource(R.string.editor_playhead_label), value = dockState.playheadLabel, modifier = Modifier.weight(1f))
+                    EditorStatChip(label = stringResource(R.string.editor_timeline_focus_video), value = if (selectedTrack == EditorTrack.Video) stringResource(R.string.editor_timeline_video_track) else stringResource(R.string.editor_timeline_audio_track), modifier = Modifier.weight(1f))
                     EditorStatChip(label = stringResource(R.string.editor_duration_label), value = dockState.durationLabel, modifier = Modifier.weight(1f))
+                    EditorStatChip(label = stringResource(R.string.editor_timeline_ruler), value = dockState.visibleWindowLabel, modifier = Modifier.weight(1f))
                   }
                 }
               }
@@ -1000,15 +1068,15 @@ private fun EditorScreen(
 
       Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(22.dp),
         color = Color(0xFF121720),
       ) {
         Column(
-          modifier = Modifier.fillMaxWidth().padding(16.dp),
-          verticalArrangement = Arrangement.spacedBy(12.dp),
+          modifier = Modifier.fillMaxWidth().padding(14.dp),
+          verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-          Text(stringResource(R.string.editor_tool_rail), style = MaterialTheme.typography.titleLarge)
-          Text(stringResource(R.string.editor_tools_compact), color = ClipyMuted)
+          Text(stringResource(R.string.editor_tool_rail), style = MaterialTheme.typography.titleMedium)
+          Text(stringResource(R.string.editor_tools_compact), color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
           EditorControlTabs(selected = selectedControlTab, onSelected = { selectedControlTab = it })
           when (selectedControlTab) {
             EditorControlTab.Frame -> {
@@ -1487,10 +1555,25 @@ private fun ToggleRow(title: String, checked: Boolean, onToggle: () -> Unit) {
 private fun TimelineEditor(
   sourceUri: String,
   timeline: TimelineSnapshot,
+  selectedTrack: EditorTrack,
+  selectedTool: TimelineTool,
+  audioTrimStartMs: Long,
+  audioTrimEndMs: Long,
+  audioSegments: List<AudioSegmentUi>,
+  selectedAudioSegmentId: String?,
+  audioGain: Float,
+  isMuted: Boolean,
   onTrimStartChange: (Long) -> Unit,
   onTrimEndChange: (Long) -> Unit,
+  onAudioTrimStartChange: (Long) -> Unit,
+  onAudioTrimEndChange: (Long) -> Unit,
   onPlayheadChange: (Long) -> Unit,
   onZoomChange: (Float) -> Unit,
+  onTrackSelected: (EditorTrack) -> Unit,
+  onToolSelected: (TimelineTool) -> Unit,
+  onAudioSegmentSelected: (String) -> Unit,
+  onAudioCut: () -> Unit,
+  onAudioGainChange: (Float) -> Unit,
   onInteractionChange: (Boolean) -> Unit,
   onPendingSeekChange: (Long?) -> Unit,
   onVisibleWindowChange: (Long, Long) -> Unit,
@@ -1677,16 +1760,84 @@ private fun TimelineEditor(
   val activeRangeWidthPx by remember(startOffsetPx, endOffsetPx) {
     derivedStateOf { (endOffsetPx - startOffsetPx).coerceAtLeast(0f) }
   }
+  val audioStartOffsetPx by remember(audioTrimStartMs, duration, trackWidthPx, currentScrollPx, viewportWidthPx) {
+    derivedStateOf { (viewportWidthPx / 2f) + timelineMsToTrackPx(audioTrimStartMs, duration, trackWidthPx) - currentScrollPx }
+  }
+  val audioEndOffsetPx by remember(audioTrimEndMs, duration, trackWidthPx, currentScrollPx, viewportWidthPx) {
+    derivedStateOf { (viewportWidthPx / 2f) + timelineMsToTrackPx(audioTrimEndMs, duration, trackWidthPx) - currentScrollPx }
+  }
+  val audioRangeWidthPx by remember(audioStartOffsetPx, audioEndOffsetPx) {
+    derivedStateOf { (audioEndOffsetPx - audioStartOffsetPx).coerceAtLeast(0f) }
+  }
+  val waveformSamples = remember(sourceUri, timeline.zoom, audioTrimStartMs, audioTrimEndMs, selectedAudioSegmentId) {
+    buildWaveformSamples(
+      durationMs = duration,
+      bucketCount = (frameCount * 2).coerceIn(24, 180),
+      trimStartMs = audioTrimStartMs,
+      trimEndMs = audioTrimEndMs,
+      seed = sourceUri.hashCode(),
+    )
+  }
+  val timelineTicks = remember(visibleWindowMs, duration) {
+    buildTimelineTicks(
+      visibleStartMs = visibleWindowMs.first,
+      visibleEndMs = visibleWindowMs.last,
+      durationMs = duration,
+      targetTickCount = 7,
+    )
+  }
+  val selectedSegment = remember(audioSegments, selectedAudioSegmentId) {
+    audioSegments.firstOrNull { it.id == selectedAudioSegmentId }
+  }
 
-  Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+  val activeTrackTrimLabel = if (selectedTrack == EditorTrack.Video) {
+    formatTimelineWindow(timeline.trimStartMs, timeline.trimEndMs)
+  } else {
+    formatTimelineWindow(audioTrimStartMs, audioTrimEndMs)
+  }
+  val playheadOffsetPx by remember(timeline.playheadMs, duration, trackWidthPx, currentScrollPx, viewportWidthPx) {
+    derivedStateOf {
+      ((viewportWidthPx / 2f) + timelineMsToTrackPx(timeline.playheadMs, duration, trackWidthPx) - currentScrollPx)
+        .coerceIn(0f, viewportWidthPx.toFloat())
+    }
+  }
+
+  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    TimelineTrackHeader(
+      zoomLabel = String.format(java.util.Locale.US, "%.1fx", timeline.zoom),
+      playheadLabel = formatDurationMs(timeline.playheadMs),
+      trimLabel = activeTrackTrimLabel,
+      selectedTrack = selectedTrack,
+      selectedTool = selectedTool,
+      audioGain = audioGain,
+      isMuted = isMuted,
+      onTrackSelected = onTrackSelected,
+      onToolSelected = onToolSelected,
+      onAudioCut = onAudioCut,
+      onZoomOut = { onZoomChange((timeline.zoom - 0.35f).coerceIn(1f, 6f)) },
+      onZoomIn = { onZoomChange((timeline.zoom + 0.35f).coerceIn(1f, 6f)) },
+      onAudioGainChange = onAudioGainChange,
+    )
+    TimelineActionRow(
+      modifier = Modifier.fillMaxWidth(),
+      selectedTrack = selectedTrack,
+      selectedTool = selectedTool,
+      audioGain = audioGain,
+      isMuted = isMuted,
+      selectedSegment = selectedSegment,
+      playheadMs = timeline.playheadMs,
+      onToolSelected = onToolSelected,
+      onAudioCut = onAudioCut,
+      onAudioGainChange = onAudioGainChange,
+    )
     Box(
       modifier = Modifier
         .fillMaxWidth()
-        .height(196.dp)
+        .height(236.dp)
         .onSizeChanged { viewportWidthPx = it.width }
-        .clip(RoundedCornerShape(20.dp))
-        .background(Color(0xFF0B1017))
-        .border(1.dp, Color.White.copy(alpha = 0.04f), RoundedCornerShape(20.dp))
+        .clip(RoundedCornerShape(16.dp))
+        .background(Color(0xFF080B11))
+        .border(1.dp, Color.White.copy(alpha = 0.045f), RoundedCornerShape(16.dp))
         .pointerInput(timeline.zoom) {
           detectTransformGestures { _, _, zoom, _ ->
             onZoomChange((timeline.zoom * zoom).coerceIn(1f, 6f))
@@ -1701,23 +1852,63 @@ private fun TimelineEditor(
           }
         },
     ) {
-      LazyRow(
-        state = listState,
-        modifier = Modifier
-          .fillMaxSize()
-          .padding(vertical = 18.dp),
-        userScrollEnabled = activeDragTarget == null,
-        contentPadding = PaddingValues(horizontal = with(density) { edgePadding.toDp() }),
+      Column(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
       ) {
-        items(
-          items = timelineFrames,
-          key = { it.cacheKey },
-        ) { frame ->
-          TimelineThumbnail(
-            thumbnail = timelineBitmaps[frame.cacheKey],
-            modifier = Modifier
-              .width(cellWidth)
-              .fillMaxHeight(),
+        TimelineRuler(
+          ticks = timelineTicks,
+          currentScrollPx = currentScrollPx,
+          viewportWidthPx = viewportWidthPx,
+          durationMs = duration,
+          trackWidthPx = trackWidthPx,
+          modifier = Modifier.fillMaxWidth().height(24.dp),
+        )
+        TimelineTrackLane(
+          modifier = Modifier.fillMaxWidth().weight(1f),
+          title = stringResource(R.string.editor_timeline_video_track),
+          selected = selectedTrack == EditorTrack.Video,
+          iconLabel = stringResource(R.string.editor_timeline_video_icon),
+          onSelect = { onTrackSelected(EditorTrack.Video) },
+        ) {
+          LazyRow(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            userScrollEnabled = activeDragTarget == null,
+            contentPadding = PaddingValues(horizontal = with(density) { edgePadding.toDp() }),
+          ) {
+            items(
+              items = timelineFrames,
+              key = { it.cacheKey },
+            ) { frame ->
+              TimelineThumbnail(
+                thumbnail = timelineBitmaps[frame.cacheKey],
+                active = frame.captureTimeMs in timeline.trimStartMs..timeline.trimEndMs,
+                emphasized = selectedTrack == EditorTrack.Video,
+                modifier = Modifier.width(cellWidth).fillMaxHeight(),
+              )
+            }
+          }
+        }
+        TimelineTrackLane(
+          modifier = Modifier.fillMaxWidth().weight(1f),
+          title = stringResource(R.string.editor_timeline_audio_track),
+          selected = selectedTrack == EditorTrack.Audio,
+          iconLabel = stringResource(R.string.editor_timeline_audio_icon),
+          subtitle = if (isMuted) stringResource(R.string.editor_audio_muted) else stringResource(R.string.editor_audio_linked),
+          onSelect = { onTrackSelected(EditorTrack.Audio) },
+        ) {
+          AudioWaveformTrack(
+            modifier = Modifier.fillMaxSize().padding(horizontal = with(density) { edgePadding.toDp() }),
+            samples = waveformSamples,
+            segments = audioSegments,
+            selectedSegmentId = selectedAudioSegmentId,
+            selectedTrack = selectedTrack,
+            currentScrollPx = currentScrollPx,
+            viewportWidthPx = viewportWidthPx,
+            durationMs = duration,
+            trackWidthPx = trackWidthPx,
+            onSegmentSelected = onAudioSegmentSelected,
           )
         }
       }
@@ -1725,36 +1916,36 @@ private fun TimelineEditor(
         modifier = Modifier
           .fillMaxHeight()
           .width(with(density) { startOffsetPx.coerceIn(0f, viewportWidthPx.toFloat()).toDp() })
-          .background(Color.Black.copy(alpha = 0.54f)),
+          .background(Color.Black.copy(alpha = 0.62f)),
       )
       Box(
         modifier = Modifier
           .fillMaxHeight()
           .width(with(density) { activeRangeWidthPx.toDp() })
           .offset { IntOffset(startOffsetPx.roundToInt(), 0) }
-          .clip(RoundedCornerShape(16.dp))
+          .clip(RoundedCornerShape(12.dp))
           .background(
             Brush.verticalGradient(
               listOf(
-                ClipyAccent.copy(alpha = if (isUserInteracting) 0.28f else 0.2f),
-                ClipyAccent.copy(alpha = if (isUserInteracting) 0.18f else 0.12f),
+                ClipyAccent.copy(alpha = if (isUserInteracting) 0.22f else 0.16f),
+                ClipyAccent.copy(alpha = if (isUserInteracting) 0.1f else 0.06f),
               ),
             ),
           )
-          .border(1.dp, ClipyAccent.copy(alpha = 0.95f), RoundedCornerShape(16.dp)),
+          .border(1.dp, ClipyAccent.copy(alpha = 0.82f), RoundedCornerShape(12.dp)),
       )
       Box(
         modifier = Modifier
           .fillMaxHeight()
           .width(with(density) { (viewportWidthPx.toFloat() - endOffsetPx).coerceIn(0f, viewportWidthPx.toFloat()).toDp() })
           .offset { IntOffset(endOffsetPx.roundToInt(), 0) }
-          .background(Color.Black.copy(alpha = 0.54f)),
+          .background(Color.Black.copy(alpha = 0.62f)),
       )
       Box(
         modifier = Modifier
-          .fillMaxHeight()
+          .fillMaxHeight(0.34f)
           .width(handleTouchWidth)
-          .offset { IntOffset((startOffsetPx - with(density) { handleTouchWidth.toPx() / 2f }).roundToInt(), 0) }
+          .offset { IntOffset((startOffsetPx - with(density) { handleTouchWidth.toPx() / 2f }).roundToInt(), 34.dp.roundToPx()) }
           .pointerInput(timeline, currentScrollPx) {
             detectDragGestures(
               onDragStart = {
@@ -1787,10 +1978,10 @@ private fun TimelineEditor(
       ) {
         Box(
           modifier = Modifier
-            .fillMaxHeight(0.74f)
-            .width(handleVisualWidth)
+            .fillMaxHeight(0.82f)
+            .width(10.dp)
             .clip(RoundedCornerShape(999.dp))
-            .background(Brush.verticalGradient(listOf(ClipyPrimary, if (activeDragTarget == TimelineDragTarget.Start) ClipyPrimary else ClipyAccent)))
+            .background(Brush.verticalGradient(listOf(Color.White, if (activeDragTarget == TimelineDragTarget.Start) ClipyPrimary else ClipyAccent)))
         )
         Box(
           modifier = Modifier
@@ -1802,9 +1993,9 @@ private fun TimelineEditor(
       }
       Box(
         modifier = Modifier
-          .fillMaxHeight()
+          .fillMaxHeight(0.34f)
           .width(handleTouchWidth)
-          .offset { IntOffset((endOffsetPx - with(density) { handleTouchWidth.toPx() / 2f }).roundToInt(), 0) }
+          .offset { IntOffset((endOffsetPx - with(density) { handleTouchWidth.toPx() / 2f }).roundToInt(), 34.dp.roundToPx()) }
           .pointerInput(timeline, currentScrollPx) {
             detectDragGestures(
               onDragStart = {
@@ -1837,10 +2028,10 @@ private fun TimelineEditor(
       ) {
         Box(
           modifier = Modifier
-            .fillMaxHeight(0.74f)
-            .width(handleVisualWidth)
+            .fillMaxHeight(0.82f)
+            .width(10.dp)
             .clip(RoundedCornerShape(999.dp))
-            .background(Brush.verticalGradient(listOf(ClipyPrimary, if (activeDragTarget == TimelineDragTarget.End) ClipyPrimary else ClipyAccent)))
+            .background(Brush.verticalGradient(listOf(Color.White, if (activeDragTarget == TimelineDragTarget.End) ClipyPrimary else ClipyAccent)))
         )
         Box(
           modifier = Modifier
@@ -1860,25 +2051,81 @@ private fun TimelineEditor(
           modifier = Modifier
             .fillMaxHeight()
             .width(if (isUserInteracting) 4.dp else 2.dp)
-            .background(ClipyOnDark),
+            .background(Color.White.copy(alpha = 0.92f)),
         )
         Box(
           modifier = Modifier
             .align(Alignment.TopCenter)
-            .padding(top = 8.dp)
-            .width(16.dp)
-            .height(18.dp)
+            .padding(top = 6.dp)
+            .width(14.dp)
+            .height(16.dp)
             .clip(RoundedCornerShape(bottomStart = 10.dp, bottomEnd = 10.dp))
             .background(if (isUserInteracting) ClipyPrimary else ClipyAccent),
         )
       }
+      if (selectedTrack == EditorTrack.Audio && selectedTool == TimelineTool.Split) {
+        Box(
+          modifier = Modifier
+            .offset { IntOffset((playheadOffsetPx - 1.dp.toPx()).roundToInt(), 148.dp.roundToPx()) }
+            .width(2.dp)
+            .height(76.dp)
+            .background(Color.White.copy(alpha = 0.92f)),
+        )
+        Box(
+          modifier = Modifier
+            .offset { IntOffset((playheadOffsetPx - 8.dp.toPx()).roundToInt(), 142.dp.roundToPx()) }
+            .width(16.dp)
+            .height(4.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(ClipyAccent.copy(alpha = 0.9f)),
+        )
+      }
+      AudioTrimHandle(
+        xOffsetPx = audioStartOffsetPx,
+        viewportWidthPx = viewportWidthPx,
+        topOffsetPx = with(density) { 148.dp.toPx().roundToInt() },
+        density = density,
+        active = selectedTrack == EditorTrack.Audio,
+        activeColor = ClipyAccent,
+        onDrag = { deltaPx ->
+          val nextTrackOffset = (timelineMsToTrackPx(audioTrimStartMs, duration, trackWidthPx) + deltaPx).coerceIn(
+            0f,
+            timelineMsToTrackPx(audioTrimEndMs - MIN_TRIM_GAP_MS, duration, trackWidthPx),
+          )
+          onAudioTrimStartChange(boundedTrimStartMs(nextTrackOffset, duration, trackWidthPx, audioTrimEndMs, MIN_TRIM_GAP_MS))
+        },
+      )
+      AudioTrimHandle(
+        xOffsetPx = audioEndOffsetPx,
+        viewportWidthPx = viewportWidthPx,
+        topOffsetPx = with(density) { 148.dp.toPx().roundToInt() },
+        density = density,
+        active = selectedTrack == EditorTrack.Audio,
+        activeColor = ClipyAccent,
+        onDrag = { deltaPx ->
+          val nextTrackOffset = (timelineMsToTrackPx(audioTrimEndMs, duration, trackWidthPx) + deltaPx).coerceIn(
+            timelineMsToTrackPx(audioTrimStartMs + MIN_TRIM_GAP_MS, duration, trackWidthPx),
+            trackWidthPx,
+          )
+          onAudioTrimEndChange(boundedTrimEndMs(nextTrackOffset, duration, trackWidthPx, audioTrimStartMs, MIN_TRIM_GAP_MS))
+        },
+      )
+      Box(
+        modifier = Modifier
+          .height(76.dp)
+          .width(with(density) { audioRangeWidthPx.toDp() })
+          .offset { IntOffset(audioStartOffsetPx.roundToInt(), 148.dp.roundToPx()) }
+          .clip(RoundedCornerShape(12.dp))
+          .background(ClipyAccent.copy(alpha = if (selectedTrack == EditorTrack.Audio) 0.12f else 0.04f))
+          .border(1.dp, ClipyAccent.copy(alpha = if (selectedTrack == EditorTrack.Audio) 0.62f else 0.18f), RoundedCornerShape(12.dp)),
+      )
       Box(
         modifier = Modifier
           .align(Alignment.TopCenter)
-          .padding(top = 10.dp)
-          .clip(RoundedCornerShape(999.dp))
-          .background(Color.Black.copy(alpha = 0.34f))
-          .padding(horizontal = 10.dp, vertical = 6.dp),
+            .padding(top = 8.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(Color.Black.copy(alpha = 0.34f))
+            .padding(horizontal = 9.dp, vertical = 5.dp),
       ) {
         Text(
           text = formatDurationMs(timeline.playheadMs.coerceIn(timeline.trimStartMs, timeline.trimEndMs)),
@@ -1902,18 +2149,23 @@ private fun TimelineEditor(
     Text(
       text = stringResource(R.string.editor_timeline_hint),
       color = ClipyMuted,
-      fontSize = 12.sp,
+      fontSize = 11.sp,
     )
   }
 }
 
 @Composable
-private fun TimelineThumbnail(thumbnail: Bitmap?, modifier: Modifier = Modifier) {
+private fun TimelineThumbnail(
+  thumbnail: Bitmap?,
+  active: Boolean,
+  emphasized: Boolean,
+  modifier: Modifier = Modifier,
+) {
   Box(
     modifier = modifier
       .padding(horizontal = 1.dp)
-      .clip(RoundedCornerShape(8.dp))
-      .background(Color(0xFF1A212C)),
+      .clip(RoundedCornerShape(6.dp))
+      .background(Color(0xFF161D28)),
     contentAlignment = Alignment.Center,
   ) {
     if (thumbnail != null) {
@@ -1922,7 +2174,11 @@ private fun TimelineThumbnail(thumbnail: Bitmap?, modifier: Modifier = Modifier)
         contentDescription = null,
         modifier = Modifier.fillMaxSize(),
         contentScale = ContentScale.Crop,
-        alpha = 0.96f,
+        alpha = when {
+          active && emphasized -> 0.98f
+          active -> 0.9f
+          else -> 0.44f
+        },
       )
     } else {
       Box(
@@ -1940,6 +2196,343 @@ private fun TimelineThumbnail(thumbnail: Bitmap?, modifier: Modifier = Modifier)
       )
     }
   }
+}
+
+@Composable
+private fun TimelineMetaBadge(label: String, value: String, modifier: Modifier = Modifier) {
+  Surface(modifier = modifier, shape = RoundedCornerShape(10.dp), color = Color(0xFF121722)) {
+    Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+      Text(label, color = ClipyMuted, style = MaterialTheme.typography.labelSmall)
+      Text(value, color = ClipyOnDark, style = MaterialTheme.typography.labelLarge)
+    }
+  }
+}
+
+@Composable
+private fun TimelineCompactBadge(primary: String, secondary: String) {
+  Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFF121722)) {
+    Column(
+      modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+      verticalArrangement = Arrangement.spacedBy(1.dp),
+      horizontalAlignment = Alignment.End,
+    ) {
+      Text(primary, color = ClipyOnDark, style = MaterialTheme.typography.labelLarge)
+      Text(secondary, color = ClipyMuted, style = MaterialTheme.typography.labelSmall)
+    }
+  }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TimelineTrackHeader(
+  zoomLabel: String,
+  playheadLabel: String,
+  trimLabel: String,
+  selectedTrack: EditorTrack,
+  selectedTool: TimelineTool,
+  audioGain: Float,
+  isMuted: Boolean,
+  onTrackSelected: (EditorTrack) -> Unit,
+  onToolSelected: (TimelineTool) -> Unit,
+  onAudioCut: () -> Unit,
+  onZoomOut: () -> Unit,
+  onZoomIn: () -> Unit,
+  onAudioGainChange: (Float) -> Unit,
+) {
+  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.Top,
+    ) {
+      Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(playheadLabel, color = ClipyOnDark, style = MaterialTheme.typography.titleMedium)
+        Text(trimLabel, color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
+      }
+      Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        TimelineMetaBadge(label = stringResource(R.string.editor_playhead_label), value = playheadLabel)
+        TimelineMetaBadge(label = stringResource(R.string.editor_timeline_zoom, 1f), value = zoomLabel)
+      }
+    }
+    FlowRow(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(6.dp),
+      verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+      TimelineFilterChip(selected = selectedTrack == EditorTrack.Video, onClick = { onTrackSelected(EditorTrack.Video) }, label = stringResource(R.string.editor_timeline_video_track))
+      TimelineFilterChip(selected = selectedTrack == EditorTrack.Audio, onClick = { onTrackSelected(EditorTrack.Audio) }, label = stringResource(R.string.editor_timeline_audio_track))
+      TimelineFilterChip(selected = selectedTool == TimelineTool.Trim, onClick = { onToolSelected(TimelineTool.Trim) }, label = stringResource(R.string.editor_timeline_trim_tool))
+      TimelineFilterChip(selected = selectedTool == TimelineTool.Split, onClick = { onToolSelected(TimelineTool.Split) }, label = stringResource(R.string.editor_timeline_cut_tool))
+      if (selectedTrack == EditorTrack.Audio) {
+        TimelineFilterChip(selected = selectedTool == TimelineTool.Gain, onClick = { onToolSelected(TimelineTool.Gain) }, label = stringResource(R.string.editor_timeline_gain_tool))
+        AssistChip(onClick = {}, label = { Text(stringResource(R.string.editor_audio_gain) + " ${String.format(java.util.Locale.US, "%.1fx", audioGain)}") })
+        if (isMuted) {
+          AssistChip(onClick = {}, label = { Text(stringResource(R.string.editor_audio_muted)) })
+        }
+      }
+      AssistChip(onClick = onZoomOut, label = { Text(stringResource(R.string.editor_timeline_zoom_out)) })
+      AssistChip(onClick = onZoomIn, label = { Text(stringResource(R.string.editor_timeline_zoom_in)) })
+    }
+  }
+}
+
+@Composable
+private fun TimelineActionRow(
+  modifier: Modifier = Modifier,
+  selectedTrack: EditorTrack,
+  selectedTool: TimelineTool,
+  audioGain: Float,
+  isMuted: Boolean,
+  selectedSegment: AudioSegmentUi?,
+  playheadMs: Long,
+  onToolSelected: (TimelineTool) -> Unit,
+  onAudioCut: () -> Unit,
+  onAudioGainChange: (Float) -> Unit,
+) {
+  val canSplit = selectedSegment?.let { playheadMs in (it.startMs + MIN_TRIM_GAP_MS)..(it.endMs - MIN_TRIM_GAP_MS) } == true
+  Surface(
+    modifier = modifier,
+    shape = RoundedCornerShape(14.dp),
+    color = Color(0xFF0F141E),
+  ) {
+    Row(
+      modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp),
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+          text = when (selectedTrack) {
+            EditorTrack.Video -> stringResource(R.string.editor_timeline_focus_video)
+            EditorTrack.Audio -> stringResource(R.string.editor_timeline_focus_audio)
+          },
+          color = ClipyOnDark,
+          style = MaterialTheme.typography.labelLarge,
+        )
+        Text(
+          text = when (selectedTool) {
+            TimelineTool.Trim -> stringResource(R.string.editor_timeline_tool_trim_hint)
+            TimelineTool.Split -> stringResource(R.string.editor_timeline_tool_split_hint)
+            TimelineTool.Gain -> stringResource(R.string.editor_timeline_tool_gain_hint)
+          },
+          color = ClipyMuted,
+          style = MaterialTheme.typography.bodySmall,
+        )
+      }
+      Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (selectedTrack == EditorTrack.Audio && selectedTool == TimelineTool.Split) {
+          OutlinedButton(onClick = onAudioCut, enabled = canSplit) {
+            Text(stringResource(R.string.editor_timeline_cut_tool))
+          }
+        }
+        if (selectedTrack == EditorTrack.Audio && selectedTool == TimelineTool.Gain) {
+          AssistChip(onClick = { onAudioGainChange((audioGain - 0.1f).coerceAtLeast(0f)) }, label = { Text("-") })
+          TimelineCompactBadge(primary = String.format(java.util.Locale.US, "%.1fx", audioGain), secondary = stringResource(R.string.editor_audio_gain))
+          AssistChip(onClick = { onAudioGainChange((audioGain + 0.1f).coerceAtMost(1.5f)) }, label = { Text("+") })
+        }
+        TimelineCompactBadge(primary = formatDurationMs(playheadMs), secondary = stringResource(R.string.editor_playhead_label))
+        if (selectedTrack == EditorTrack.Audio && isMuted) {
+          AssistChip(onClick = {}, label = { Text(stringResource(R.string.editor_audio_muted)) })
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun TimelineRuler(
+  ticks: List<TimelineTickUiModel>,
+  currentScrollPx: Float,
+  viewportWidthPx: Int,
+  durationMs: Long,
+  trackWidthPx: Float,
+  modifier: Modifier = Modifier,
+) {
+  Box(modifier = modifier) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
+      val baselineY = size.height - 6.dp.toPx()
+      drawLine(
+        color = Color.White.copy(alpha = 0.08f),
+        start = androidx.compose.ui.geometry.Offset(0f, baselineY),
+        end = androidx.compose.ui.geometry.Offset(size.width, baselineY),
+        strokeWidth = 1.dp.toPx(),
+      )
+      ticks.forEach { tick ->
+        val x = (viewportWidthPx / 2f) + timelineMsToTrackPx(tick.timeMs, durationMs, trackWidthPx) - currentScrollPx
+        if (x !in -24f..(size.width + 24f)) return@forEach
+        val tickHeight = if (tick.isMajor) 12.dp.toPx() else 7.dp.toPx()
+        drawLine(
+          color = if (tick.isMajor) Color.White.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.16f),
+          start = androidx.compose.ui.geometry.Offset(x, baselineY - tickHeight),
+          end = androidx.compose.ui.geometry.Offset(x, baselineY),
+          strokeWidth = 1.dp.toPx(),
+          cap = StrokeCap.Round,
+        )
+      }
+    }
+    ticks.filter { it.isMajor }.forEach { tick ->
+      val x = (viewportWidthPx / 2f) + timelineMsToTrackPx(tick.timeMs, durationMs, trackWidthPx) - currentScrollPx
+      if (x in 0f..viewportWidthPx.toFloat()) {
+        Text(
+          text = formatDurationMs(tick.timeMs),
+          color = ClipyMuted,
+          style = MaterialTheme.typography.labelSmall,
+          modifier = Modifier.offset { IntOffset((x - 14.dp.toPx()).roundToInt(), 0) },
+        )
+      }
+    }
+  }
+}
+
+@Composable
+private fun TimelineTrackLane(
+  modifier: Modifier = Modifier,
+  title: String,
+  selected: Boolean,
+  iconLabel: String,
+  subtitle: String? = null,
+  onSelect: () -> Unit,
+  content: @Composable BoxScope.() -> Unit,
+) {
+  Column(
+    modifier = modifier
+      .clip(RoundedCornerShape(14.dp))
+      .background(if (selected) Color(0xFF171E2B) else Color(0xFF0F151F))
+      .border(1.dp, if (selected) ClipyAccent.copy(alpha = 0.34f) else Color.White.copy(alpha = 0.035f), RoundedCornerShape(14.dp))
+      .clickable(onClick = onSelect)
+      .padding(8.dp),
+    verticalArrangement = Arrangement.spacedBy(4.dp),
+  ) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+      Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(
+          modifier = Modifier.size(7.dp).clip(CircleShape).background(if (selected) ClipyAccent else Color.White.copy(alpha = 0.22f)),
+        )
+        Text(title, color = ClipyOnDark, style = MaterialTheme.typography.labelLarge)
+      }
+      if (subtitle != null) {
+        Text(subtitle, color = ClipyMuted, style = MaterialTheme.typography.labelSmall)
+      }
+    }
+    Box(modifier = Modifier.fillMaxSize(), content = content)
+  }
+}
+
+@Composable
+private fun AudioWaveformTrack(
+  modifier: Modifier = Modifier,
+  samples: List<com.nantcompany.clipy.model.WaveformSampleUiModel>,
+  segments: List<AudioSegmentUi>,
+  selectedSegmentId: String?,
+  selectedTrack: EditorTrack,
+  currentScrollPx: Float,
+  viewportWidthPx: Int,
+  durationMs: Long,
+  trackWidthPx: Float,
+  onSegmentSelected: (String) -> Unit,
+) {
+  val density = LocalDensity.current
+  Box(modifier = modifier) {
+    Box(
+      modifier = Modifier
+        .fillMaxSize()
+        .clip(RoundedCornerShape(12.dp))
+        .background(if (selectedTrack == EditorTrack.Audio) ClipyAccent.copy(alpha = 0.05f) else Color.Transparent),
+    )
+    Canvas(modifier = Modifier.fillMaxSize()) {
+      val centerY = size.height / 2f
+      val barWidth = (size.width / samples.size.coerceAtLeast(1)).coerceIn(2.5f, 7f)
+      samples.forEach { sample ->
+        val x = ((viewportWidthPx / 2f) + timelineMsToTrackPx(sample.timeMs, durationMs, trackWidthPx) - currentScrollPx)
+        if (x < -barWidth || x > size.width + barWidth) return@forEach
+        val barHeight = (size.height * 0.18f) + (sample.amplitude * size.height * 0.34f)
+        drawLine(
+          color = if (sample.isSelected) ClipyAccent.copy(alpha = if (selectedTrack == EditorTrack.Audio) 0.95f else 0.58f) else Color.White.copy(alpha = 0.14f),
+          start = androidx.compose.ui.geometry.Offset(x, centerY - barHeight / 2f),
+          end = androidx.compose.ui.geometry.Offset(x, centerY + barHeight / 2f),
+          strokeWidth = barWidth,
+          cap = StrokeCap.Round,
+        )
+      }
+    }
+    segments.forEachIndexed { index, segment ->
+      val segmentStartPx = (viewportWidthPx / 2f) + timelineMsToTrackPx(segment.startMs, durationMs, trackWidthPx) - currentScrollPx
+      val segmentEndPx = (viewportWidthPx / 2f) + timelineMsToTrackPx(segment.endMs, durationMs, trackWidthPx) - currentScrollPx
+      Box(
+        modifier = Modifier
+          .offset { IntOffset(segmentStartPx.roundToInt(), 8.dp.roundToPx()) }
+          .width(with(density) { (segmentEndPx - segmentStartPx).coerceAtLeast(24f).toDp() })
+          .height(24.dp)
+          .clip(RoundedCornerShape(12.dp))
+          .background(if (segment.id == selectedSegmentId) ClipyAccent.copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.18f))
+          .border(1.dp, if (segment.id == selectedSegmentId) ClipyAccent.copy(alpha = 0.82f) else Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+          .clickable { onSegmentSelected(segment.id) },
+        contentAlignment = Alignment.Center,
+      ) {
+        Text(stringResource(R.string.editor_audio_segment, index + 1), color = ClipyOnDark, style = MaterialTheme.typography.labelSmall)
+      }
+    }
+  }
+}
+
+@Composable
+private fun AudioTrimHandle(
+  xOffsetPx: Float,
+  viewportWidthPx: Int,
+  topOffsetPx: Int,
+  density: androidx.compose.ui.unit.Density,
+  active: Boolean,
+  activeColor: Color,
+  onDrag: (Float) -> Unit,
+) {
+  val handleTouchWidth = 42.dp
+  val handleVisualWidth = 10.dp
+  Box(
+    modifier = Modifier
+      .height(88.dp)
+      .width(handleTouchWidth)
+      .offset { IntOffset((xOffsetPx - with(density) { handleTouchWidth.toPx() / 2f }).roundToInt().coerceIn(-viewportWidthPx, viewportWidthPx * 2), topOffsetPx) }
+      .pointerInput(active) {
+        detectDragGestures { change, dragAmount ->
+          change.consume()
+          onDrag(dragAmount.x)
+        }
+      },
+    contentAlignment = Alignment.Center,
+  ) {
+    Box(
+      modifier = Modifier
+        .fillMaxHeight()
+        .width(handleVisualWidth)
+        .clip(RoundedCornerShape(999.dp))
+        .background(if (active) activeColor else Color.White.copy(alpha = 0.34f)),
+    )
+  }
+}
+
+@Composable
+private fun TimelineFilterChip(selected: Boolean, onClick: () -> Unit, label: String) {
+  FilterChip(
+    selected = selected,
+    onClick = onClick,
+    label = { Text(label) },
+    colors = FilterChipDefaults.filterChipColors(
+      selectedContainerColor = ClipyAccent.copy(alpha = 0.18f),
+      selectedLabelColor = ClipyOnDark,
+      containerColor = Color(0xFF131925),
+      labelColor = ClipyMuted,
+    ),
+    border = FilterChipDefaults.filterChipBorder(
+      enabled = true,
+      selected = selected,
+      borderColor = Color.White.copy(alpha = 0.05f),
+      selectedBorderColor = ClipyAccent.copy(alpha = 0.36f),
+      disabledBorderColor = Color.Transparent,
+      disabledSelectedBorderColor = Color.Transparent,
+      borderWidth = 1.dp,
+      selectedBorderWidth = 1.dp,
+    ),
+  )
 }
 
 @Composable
