@@ -119,6 +119,7 @@
     <string name="editor_panel_live_preview">Xem truoc truc tiep</string>
     <string name="editor_panel_snap">Bat hut moc</string>
     <string name="editor_panel_smooth">Keo muot</string>
+    <string name="editor_preview_reset">Dat lai xem truoc</string>
     <string name="section_trim">Cat</string>
     <string name="section_trim_hint">Cac moc nhanh giu MVP gon nhe nhung van de thao tac.</string>
     <string name="trim_start">Bat dau</string>

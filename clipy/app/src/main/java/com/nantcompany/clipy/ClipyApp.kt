@@ -14,6 +14,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -738,6 +739,8 @@ private fun EditorScreen(
   var selectedAudioSegmentId by rememberSaveable(draft.sourceUri) { mutableStateOf("seg-0") }
   var previewZoom by rememberSaveable { mutableStateOf(1f) }
   var previewFill by rememberSaveable { mutableStateOf(false) }
+  var previewOverlayVisible by rememberSaveable { mutableStateOf(true) }
+  var previewScrubberWidthPx by remember { mutableStateOf(0) }
   var toolPanelExpanded by rememberSaveable { mutableStateOf(true) }
   var volumeAmount by rememberSaveable(draft.sourceUri) { mutableStateOf(1f) }
   var fadeAmount by rememberSaveable(draft.sourceUri) { mutableStateOf(0.18f) }
@@ -817,6 +820,7 @@ private fun EditorScreen(
     filterStrength = 0.36f
     previewZoom = 1f
     previewFill = false
+    previewOverlayVisible = true
     toolPanelExpanded = true
     undoRedoState = UndoRedoState()
   }
@@ -870,6 +874,19 @@ private fun EditorScreen(
   DisposableEffect(player) {
     onDispose { player.release() }
   }
+
+  val previewProgress = ((draft.playheadMs - draft.trimStartMs).toFloat() / (draft.trimEndMs - draft.trimStartMs).coerceAtLeast(1L).toFloat())
+    .coerceIn(0f, 1f)
+  val centerTransportAlpha by animateFloatAsState(
+    targetValue = if (previewOverlayVisible || !isPlaying) 1f else 0f,
+    animationSpec = tween(durationMillis = 180),
+    label = "centerTransportAlpha",
+  )
+  val previewOverlayAlpha by animateFloatAsState(
+    targetValue = if (previewOverlayVisible) 1f else 0f,
+    animationSpec = tween(durationMillis = 180),
+    label = "previewOverlayAlpha",
+  )
 
   Scaffold(
     containerColor = ClipyBackground,
@@ -992,7 +1009,17 @@ private fun EditorScreen(
                       ),
                     ),
                   )
-                  .border(1.dp, Color.White.copy(alpha = 0.04f), RoundedCornerShape(22.dp)),
+                  .border(1.dp, Color.White.copy(alpha = 0.04f), RoundedCornerShape(22.dp))
+                  .pointerInput(draft.trimStartMs, draft.trimEndMs, draft.playheadMs) {
+                    detectTapGestures(
+                      onTap = { previewOverlayVisible = !previewOverlayVisible },
+                      onDoubleTap = {
+                        previewZoom = 1f
+                        previewFill = false
+                        previewOverlayVisible = true
+                      },
+                    )
+                  },
                 contentAlignment = Alignment.Center,
               ) {
                 if (draft.sourceUri.isBlank()) {
@@ -1008,6 +1035,7 @@ private fun EditorScreen(
                       .fillMaxSize()
                       .pointerInput(draft.trimStartMs, draft.trimEndMs) {
                         detectTransformGestures { _, pan, zoom, _ ->
+                          previewOverlayVisible = true
                           previewZoom = (previewZoom * zoom).coerceIn(1f, 3f)
                           if (kotlin.math.abs(pan.x) > 6f) {
                             val deltaMs = (pan.x * -6f).roundToLong()
@@ -1037,44 +1065,116 @@ private fun EditorScreen(
                       it.scaleY = previewZoom
                     },
                   )
-                  EditorOverlayBadge(
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
-                    title = dockState.playheadLabel,
-                    subtitle = dockState.trimLabel,
-                  )
-                  EditorStatusPill(
-                    modifier = Modifier.align(Alignment.TopEnd).padding(10.dp),
-                    isLive = timelineChrome.isInteracting || isPlaying,
-                  )
-                  Text(
-                    text = stringResource(R.string.editor_preview_glass_hint),
+                  if (previewOverlayAlpha > 0.01f) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                      EditorOverlayBadge(
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
+                        title = dockState.playheadLabel,
+                        subtitle = dockState.trimLabel,
+                      )
+                      Row(
+                        modifier = Modifier.align(Alignment.TopStart).padding(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                      ) {
+                        AssistChip(
+                          onClick = { previewFill = false },
+                          label = { Text(stringResource(R.string.editor_preview_fit)) },
+                        )
+                        AssistChip(
+                          onClick = { previewFill = true },
+                          label = { Text(stringResource(R.string.editor_preview_fill)) },
+                        )
+                      }
+                      EditorStatusPill(
+                        modifier = Modifier.align(Alignment.TopEnd).padding(10.dp),
+                        isLive = timelineChrome.isInteracting || isPlaying,
+                      )
+                      Text(
+                        text = stringResource(R.string.editor_preview_glass_hint),
+                        modifier = Modifier
+                          .align(Alignment.BottomStart)
+                          .padding(start = 10.dp, bottom = 34.dp)
+                          .background(Color.Black.copy(alpha = 0.32f * previewOverlayAlpha))
+                          .clip(RoundedCornerShape(14.dp))
+                          .padding(horizontal = 10.dp, vertical = 6.dp),
+                        color = ClipyOnDark.copy(alpha = 0.84f * previewOverlayAlpha),
+                        style = MaterialTheme.typography.labelSmall,
+                      )
+                    }
+                  }
+                  Surface(
                     modifier = Modifier
-                      .align(Alignment.BottomStart)
-                      .padding(10.dp)
-                      .clip(RoundedCornerShape(14.dp))
-                      .background(Color.Black.copy(alpha = 0.32f))
-                      .padding(horizontal = 10.dp, vertical = 6.dp),
-                    color = ClipyOnDark.copy(alpha = 0.84f),
-                    style = MaterialTheme.typography.labelSmall,
-                  )
-                  Row(
-                    modifier = Modifier
-                      .align(Alignment.BottomEnd)
-                      .padding(10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                      .align(Alignment.Center)
+                      .size(72.dp),
+                    shape = CircleShape,
+                    color = Color.Black.copy(alpha = 0.28f),
+                    tonalElevation = 0.dp,
                   ) {
-                    AssistChip(onClick = { previewFill = false }, label = { Text(stringResource(R.string.editor_preview_fit)) })
-                    AssistChip(onClick = { previewFill = true }, label = { Text(stringResource(R.string.editor_preview_fill)) })
+                    IconButton(
+                      onClick = {
+                        previewOverlayVisible = true
+                        if (player.isPlaying) player.pause() else player.play()
+                        isPlaying = player.isPlaying
+                      },
+                      modifier = Modifier.fillMaxSize(),
+                    ) {
+                      Icon(
+                        imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                        contentDescription = stringResource(R.string.editor_transport_play),
+                        tint = Color.White.copy(alpha = centerTransportAlpha),
+                        modifier = Modifier.size(34.dp),
+                      )
+                    }
                   }
                   Box(
                     modifier = Modifier
                       .align(Alignment.BottomCenter)
-                      .padding(horizontal = 18.dp, vertical = 12.dp)
-                      .fillMaxWidth((draft.playheadMs - draft.trimStartMs).toFloat() / (draft.trimEndMs - draft.trimStartMs).coerceAtLeast(1L).toFloat())
-                      .height(3.dp)
-                      .clip(RoundedCornerShape(999.dp))
-                      .background(ClipyAccent.copy(alpha = 0.92f)),
-                  )
+                      .padding(horizontal = 12.dp, vertical = 12.dp)
+                      .fillMaxWidth()
+                      .height(14.dp)
+                      .onSizeChanged { previewScrubberWidthPx = it.width }
+                      .pointerInput(draft.trimStartMs, draft.trimEndMs) {
+                        detectDragGestures { change, dragAmount ->
+                          change.consume()
+                          val width = previewScrubberWidthPx.toFloat().coerceAtLeast(1f)
+                          val relativeX = (change.position.x + dragAmount.x).coerceIn(0f, width)
+                          val seekMs = draft.trimStartMs + ((draft.trimEndMs - draft.trimStartMs) * (relativeX / width)).roundToLong()
+                          previewOverlayVisible = true
+                          onPlayheadChange(seekMs.coerceIn(draft.trimStartMs, draft.trimEndMs))
+                        }
+                      },
+                  ) {
+                    Box(
+                      modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color.White.copy(alpha = 0.18f)),
+                    )
+                    Box(
+                      modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxWidth(previewProgress)
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(ClipyAccent.copy(alpha = 0.92f)),
+                    )
+                    Box(
+                      modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .offset {
+                          IntOffset(
+                            (previewProgress * previewScrubberWidthPx - 7.dp.toPx()).roundToInt(),
+                            0,
+                          )
+                        }
+                        .size(14.dp)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                        .border(2.dp, ClipyAccent, CircleShape),
+                    )
+                  }
                   Box(
                     modifier = Modifier
                       .align(Alignment.Center)
@@ -1272,32 +1372,7 @@ private fun EditorScreen(
               Text(stringResource(R.string.editor_creator_rail_title), style = MaterialTheme.typography.titleMedium)
               Text(stringResource(R.string.editor_context_panel_hint), color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              MiniActionButton(
-                icon = Icons.Rounded.Undo,
-                label = stringResource(R.string.editor_undo),
-                enabled = undoRedoState.canUndo,
-                onClick = {
-                  val label = undoRedoState.undoStack.lastOrNull() ?: return@MiniActionButton
-                  undoRedoState = undoRedoState.copy(
-                    undoStack = undoRedoState.undoStack.dropLast(1),
-                    redoStack = undoRedoState.redoStack + label,
-                  )
-                },
-              )
-              MiniActionButton(
-                icon = Icons.Rounded.Redo,
-                label = stringResource(R.string.editor_redo),
-                enabled = undoRedoState.canRedo,
-                onClick = {
-                  val label = undoRedoState.redoStack.lastOrNull() ?: return@MiniActionButton
-                  undoRedoState = undoRedoState.copy(
-                    undoStack = undoRedoState.undoStack + label,
-                    redoStack = undoRedoState.redoStack.dropLast(1),
-                  )
-                },
-              )
-            }
+            TimelineCompactBadge(primary = undoRedoState.lastActionLabel ?: stringResource(R.string.editor_history_idle), secondary = stringResource(R.string.editor_tool_rail))
           }
           PrimaryToolRail(
             selected = selectedPrimaryTool,
@@ -1342,6 +1417,38 @@ private fun EditorScreen(
             CompactToggleCard(title = stringResource(R.string.toggle_reverse), checked = draft.isReversed, onToggle = onToggleReverse, modifier = Modifier.weight(1f))
             CompactToggleCard(title = stringResource(R.string.toggle_boomerang), checked = draft.isBoomerang, onToggle = onToggleBoomerang, modifier = Modifier.weight(1f))
           }
+        }
+      }
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End,
+      ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          MiniActionButton(
+            icon = Icons.Rounded.Undo,
+            label = stringResource(R.string.editor_undo),
+            enabled = undoRedoState.canUndo,
+            onClick = {
+              val label = undoRedoState.undoStack.lastOrNull() ?: return@MiniActionButton
+              undoRedoState = undoRedoState.copy(
+                undoStack = undoRedoState.undoStack.dropLast(1),
+                redoStack = undoRedoState.redoStack + label,
+              )
+            },
+          )
+          MiniActionButton(
+            icon = Icons.Rounded.Redo,
+            label = stringResource(R.string.editor_redo),
+            enabled = undoRedoState.canRedo,
+            onClick = {
+              val label = undoRedoState.redoStack.lastOrNull() ?: return@MiniActionButton
+              undoRedoState = undoRedoState.copy(
+                undoStack = undoRedoState.undoStack + label,
+                redoStack = undoRedoState.redoStack.dropLast(1),
+              )
+            },
+          )
         }
       }
 
@@ -2663,7 +2770,12 @@ private fun MiniActionButton(
 
 @Composable
 private fun PrimaryToolRail(selected: EditorPrimaryTool, onSelected: (EditorPrimaryTool) -> Unit) {
-  Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .horizontalScroll(rememberScrollState()),
+    horizontalArrangement = Arrangement.spacedBy(8.dp),
+  ) {
     EditorPrimaryTool.entries.forEach { tool ->
       val icon = when (tool) {
         EditorPrimaryTool.Edit -> Icons.Rounded.FitScreen
@@ -2684,7 +2796,7 @@ private fun PrimaryToolRail(selected: EditorPrimaryTool, onSelected: (EditorPrim
         onClick = { onSelected(tool) },
         label = { Text(label) },
         leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
-        modifier = Modifier.weight(1f),
+        modifier = Modifier.widthIn(min = 104.dp),
         colors = FilterChipDefaults.filterChipColors(
           selectedContainerColor = ClipyAccent,
           selectedLabelColor = Color.White,

@@ -119,6 +119,7 @@
     <string name="editor_panel_live_preview">Live preview</string>
     <string name="editor_panel_snap">Snap on</string>
     <string name="editor_panel_smooth">Smooth drag</string>
+    <string name="editor_preview_reset">Reset preview</string>
     <string name="section_trim">Trim</string>
     <string name="section_trim_hint">Quick presets keep the MVP lightweight while still feeling tactile.</string>
     <string name="trim_start">Start</string>
