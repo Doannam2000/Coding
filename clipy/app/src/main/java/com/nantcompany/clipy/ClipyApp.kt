@@ -143,7 +143,9 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -672,7 +674,8 @@ private fun HomeScreen(
   }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@kotlin.OptIn(ExperimentalMaterial3Api::class)
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun EditorScreen(
   state: AppSnapshot,
@@ -1015,13 +1018,21 @@ private fun EditorScreen(
                     factory = { viewContext ->
                       PlayerView(viewContext).apply {
                         useController = false
-                        resizeMode = if (previewFill) 4 else 0
+                        resizeMode = if (previewFill) {
+                          AspectRatioFrameLayout.RESIZE_MODE_FILL
+                        } else {
+                          AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        }
                         this.player = player
                       }
                     },
                     update = {
                       it.player = player
-                      it.resizeMode = if (previewFill) 4 else 0
+                      it.resizeMode = if (previewFill) {
+                        AspectRatioFrameLayout.RESIZE_MODE_FILL
+                      } else {
+                        AspectRatioFrameLayout.RESIZE_MODE_FIT
+                      }
                       it.scaleX = previewZoom
                       it.scaleY = previewZoom
                     },
