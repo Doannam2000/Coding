@@ -1,0 +1,801 @@
+{
+  "name": "bot-telegram-gateway",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "TelegramTrigger",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [
+        260,
+        300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.message.from.id === Number($env.ALLOWED_TELEGRAM_ID) && (!$env.ALLOWED_TELEGRAM_CHAT_ID || $json.message.chat.id === Number($env.ALLOWED_TELEGRAM_CHAT_ID))}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "GuardAllowedUser",
+      "name": "Guard Allowed User",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{$json.message.chat.id}}",
+        "text": "Unauthorized user.",
+        "additionalFields": {}
+      },
+      "id": "ReplyUnauthorized",
+      "name": "Reply Unauthorized",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        740,
+        460
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = ($json.message.text || '').trim();\nconst parts = text.split(' ');\nconst command = (parts[0] || '').toLowerCase();\nconst payload = text.slice(command.length).trim();\nconst fields = payload.split('|').map(v => v.trim());\n\nreturn [{\n  command,\n  payload,\n  fields,\n  chat_id: $json.message.chat.id,\n  user_id: $json.message.from.id\n}];"
+      },
+      "id": "ParseCommand",
+      "name": "Parse Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        740,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.command}}",
+                    "rightValue": "/task",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.command}}",
+                    "rightValue": "/status",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.command}}",
+                    "rightValue": "/pause",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.command}}",
+                    "rightValue": "/resume",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.command}}",
+                    "rightValue": "/schedule",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.command}}",
+                    "rightValue": "/cancel",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.command}}",
+                    "rightValue": "/approve",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.command}}",
+                    "rightValue": "/config",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.command}}",
+                    "rightValue": "/autoapp",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "id": "RouteCommand",
+      "name": "Route Command",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        980,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into bot_tasks(repo, title, prompt, created_by, status, next_run_at) values($1,$2,$3,$4,'queued', now()) returning id, repo, title;",
+        "additionalFields": {
+          "queryParams": "={{[$json.fields[0], $json.fields[1], $json.fields[2], $json.user_id]}}"
+        }
+      },
+      "id": "InsertTask",
+      "name": "Insert Task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1240,
+        20
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select t.id, t.status, t.current_step, t.pr_url, coalesce((select count(*) from bot_task_steps s where s.task_id = t.id and s.status='passed'), 0) as steps_passed from bot_tasks t where t.id = $1;",
+        "additionalFields": {
+          "queryParams": "={{[Number($json.fields[0])]}}"
+        }
+      },
+      "id": "GetStatus",
+      "name": "Get Status",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1240,
+        120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update bot_tasks set status='paused', updated_at=now() where id=$1 returning id, status;",
+        "additionalFields": {
+          "queryParams": "={{[Number($json.fields[0])]}}"
+        }
+      },
+      "id": "PauseTask",
+      "name": "Pause Task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1240,
+        220
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update bot_tasks set status='ready', updated_at=now() where id=$1 and status='paused' returning id, status;",
+        "additionalFields": {
+          "queryParams": "={{[Number($json.fields[0])]}}"
+        }
+      },
+      "id": "ResumeTask",
+      "name": "Resume Task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1240,
+        320
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update bot_tasks set cron_expr=$2, next_run_at=now(), updated_at=now() where id=$1 returning id, cron_expr;",
+        "additionalFields": {
+          "queryParams": "={{[Number($json.fields[0]), $json.fields[1]]}}"
+        }
+      },
+      "id": "ScheduleTask",
+      "name": "Schedule Task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1240,
+        420
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update bot_tasks set status='cancelled', updated_at=now() where id=$1 returning id, status;",
+        "additionalFields": {
+          "queryParams": "={{[Number($json.fields[0])]}}"
+        }
+      },
+      "id": "CancelTask",
+      "name": "Cancel Task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1240,
+        520
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update bot_tasks set status='ready', approved_by=$2, updated_at=now() where id=$1 and status='blocked_needs_approval' returning id, status;",
+        "additionalFields": {
+          "queryParams": "={{[Number($json.fields[0]), $json.user_id]}}"
+        }
+      },
+      "id": "ApproveTask",
+      "name": "Approve Task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1240,
+        620
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into bot_settings(key, value, updated_at) values(concat('repo_config:', $1), $2, now()) on conflict (key) do update set value=excluded.value, updated_at=now() returning key, value;",
+        "additionalFields": {
+          "queryParams": "={{[$json.fields[0], $json.fields[1]]}}"
+        }
+      },
+      "id": "ConfigTask",
+      "name": "Config Task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1240,
+        720
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "command": "=powershell -ExecutionPolicy Bypass -File \"D:\\Code\\NaNAIFlow\\scripts\\autoapp-bootstrap.ps1\" -Repo \"{{$json.fields[0]}}\" -Idea \"{{$json.fields[1]}}\" -TargetUsers \"{{$json.fields[2] || 'General users'}}\" -Constraints \"{{$json.fields[3] || ''}}\" -RepoRoot \"{{$env.DEFAULT_REPO_ROOT || 'D:\\Code'}}\""
+      },
+      "id": "RunAutoappBootstrap",
+      "name": "Run Autoapp Bootstrap",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        820
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const out = ($json.stdout || '').trim();\nconst parsed = JSON.parse(out);\nreturn [{\n  ok: parsed.status === 'success',\n  message: parsed.message || '',\n  repo: parsed.repo || '',\n  title: parsed.title || '',\n  prompt: parsed.prompt || '',\n  config_md_path: parsed.config_md_path || 'docs/ai-spec.md',\n  user_id: $item(0).$node['Parse Command'].json.user_id\n}];"
+      },
+      "id": "ParseAutoappBootstrap",
+      "name": "Parse Autoapp Bootstrap",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1480,
+        820
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.ok}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "AutoappOk",
+      "name": "Autoapp OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1700,
+        820
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into bot_tasks(repo, title, prompt, config_md_path, created_by, status, next_run_at) values($1,$2,$3,$4,$5,'queued', now()) returning id, repo, title, status, config_md_path;",
+        "additionalFields": {
+          "queryParams": "={{[$json.repo, $json.title, $json.prompt, $json.config_md_path, $json.user_id]}}"
+        }
+      },
+      "id": "InsertAutoappTask",
+      "name": "Insert Autoapp Task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1920,
+        740
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ text: `AUTOAPP FAILED: ${$json.message || 'unknown error'}` }];"
+      },
+      "id": "BuildAutoappErrorReply",
+      "name": "Build Autoapp Error Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const command = $node['Parse Command'].json.command || 'command';\nconst row = $json || {};\nlet detail = '';\nif (row.id) {\n  detail = `id=${row.id}`;\n}\nif (row.status) {\n  detail = detail ? `${detail}, status=${row.status}` : `status=${row.status}`;\n}\nif (row.cron_expr) {\n  detail = detail ? `${detail}, cron=${row.cron_expr}` : `cron=${row.cron_expr}`;\n}\nif (row.key && row.value) {\n  detail = detail ? `${detail}, ${row.key}=${row.value}` : `${row.key}=${row.value}`;\n}\nif (row.config_md_path) {\n  detail = detail ? `${detail}, spec=${row.config_md_path}` : `spec=${row.config_md_path}`;\n}\nif (row.message) {\n  detail = detail ? `${detail}, message=${row.message}` : `message=${row.message}`;\n}\nreturn [{ text: detail ? `OK ${command}: ${detail}` : `OK ${command}` }];"
+      },
+      "id": "BuildReply",
+      "name": "Build Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1480,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{$node['Parse Command'].json.chat_id}}",
+        "text": "={{$json.text}}",
+        "additionalFields": {}
+      },
+      "id": "ReplyResult",
+      "name": "Reply Result",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        360
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Guard Allowed User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard Allowed User": {
+      "main": [
+        [
+          {
+            "node": "Parse Command",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Command": {
+      "main": [
+        [
+          {
+            "node": "Route Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Command": {
+      "main": [
+        [
+          {
+            "node": "Insert Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pause Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resume Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Schedule Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cancel Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Approve Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Config Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run Autoapp Bootstrap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Task": {
+      "main": [
+        [
+          {
+            "node": "Build Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Status": {
+      "main": [
+        [
+          {
+            "node": "Build Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pause Task": {
+      "main": [
+        [
+          {
+            "node": "Build Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resume Task": {
+      "main": [
+        [
+          {
+            "node": "Build Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Task": {
+      "main": [
+        [
+          {
+            "node": "Build Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cancel Task": {
+      "main": [
+        [
+          {
+            "node": "Build Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approve Task": {
+      "main": [
+        [
+          {
+            "node": "Build Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config Task": {
+      "main": [
+        [
+          {
+            "node": "Build Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Autoapp Bootstrap": {
+      "main": [
+        [
+          {
+            "node": "Parse Autoapp Bootstrap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Autoapp Bootstrap": {
+      "main": [
+        [
+          {
+            "node": "Autoapp OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Autoapp OK?": {
+      "main": [
+        [
+          {
+            "node": "Insert Autoapp Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Autoapp Error Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Autoapp Task": {
+      "main": [
+        [
+          {
+            "node": "Build Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Autoapp Error Reply": {
+      "main": [
+        [
+          {
+            "node": "Reply Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Reply": {
+      "main": [
+        [
+          {
+            "node": "Reply Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1"
+}

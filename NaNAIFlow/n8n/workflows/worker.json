@@ -1,0 +1,475 @@
+{
+  "name": "bot-worker",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "Every30Seconds",
+      "name": "Every 30 Seconds",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "with picked as (select id from bot_tasks where status='ready' order by created_at asc limit 1 for update skip locked) update bot_tasks t set status='running_step', updated_at=now() from picked where t.id = picked.id returning t.id, t.repo, t.title, t.prompt, t.config_md_path, t.branch;"
+      },
+      "id": "ClaimTask",
+      "name": "Claim Task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$items().length}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "HasTask",
+      "name": "Has Task?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "with next_step as (select s.id from bot_task_steps s where s.task_id=$1 and s.status='pending' order by s.step_no asc limit 1 for update skip locked) update bot_task_steps s set status='running', started_at=now(), updated_at=now() from next_step where s.id = next_step.id returning s.id, s.task_id, s.step_no, s.title, s.instruction, s.retries, s.test_command, s.build_command, s.started_at;",
+        "additionalFields": {
+          "queryParams": "={{[$json.id]}}"
+        }
+      },
+      "id": "ClaimStep",
+      "name": "Claim Step",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$items().length}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "HasStep",
+      "name": "Has Step?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "command": "=powershell -ExecutionPolicy Bypass -File \"D:\\Code\\NaNAIFlow\\scripts\\run-task.ps1\" -TaskId {{$json.task_id}} -RepoPath \"D:\\Code\\{{$item(0).$node['Claim Task'].json.repo}}\" -StepNo {{$json.step_no}} -StepInstruction \"{{$json.instruction}}\" -TaskTitle \"{{$item(0).$node['Claim Task'].json.title}}\" -TaskPrompt \"{{$item(0).$node['Claim Task'].json.prompt}}\" -ConfigPath \"{{$item(0).$node['Claim Task'].json.config_md_path || 'docs/ai-spec.md'}}\" -BaseBranch \"{{$env.GITHUB_BASE_BRANCH || 'main'}}\" -TestCommand \"{{$json.test_command || $env.DEFAULT_TEST_COMMAND}}\" -BuildCommand \"{{$json.build_command || $env.DEFAULT_BUILD_COMMAND}}\" -CreatePr"
+      },
+      "id": "RunStep",
+      "name": "Run Step",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const out = ($json.stdout || '').trim();\nconst parsed = JSON.parse(out);\nreturn [{\n  run_status: parsed.status,\n  message: parsed.message || '',\n  branch: parsed.branch || '',\n  commit: parsed.commit || '',\n  pr_url: parsed.prUrl || '',\n  changed_files: parsed.changedFiles || ''\n}];"
+      },
+      "id": "ParseRun",
+      "name": "Parse Run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.run_status}}",
+              "operation": "equals",
+              "value2": "success"
+            }
+          ]
+        }
+      },
+      "id": "RunSuccess",
+      "name": "Run Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update bot_task_steps set status='passed', finished_at=now(), updated_at=now() where task_id=$1 and step_no=$2 returning id;",
+        "additionalFields": {
+          "queryParams": "={{[$item(0).$node['Claim Step'].json.task_id, $item(0).$node['Claim Step'].json.step_no]}}"
+        }
+      },
+      "id": "MarkStepPassed",
+      "name": "Mark Step Passed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2000,
+        220
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "with pending_count as (select count(*)::int as c from bot_task_steps where task_id=$1 and status='pending') update bot_tasks set status = case when (select c from pending_count)=0 then 'completed' else 'ready' end, current_step=$2, branch=coalesce($3, branch), pr_url=coalesce($4, pr_url), updated_at=now() where id=$1 returning id, status;",
+        "additionalFields": {
+          "queryParams": "={{[$item(0).$node['Claim Step'].json.task_id, $item(0).$node['Claim Step'].json.step_no, $item(0).$node['Parse Run'].json.branch, $item(0).$node['Parse Run'].json.pr_url]}}"
+        }
+      },
+      "id": "AdvanceTask",
+      "name": "Advance Task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2220,
+        220
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update bot_task_steps set status='failed', retries=retries+1, finished_at=now(), updated_at=now() where task_id=$1 and step_no=$2 returning retries;",
+        "additionalFields": {
+          "queryParams": "={{[$item(0).$node['Claim Step'].json.task_id, $item(0).$node['Claim Step'].json.step_no]}}"
+        }
+      },
+      "id": "MarkStepFailed",
+      "name": "Mark Step Failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2000,
+        420
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "with cfg as (select coalesce((select value::int from bot_settings where key='max_retries_per_step'), 2) as max_retry, coalesce((select value::int from bot_settings where key='retry_delay_minutes'), 1) as retry_delay_min), step_state as (select retries from bot_task_steps where task_id=$1 and step_no=$2), decision as (select case when (select retries from step_state) < (select max_retry from cfg) then 'failed_retryable' else 'failed_terminal' end as next_status), up_step as (update bot_task_steps set status = case when (select next_status from decision)='failed_retryable' then 'pending' else 'failed' end, updated_at=now() where task_id=$1 and step_no=$2 returning id) update bot_tasks set status = (select next_status from decision), next_run_at = case when (select next_status from decision)='failed_retryable' then now() + make_interval(mins => (select retry_delay_min from cfg)) else null end, last_error=$3, updated_at=now() where id=$1 returning id, status;",
+        "additionalFields": {
+          "queryParams": "={{[$item(0).$node['Claim Step'].json.task_id, $item(0).$node['Claim Step'].json.step_no, $item(0).$node['Parse Run'].json.message]}}"
+        }
+      },
+      "id": "MarkTaskFailure",
+      "name": "Mark Task Failure",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2220,
+        420
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into bot_task_logs(task_id, step_no, level, message, raw) values($1,$2,$3,$4,$5::jsonb);",
+        "additionalFields": {
+          "queryParams": "={{[$item(0).$node['Claim Step'].json.task_id, $item(0).$node['Claim Step'].json.step_no, $item(0).$node['Parse Run'].json.run_status === 'success' ? 'info' : 'error', $item(0).$node['Parse Run'].json.message, JSON.stringify($item(0).$node['Parse Run'].json)]}}"
+        }
+      },
+      "id": "InsertLog",
+      "name": "Insert Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2440,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": "bot-notifier",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "task_id": "={{$item(0).$node['Claim Step'].json.task_id}}",
+            "step_no": "={{$item(0).$node['Claim Step'].json.step_no}}",
+            "status": "={{$item(0).$node['Parse Run'].json.run_status}}",
+            "message": "={{$item(0).$node['Parse Run'].json.message}}",
+            "pr_url": "={{$item(0).$node['Parse Run'].json.pr_url}}",
+            "branch": "={{$item(0).$node['Parse Run'].json.branch}}",
+            "commit": "={{$item(0).$node['Parse Run'].json.commit}}",
+            "changed_files": "={{$item(0).$node['Parse Run'].json.changed_files}}",
+            "started_at": "={{$item(0).$node['Claim Step'].json.started_at}}",
+            "finished_at": "={{new Date().toISOString()}}"
+          }
+        }
+      },
+      "id": "Notify",
+      "name": "Notify",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        2660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update bot_tasks set status='completed', updated_at=now() where id=$1 and not exists (select 1 from bot_task_steps s where s.task_id=$1 and s.status in ('pending','running')) returning id;",
+        "additionalFields": {
+          "queryParams": "={{[$json.id]}}"
+        }
+      },
+      "id": "CompleteNoStep",
+      "name": "Complete No Step",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1340,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Bot Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 30 Seconds": {
+      "main": [
+        [
+          {
+            "node": "Claim Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Task": {
+      "main": [
+        [
+          {
+            "node": "Has Task?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Task?": {
+      "main": [
+        [
+          {
+            "node": "Claim Step",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Claim Step": {
+      "main": [
+        [
+          {
+            "node": "Has Step?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Step?": {
+      "main": [
+        [
+          {
+            "node": "Run Step",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Complete No Step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Step": {
+      "main": [
+        [
+          {
+            "node": "Parse Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Run": {
+      "main": [
+        [
+          {
+            "node": "Run Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Success?": {
+      "main": [
+        [
+          {
+            "node": "Mark Step Passed",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Insert Log",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Step Failed",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Insert Log",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Step Passed": {
+      "main": [
+        [
+          {
+            "node": "Advance Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Step Failed": {
+      "main": [
+        [
+          {
+            "node": "Mark Task Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1"
+}
