@@ -35,7 +35,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -169,7 +168,6 @@ import androidx.media3.ui.PlayerView
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.clipy.R
 import com.nantcompany.clipy.data.ClipyRepository.AppSnapshot
 import com.nantcompany.clipy.model.AppLanguage
 import com.nantcompany.clipy.model.AudioSegmentUi
@@ -1155,10 +1153,10 @@ private fun EditorScreen(
   var audioTrimStartMs by rememberSaveable(draft.sourceUri) { mutableStateOf(draft.trimStartMs) }
   var audioTrimEndMs by rememberSaveable(draft.sourceUri) { mutableStateOf(draft.trimEndMs) }
   var audioGain by rememberSaveable(draft.sourceUri) { mutableStateOf(1f) }
-  var audioSegments by rememberSaveable(draft.sourceUri) {
+  var audioSegments by remember(draft.sourceUri) {
     mutableStateOf(listOf(AudioSegmentUi(id = "seg-0", startMs = 0L, endMs = draft.sourceDurationMs.coerceAtLeast(MIN_TRIM_GAP_MS * 2))))
   }
-  var textClips by rememberSaveable(draft.sourceUri) {
+  var textClips by remember(draft.sourceUri) {
     mutableStateOf(
       listOf(
         TextClipUi(
@@ -1181,7 +1179,7 @@ private fun EditorScreen(
   var fadeAmount by rememberSaveable(draft.sourceUri) { mutableStateOf(0.18f) }
   var effectIntensity by rememberSaveable(draft.sourceUri) { mutableStateOf(0.42f) }
   var filterStrength by rememberSaveable(draft.sourceUri) { mutableStateOf(0.36f) }
-  var undoRedoState by rememberSaveable { mutableStateOf(UndoRedoState()) }
+  var undoRedoState by remember { mutableStateOf(UndoRedoState()) }
   val timelineChrome = remember(draft.trimStartMs, draft.trimEndMs, draft.playheadMs, timelineInteracting) {
     TimelineChromeState(
       trimStartMs = draft.trimStartMs,
@@ -3829,7 +3827,7 @@ private fun exportSummary(state: AppSnapshot): String {
   if (draft.sourceUri.isBlank()) {
     return ""
   }
-  if (!draft.isVideoSource) {
+  if (!draft.sourceMediaType.equals("video", ignoreCase = true)) {
     return "Unsupported source type"
   }
   return if (draft.exportFormat == ExportFormat.Gif) {

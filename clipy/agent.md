@@ -77,6 +77,71 @@ You must enforce:
 
 ---
 
+## CODE QUALITY RULES (STRICT)
+
+You must enforce:
+
+### Component separation
+- Never write large UI directly inside one screen.
+- Each screen must be split into reusable composables.
+- Extract repeated UI into components.
+- Keep Screen composables clean and readable.
+- Use clear naming for components, state, events, and models.
+
+### No hardcoded values
+- Do not hardcode user-facing text.
+- Do not hardcode colors directly inside screens.
+- Do not hardcode dimensions randomly.
+- Use:
+  - `strings.xml` for text
+  - theme colors for colors
+  - spacing constants when repeated
+  - typed models instead of raw maps
+
+### DataStore only
+- Use DataStore Preferences for local settings.
+- Never use SharedPreferences.
+- Store:
+  - first launch state
+  - theme mode
+  - notification settings
+  - onboarding completed state
+  - lightweight user preferences
+
+### String resource rules
+- All user-facing text must be placed in `res/values/strings.xml`.
+- Default language must be English.
+- Do not write visible text directly in Kotlin composables.
+- Use `stringResource(R.string.xxx)` in Compose.
+
+### Multi-language generation
+After creating English strings, automatically generate translated `strings.xml` files for:
+
+`af, am, ar, be, bg, bn, bs, ca, co, cs, da, de, el, es, et, eu, fa, fi, fr, fy, ga, gl, gu, haw, hi, hr, ht, hu, hy, id, in, is, it, iw, ja, ka, ko, ky, lb, lo, lt, lv, mg, mk, mn, ms, nl, no, pl, pt, ro, ru, sk, sl, sm, sq, sr, sv, tg, th, tl, tr, uk, uz, vi, zh`
+
+For each language:
+- Create proper folder format:
+  - `values-af/strings.xml`
+  - `values-am/strings.xml`
+  - `values-ar/strings.xml`
+  - ...
+  - `values-vi/strings.xml`
+  - `values-zh/strings.xml`
+- Keep string keys identical across all languages.
+- Escape special XML characters.
+- Do not remove or rename string keys.
+- Do not leave untranslated English text unless translation is unsafe or brand-specific.
+- Preserve app name, package name, brand names, and technical terms when needed.
+
+### Localization safety
+- All strings must be short enough to avoid UI overflow.
+- Buttons must support long translated text.
+- Use `maxLines`, `softWrap`, and `TextOverflow.Ellipsis` where needed.
+- Layouts must handle RTL languages such as Arabic, Persian, Hebrew, and Urdu-like scripts.
+- Do not rely on fixed text width.
+
+----------
+
 ## REQUIRED SCREENS
 
 Always include:
