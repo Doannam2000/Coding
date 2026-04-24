@@ -2,6 +2,7 @@ package com.nantcompany.clipy.ui
 
 import android.app.Application
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -25,6 +26,9 @@ import kotlinx.coroutines.withContext
 class ClipyViewModel(application: Application) : AndroidViewModel(application) {
   private val repository = ClipyRepository.getInstance(application)
   private val mediaPickerState = MutableStateFlow(MediaPickerUiState())
+  private val pickerTabSnapshots = mutableMapOf<MediaTab, PickerTabSnapshot>()
+  private val pickerRefreshRequestIds = mutableMapOf<MediaTab, Long>()
+  private var nextPickerRefreshRequestId = 0L
 
   val appState: StateFlow<AppSnapshot> = repository.appSnapshot.stateIn(
     viewModelScope,
@@ -54,8 +58,18 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
   fun refreshMediaPermissionAndContent(forceTab: MediaTab? = null) {
     val context = getApplication<Application>()
     val tab = forceTab ?: mediaPickerState.value.activeTab
-    val hasPermission = hasMediaAccess(context, tab)
+    val permissionSnapshot = mediaPermissionSnapshot(context)
+    val hasPermission = hasMediaAccess(permissionSnapshot, tab)
+    val requestId = nextPickerRefreshRequestId + 1L
+    nextPickerRefreshRequestId = requestId
+    pickerRefreshRequestIds[tab] = requestId
+    val cachedSnapshot = pickerTabSnapshots[tab]
+    Log.d(
+      "ClipyMediaPicker",
+      "refreshMediaPermissionAndContent sdk=${permissionSnapshot.sdkInt} tab=$tab hasPermission=$hasPermission partial=${isUsingPartialMediaAccess(permissionSnapshot, tab)} requestId=$requestId",
+    )
     if (!hasPermission) {
+      pickerTabSnapshots.remove(tab)
       mediaPickerState.value = mediaPickerState.value.copy(
         activeTab = tab,
         hasMediaPermission = false,
@@ -64,28 +78,69 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
         mediaItems = emptyList(),
         canLoadMore = false,
         loadCursor = 0,
+        lastQueryCursorCount = null,
+        isUsingPartialAccess = false,
+        errorMessage = null,
       )
       return
     }
     viewModelScope.launch {
-      mediaPickerState.value = mediaPickerState.value.copy(activeTab = tab, hasMediaPermission = true, isLoading = true)
-      val selectedIds = mediaPickerState.value.selectedItems.map { it.id }
-      val selectedAlbumId = mediaPickerState.value.selectedAlbumId
-      val (albums, items) = withContext(Dispatchers.IO) { queryDeviceMedia(context, tab, offset = 0) }
-      mediaPickerState.value = mediaPickerState.value.copy(
-        activeTab = tab,
-        hasMediaPermission = true,
-        isLoading = false,
-        albums = albums.mapIndexed { index, album -> album.copy(isSelected = (selectedAlbumId ?: "recent").let { current -> if (index == 0 && selectedAlbumId == null) true else album.id == current }) },
-        mediaItems = applySelection(items, selectedIds),
-        selectedAlbumId = selectedAlbumId,
-        isNextEnabled = mediaPickerState.value.selectedItems.isNotEmpty(),
-        initialScrollTarget = items.firstOrNull { !it.isCameraItem }?.id,
-        canLoadMore = items.count { !it.isCameraItem } >= 60,
-        loadCursor = items.count { !it.isCameraItem },
+      mediaPickerState.value = mediaPickerState.value.withVisibleTabSnapshot(
+        tab = tab,
+        snapshot = cachedSnapshot,
+        hasPermission = true,
+        isLoading = true,
+        isUsingPartialAccess = isUsingPartialMediaAccess(permissionSnapshot, tab),
+        errorMessage = null,
       )
-      if (selectedIds.isNotEmpty()) {
-        rebuildSelectedItems()
+      val selectedIds = mediaPickerState.value.selectedItems.map { it.id }
+      val selectedAlbumId = cachedSnapshot?.selectedAlbumId ?: mediaPickerState.value.selectedAlbumId
+      runCatching {
+        withContext(Dispatchers.IO) { queryDeviceMedia(context, tab, offset = 0) }
+      }.onSuccess { result ->
+        val albums = result.albums.mapIndexed { index, album ->
+          album.copy(isSelected = (selectedAlbumId ?: "recent").let { current -> if (index == 0 && selectedAlbumId == null) true else album.id == current })
+        }
+        val items = applySelection(result.items, selectedIds)
+        val snapshot = PickerTabSnapshot(
+          albums = albums,
+          items = items,
+          selectedAlbumId = selectedAlbumId,
+          canLoadMore = result.items.count { !it.isCameraItem } >= 60,
+          loadCursor = result.items.count { !it.isCameraItem },
+          lastQueryCursorCount = result.cursorCount,
+          initialScrollTarget = result.items.firstOrNull { !it.isCameraItem }?.id,
+        )
+        pickerTabSnapshots[tab] = snapshot
+        Log.d(
+          "ClipyMediaPicker",
+          "refreshMediaPermissionAndContent loaded tab=$tab cursorCount=${result.cursorCount} finalSize=${result.items.count { !it.isCameraItem }} requestId=$requestId applyVisible=${shouldApplyVisiblePickerResult(mediaPickerState.value.activeTab, tab, pickerRefreshRequestIds[tab], requestId)}",
+        )
+        if (shouldApplyVisiblePickerResult(mediaPickerState.value.activeTab, tab, pickerRefreshRequestIds[tab], requestId)) {
+          mediaPickerState.value = mediaPickerState.value.withVisibleTabSnapshot(
+            tab = tab,
+            snapshot = snapshot,
+            hasPermission = true,
+            isLoading = false,
+            isUsingPartialAccess = isUsingPartialMediaAccess(permissionSnapshot, tab),
+            errorMessage = null,
+          )
+        }
+        if (selectedIds.isNotEmpty()) {
+          rebuildSelectedItems()
+        }
+      }.onFailure { throwable ->
+        Log.e("ClipyMediaPicker", "refreshMediaPermissionAndContent failed for tab=$tab", throwable)
+        if (shouldApplyVisiblePickerResult(mediaPickerState.value.activeTab, tab, pickerRefreshRequestIds[tab], requestId)) {
+          mediaPickerState.value = mediaPickerState.value.withVisibleTabSnapshot(
+            tab = tab,
+            snapshot = cachedSnapshot,
+            hasPermission = true,
+            isLoading = false,
+            isUsingPartialAccess = isUsingPartialMediaAccess(permissionSnapshot, tab),
+            errorMessage = throwable.message,
+          )
+        }
       }
     }
   }
@@ -99,23 +154,42 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
     val tab = currentState.activeTab
     viewModelScope.launch {
       mediaPickerState.value = currentState.copy(isLoading = true)
-      val (_, items) = withContext(Dispatchers.IO) {
+      val result = withContext(Dispatchers.IO) {
         queryDeviceMedia(context, tab, offset = currentState.loadCursor)
       }
       val existingIds = mediaPickerState.value.mediaItems.map { it.id }.toSet()
-      val appended = items.filterNot { it.id in existingIds || it.isCameraItem }
+      val appended = result.items.filterNot { it.id in existingIds || it.isCameraItem }
       val mergedItems = mediaPickerState.value.mediaItems + appended
-      mediaPickerState.value = mediaPickerState.value.copy(
+      val updatedState = mediaPickerState.value.copy(
         isLoading = false,
         mediaItems = applySelection(mergedItems, mediaPickerState.value.selectedItems.map { it.id }),
         canLoadMore = appended.isNotEmpty() && appended.size >= 60,
         loadCursor = currentState.loadCursor + appended.size,
+        lastQueryCursorCount = result.cursorCount,
+      )
+      mediaPickerState.value = updatedState
+      pickerTabSnapshots[tab] = PickerTabSnapshot(
+        albums = updatedState.albums,
+        items = updatedState.mediaItems,
+        selectedAlbumId = updatedState.selectedAlbumId,
+        canLoadMore = updatedState.canLoadMore,
+        loadCursor = updatedState.loadCursor,
+        lastQueryCursorCount = updatedState.lastQueryCursorCount,
+        initialScrollTarget = updatedState.initialScrollTarget,
       )
     }
   }
 
   fun selectPickerTab(tab: MediaTab) {
-    mediaPickerState.value = mediaPickerState.value.copy(activeTab = tab, selectedAlbumId = null)
+    val permissionSnapshot = mediaPermissionSnapshot(getApplication())
+    mediaPickerState.value = mediaPickerState.value.withVisibleTabSnapshot(
+      tab = tab,
+      snapshot = pickerTabSnapshots[tab],
+      hasPermission = hasMediaAccess(permissionSnapshot, tab),
+      isLoading = hasMediaAccess(permissionSnapshot, tab),
+      isUsingPartialAccess = isUsingPartialMediaAccess(permissionSnapshot, tab),
+      errorMessage = null,
+    )
     refreshMediaPermissionAndContent(forceTab = tab)
   }
 
@@ -127,7 +201,7 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
       baseItems
     } else {
       val context = getApplication<Application>()
-      val (_, allItems) = queryDeviceMedia(context, mediaPickerState.value.activeTab)
+      val allItems = queryDeviceMedia(context, mediaPickerState.value.activeTab).items
       val matchingUris = mutableSetOf<String>()
       context.contentResolver.query(
         when (mediaPickerState.value.activeTab) {
@@ -159,6 +233,15 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
       albums = mediaPickerState.value.albums.map { it.copy(isSelected = it.id == normalizedId || (normalizedId == "recent" && it.id == "recent")) },
       mediaItems = applySelection(filtered, mediaPickerState.value.selectedItems.map { it.id }),
       initialScrollTarget = filtered.firstOrNull { !it.isCameraItem }?.id,
+    )
+    pickerTabSnapshots[mediaPickerState.value.activeTab] = PickerTabSnapshot(
+      albums = mediaPickerState.value.albums,
+      items = mediaPickerState.value.mediaItems,
+      selectedAlbumId = mediaPickerState.value.selectedAlbumId,
+      canLoadMore = mediaPickerState.value.canLoadMore,
+      loadCursor = mediaPickerState.value.loadCursor,
+      lastQueryCursorCount = mediaPickerState.value.lastQueryCursorCount,
+      initialScrollTarget = mediaPickerState.value.initialScrollTarget,
     )
   }
 
@@ -330,4 +413,47 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
         override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T = ClipyViewModel(application) as T
       }
   }
+}
+
+internal data class PickerTabSnapshot(
+  val albums: List<MediaAlbumUiModel>,
+  val items: List<MediaGridItemUiModel>,
+  val selectedAlbumId: String?,
+  val canLoadMore: Boolean,
+  val loadCursor: Int,
+  val lastQueryCursorCount: Int?,
+  val initialScrollTarget: String?,
+)
+
+internal fun MediaPickerUiState.withVisibleTabSnapshot(
+  tab: MediaTab,
+  snapshot: PickerTabSnapshot?,
+  hasPermission: Boolean,
+  isLoading: Boolean,
+  isUsingPartialAccess: Boolean,
+  errorMessage: String?,
+): MediaPickerUiState {
+  return copy(
+    activeTab = tab,
+    hasMediaPermission = hasPermission,
+    isLoading = isLoading,
+    isUsingPartialAccess = isUsingPartialAccess,
+    errorMessage = errorMessage,
+    albums = snapshot?.albums ?: emptyList(),
+    mediaItems = snapshot?.items ?: emptyList(),
+    selectedAlbumId = snapshot?.selectedAlbumId,
+    canLoadMore = snapshot?.canLoadMore ?: false,
+    loadCursor = snapshot?.loadCursor ?: 0,
+    lastQueryCursorCount = snapshot?.lastQueryCursorCount,
+    initialScrollTarget = snapshot?.initialScrollTarget,
+  )
+}
+
+internal fun shouldApplyVisiblePickerResult(
+  activeTab: MediaTab,
+  resultTab: MediaTab,
+  latestRequestId: Long?,
+  requestId: Long,
+): Boolean {
+  return activeTab == resultTab && latestRequestId == requestId
 }

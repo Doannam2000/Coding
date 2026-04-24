@@ -243,6 +243,14 @@
     <string name="media_picker_empty_live">No live media found in this album yet.</string>
     <string name="media_picker_empty_title">No videos found</string>
     <string name="media_picker_empty_hint">Try switching albums, refreshing permissions, or capturing a new clip.</string>
+    <string name="media_picker_status_refreshing">Refreshing library</string>
+    <string name="media_picker_status_refreshing_detail">Access granted, loading media for this tab.</string>
+    <string name="media_picker_status_loaded">Library ready</string>
+    <string name="media_picker_status_loaded_detail">%1$d items loaded for the current tab.</string>
+    <string name="media_picker_status_partial">Limited library access</string>
+    <string name="media_picker_status_partial_detail">Showing %1$d selected items that Android currently allows Clipy to read.</string>
+    <string name="media_picker_status_error">Could not refresh the library</string>
+    <string name="media_picker_status_retry">Retry</string>
     <string name="media_picker_camera">Camera</string>
     <string name="media_picker_camera_unavailable">Camera capture is not wired into this MVP yet.</string>
     <string name="media_picker_live_badge">LIVE</string>

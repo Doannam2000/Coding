@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
+import android.util.Log
 import android.util.Size
 import android.widget.Toast
 import androidx.collection.LruCache
@@ -68,6 +69,8 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -148,6 +151,31 @@ data class MediaGridItemUiModel(
   val isSelected: Boolean,
 )
 
+data class MediaQueryRequest(
+  val tab: MediaTab,
+  val collectionUri: Uri,
+  val sortOrder: String,
+)
+
+private data class QueryExecution(
+  val cursor: android.database.Cursor?,
+  val mode: String,
+)
+
+data class MediaPermissionSnapshot(
+  val sdkInt: Int,
+  val hasReadMediaImages: Boolean,
+  val hasReadMediaVideo: Boolean,
+  val hasReadMediaVisualUserSelected: Boolean,
+  val hasReadExternalStorage: Boolean,
+)
+
+data class MediaQueryResult(
+  val albums: List<MediaAlbumUiModel>,
+  val items: List<MediaGridItemUiModel>,
+  val cursorCount: Int,
+)
+
 data class SelectedMediaUiModel(
   val id: String,
   val uri: String,
@@ -171,9 +199,13 @@ data class MediaPickerUiState(
   val hasMediaPermission: Boolean = false,
   val canLoadMore: Boolean = false,
   val loadCursor: Int = 0,
+  val lastQueryCursorCount: Int? = null,
+  val isUsingPartialAccess: Boolean = false,
+  val errorMessage: String? = null,
 )
 
 private const val MEDIA_PAGE_SIZE = 60
+private const val MEDIA_PICKER_LOG_TAG = "ClipyMediaPicker"
 private val thumbnailMemoryCache = LruCache<String, Bitmap>(96)
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
@@ -415,17 +447,24 @@ fun MediaPickerScreen(
         .fillMaxSize()
         .background(ClipyBackground)
         .padding(top = padding.calculateTopPadding()),
-    ) {
-      when {
-        !state.hasMediaPermission -> {
-          PermissionEmptyState(tab = state.activeTab, onGrant = { permissionLauncher.launch(permissions) })
+      ) {
+        PickerStatusStrip(
+          state = state,
+          onRetry = onRequestPermissionRefresh,
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        )
+        when {
+          !state.hasMediaPermission -> {
+            PermissionEmptyState(tab = state.activeTab, onGrant = { permissionLauncher.launch(permissions) })
         }
 
-        state.isLoading -> {
+        state.isLoading && state.mediaItems.isEmpty() -> {
           ShimmerMediaGrid(modifier = Modifier.fillMaxSize())
         }
 
-        state.mediaItems.isEmpty() -> {
+        state.mediaItems.isEmpty() && state.lastQueryCursorCount == 0 -> {
           EmptyMediaState(tab = state.activeTab)
         }
 
@@ -480,6 +519,76 @@ fun MediaPickerScreen(
         }
         if (previewItem != null) {
           PreviewOverlay(item = previewItem, onDismiss = { onPreviewItem(null) })
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun PickerStatusStrip(
+  state: MediaPickerUiState,
+  onRetry: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val activeItemCount = state.mediaItems.count { !it.isCameraItem }
+  val messageRes = when {
+    state.errorMessage != null -> R.string.media_picker_status_error
+    state.isLoading && state.hasMediaPermission -> R.string.media_picker_status_refreshing
+    state.isUsingPartialAccess -> R.string.media_picker_status_partial
+    state.lastQueryCursorCount != null && activeItemCount > 0 -> R.string.media_picker_status_loaded
+    else -> null
+  } ?: return
+
+  Card(
+    modifier = modifier,
+    shape = RoundedCornerShape(14.dp),
+    colors = CardDefaults.cardColors(
+      containerColor = if (state.errorMessage != null) Color(0xFF2A1820) else Color(0xFF151C28),
+    ),
+  ) {
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 12.dp, vertical = 10.dp),
+      horizontalArrangement = Arrangement.spacedBy(10.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      if (state.isLoading && state.errorMessage == null) {
+        CircularProgressIndicator(
+          modifier = Modifier.size(16.dp),
+          strokeWidth = 2.dp,
+          color = ClipyPrimary,
+        )
+      } else {
+        Icon(
+          imageVector = if (state.errorMessage != null) Icons.Rounded.Close else Icons.Rounded.Refresh,
+          contentDescription = null,
+          tint = if (state.errorMessage != null) Color(0xFFFF8AA0) else ClipyPrimary,
+          modifier = Modifier.size(16.dp),
+        )
+      }
+      Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+          text = stringResource(messageRes),
+          color = ClipyOnDark,
+          style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+        )
+        val detail = when {
+          state.errorMessage != null -> state.errorMessage
+          state.isUsingPartialAccess -> stringResource(R.string.media_picker_status_partial_detail, activeItemCount)
+          state.lastQueryCursorCount != null && activeItemCount > 0 -> stringResource(R.string.media_picker_status_loaded_detail, activeItemCount)
+          else -> stringResource(R.string.media_picker_status_refreshing_detail)
+        }
+        Text(
+          text = detail,
+          color = ClipyMuted,
+          style = MaterialTheme.typography.bodySmall,
+        )
+      }
+      if (state.errorMessage != null) {
+        TextButton(onClick = onRetry) {
+          Text(text = stringResource(R.string.media_picker_status_retry), color = ClipyPrimary)
         }
       }
     }
@@ -888,11 +997,9 @@ fun queryDeviceMedia(
   tab: MediaTab,
   limit: Int = MEDIA_PAGE_SIZE,
   offset: Int = 0,
-): Pair<List<MediaAlbumUiModel>, List<MediaGridItemUiModel>> {
-  val collection = when (tab) {
-    MediaTab.Videos -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-    MediaTab.Photos, MediaTab.Live -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-  }
+): MediaQueryResult {
+  val request = buildMediaQueryRequest(tab)
+  val collection = request.collectionUri
   val projection = arrayOf(
     MediaStore.MediaColumns._ID,
     MediaStore.MediaColumns.DATE_ADDED,
@@ -902,25 +1009,42 @@ fun queryDeviceMedia(
     MediaStore.MediaColumns.DISPLAY_NAME,
     if (tab == MediaTab.Videos) MediaStore.Video.VideoColumns.DURATION else MediaStore.Images.ImageColumns.DATE_TAKEN,
   )
-  val sortOrder = "${MediaStore.MediaColumns.DATE_ADDED} DESC"
+  val sortOrder = request.sortOrder
   val rows = mutableListOf<MediaGridItemUiModel>()
   val albums = linkedMapOf<String, Pair<String, MutableList<MediaGridItemUiModel>>>()
-  val cursor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-    val queryArgs = Bundle().apply {
-      putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, sortOrder)
-      putInt(ContentResolver.QUERY_ARG_LIMIT, limit)
-      putInt(ContentResolver.QUERY_ARG_OFFSET, offset)
-    }
-    context.contentResolver.query(collection, projection, queryArgs, null)
-  } else {
-    context.contentResolver.query(collection, projection, null, null, "$sortOrder LIMIT $limit OFFSET $offset")
+  val permissionSnapshot = mediaPermissionSnapshot(context)
+  val grantedPermissions = buildList {
+    if (permissionSnapshot.hasReadMediaImages) add(android.Manifest.permission.READ_MEDIA_IMAGES)
+    if (permissionSnapshot.hasReadMediaVideo) add(android.Manifest.permission.READ_MEDIA_VIDEO)
+    if (permissionSnapshot.hasReadMediaVisualUserSelected) add(android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+    if (permissionSnapshot.hasReadExternalStorage) add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+  }
+  Log.d(
+    MEDIA_PICKER_LOG_TAG,
+    "queryDeviceMedia sdk=${permissionSnapshot.sdkInt} tab=$tab permissions=$grantedPermissions uri=$collection offset=$offset limit=$limit",
+  )
+  var cursorCount = 0
+  val execution = queryMediaCursor(
+    context = context,
+    collection = collection,
+    projection = projection,
+    sortOrder = sortOrder,
+    limit = limit,
+    offset = offset,
+  )
+  val cursor = execution.cursor
+  if (cursor == null) {
+    Log.w(MEDIA_PICKER_LOG_TAG, "queryDeviceMedia returned null cursor for tab=$tab uri=$collection mode=${execution.mode}")
   }
   cursor?.use { cursor ->
+    cursorCount = cursor.count
+    Log.d(MEDIA_PICKER_LOG_TAG, "queryDeviceMedia cursorCount=$cursorCount tab=$tab uri=$collection mode=${execution.mode}")
     val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
     val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
     val mimeColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
     val bucketIdColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.BUCKET_ID)
     val bucketNameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.BUCKET_DISPLAY_NAME)
+    val displayNameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
     val durationOrDateColumn = if (tab == MediaTab.Videos) {
       cursor.getColumnIndexOrThrow(MediaStore.Video.VideoColumns.DURATION)
     } else {
@@ -938,7 +1062,12 @@ fun queryDeviceMedia(
       if (tab == MediaTab.Photos && inferredType == "live") continue
       val id = cursor.getLong(idColumn)
       val contentUri = ContentUris.withAppendedId(collection, id)
+      val displayName = cursor.getString(displayNameColumn).orEmpty()
       val durationMs = if (tab == MediaTab.Videos) cursor.getLong(durationOrDateColumn).coerceAtLeast(0L) else null
+      Log.d(
+        MEDIA_PICKER_LOG_TAG,
+        "queryDeviceMedia row tab=$tab id=$id uri=$contentUri displayName=$displayName durationMs=$durationMs mimeType=$mimeType",
+      )
       val item = MediaGridItemUiModel(
         id = "asset-$id",
         uri = contentUri.toString(),
@@ -1030,7 +1159,69 @@ fun queryDeviceMedia(
       isSelected = false,
     ),
   ) + rows
-  return albumModels to withCamera
+  Log.d(MEDIA_PICKER_LOG_TAG, "queryDeviceMedia finalListSize=${rows.size} tab=$tab offset=$offset")
+  return MediaQueryResult(
+    albums = albumModels,
+    items = withCamera,
+    cursorCount = cursorCount,
+  )
+}
+
+private fun queryMediaCursor(
+  context: Context,
+  collection: Uri,
+  projection: Array<String>,
+  sortOrder: String,
+  limit: Int,
+  offset: Int,
+): QueryExecution {
+  fun legacyQuery(): QueryExecution {
+    val cursor = context.contentResolver.query(
+      collection,
+      projection,
+      null,
+      null,
+      "$sortOrder LIMIT $limit OFFSET $offset",
+    )
+    return QueryExecution(cursor = cursor, mode = "legacy_sort_order")
+  }
+
+  if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+    return legacyQuery()
+  }
+
+  val argsCursor = runCatching {
+    val queryArgs = Bundle().apply {
+      putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, sortOrder)
+      putInt(ContentResolver.QUERY_ARG_LIMIT, limit)
+      putInt(ContentResolver.QUERY_ARG_OFFSET, offset)
+    }
+    context.contentResolver.query(collection, projection, queryArgs, null)
+  }.onFailure {
+    Log.w(MEDIA_PICKER_LOG_TAG, "queryMediaCursor queryArgs failed for uri=$collection offset=$offset", it)
+  }.getOrNull()
+
+  if (argsCursor != null) {
+    val count = runCatching { argsCursor.count }.getOrDefault(0)
+    if (count > 0 || offset > 0) {
+      return QueryExecution(cursor = argsCursor, mode = "query_args")
+    }
+    Log.d(MEDIA_PICKER_LOG_TAG, "queryMediaCursor queryArgs returned empty, retrying legacy mode for uri=$collection")
+    argsCursor.close()
+  }
+
+  return legacyQuery()
+}
+
+private fun buildMediaQueryRequest(tab: MediaTab): MediaQueryRequest {
+  return MediaQueryRequest(
+    tab = tab,
+    collectionUri = when (tab) {
+      MediaTab.Videos -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+      MediaTab.Photos, MediaTab.Live -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+    },
+    sortOrder = "${MediaStore.MediaColumns.DATE_ADDED} DESC",
+  )
 }
 
 private fun formatDuration(durationMs: Long): String {
@@ -1040,23 +1231,62 @@ private fun formatDuration(durationMs: Long): String {
   return "%d:%02d".format(minutes, seconds)
 }
 
-fun hasMediaAccess(context: Context, tab: MediaTab = MediaTab.Videos): Boolean {
-  return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-    permissionsForTab(tab, Build.VERSION.SDK_INT).all { permission ->
-      ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+internal fun mediaPermissionSnapshot(context: Context): MediaPermissionSnapshot {
+  fun isGranted(permission: String): Boolean {
+    return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+  }
+
+  return MediaPermissionSnapshot(
+    sdkInt = Build.VERSION.SDK_INT,
+    hasReadMediaImages = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && isGranted(android.Manifest.permission.READ_MEDIA_IMAGES),
+    hasReadMediaVideo = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && isGranted(android.Manifest.permission.READ_MEDIA_VIDEO),
+    hasReadMediaVisualUserSelected = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && isGranted(android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED),
+    hasReadExternalStorage = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU && isGranted(android.Manifest.permission.READ_EXTERNAL_STORAGE),
+  )
+}
+
+internal fun hasMediaAccess(snapshot: MediaPermissionSnapshot, tab: MediaTab = MediaTab.Videos): Boolean {
+  return when {
+    snapshot.sdkInt >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> {
+      when (tab) {
+        MediaTab.Videos -> snapshot.hasReadMediaVideo || snapshot.hasReadMediaVisualUserSelected
+        MediaTab.Photos, MediaTab.Live -> snapshot.hasReadMediaImages || snapshot.hasReadMediaVisualUserSelected
+      }
     }
-  } else {
-    ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+    snapshot.sdkInt >= Build.VERSION_CODES.TIRAMISU -> {
+      when (tab) {
+        MediaTab.Videos -> snapshot.hasReadMediaVideo
+        MediaTab.Photos, MediaTab.Live -> snapshot.hasReadMediaImages
+      }
+    }
+    else -> snapshot.hasReadExternalStorage
+  }
+}
+
+fun hasMediaAccess(context: Context, tab: MediaTab = MediaTab.Videos): Boolean {
+  return hasMediaAccess(mediaPermissionSnapshot(context), tab)
+}
+
+internal fun isUsingPartialMediaAccess(snapshot: MediaPermissionSnapshot, tab: MediaTab): Boolean {
+  if (snapshot.sdkInt < Build.VERSION_CODES.UPSIDE_DOWN_CAKE || !snapshot.hasReadMediaVisualUserSelected) {
+    return false
+  }
+  return when (tab) {
+    MediaTab.Videos -> !snapshot.hasReadMediaVideo
+    MediaTab.Photos, MediaTab.Live -> !snapshot.hasReadMediaImages
   }
 }
 
 internal fun permissionsForTab(tab: MediaTab, sdkInt: Int): Array<String> {
-  return if (sdkInt >= Build.VERSION_CODES.TIRAMISU) {
-    when (tab) {
+  return when {
+    sdkInt >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> when (tab) {
+      MediaTab.Videos -> arrayOf(android.Manifest.permission.READ_MEDIA_VIDEO, android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+      MediaTab.Photos, MediaTab.Live -> arrayOf(android.Manifest.permission.READ_MEDIA_IMAGES, android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+    }
+    sdkInt >= Build.VERSION_CODES.TIRAMISU -> when (tab) {
       MediaTab.Videos -> arrayOf(android.Manifest.permission.READ_MEDIA_VIDEO)
       MediaTab.Photos, MediaTab.Live -> arrayOf(android.Manifest.permission.READ_MEDIA_IMAGES)
     }
-  } else {
-    arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+    else -> arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
   }
 }

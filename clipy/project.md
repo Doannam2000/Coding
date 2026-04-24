@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-24 00:01 UTC
+- Last updated: 2026-04-24 00:24 UTC
 - App: Clipy
 - Slug: clipy
 - Tagline: Fast social-ready video edits and GIF exports in seconds.
 - Target users: Content creators, TikTok/Reels users, meme makers, casual users needing fast video editing
-- Design direction: Incremental dark creator-tool polish that keeps Clipy's current CapCut-inspired visual language, while making bug fixes and placeholder destinations feel intentional, responsive, and production-ready. Emphasize clearer media states, stronger content hierarchy, rounded dark surfaces, and focused blue selection accents without changing the existing Compose + MVVM architecture.
+- Design direction: Preserve the current dark, polished gallery language and add only diagnostic and recovery-focused picker states. The picker should feel more trustworthy and responsive during permission handoff, media reload, and true-empty detection, without changing navigation or the overall tab/grid structure.
 - Core constraints: Android only, no backend, lightweight but powerful, limit GIF size/duration, smooth UX, handle large videos safely
 Design style must align with: Modern dark creator-tool UI, clean layout, smooth animations, rounded cards, premium feel
 Typography should align with: Inter
@@ -622,6 +622,60 @@ OUTPUT
 - Functional Templates & Profile UI (even with mock data)
 - Redesigned Language screen (clean, modern)
 - Stable and smooth UX
+Additional follow-up requirement: [fixbug] Fix Media Picker bug: the app has full storage/media permissions but the picker still loads 0 media items.
+
+Investigate and fix these possible causes:
+
+1. MediaStore query may be wrong
+- Use correct collection:
+  MediaStore.Video.Media.EXTERNAL_CONTENT_URI for videos
+  MediaStore.Images.Media.EXTERNAL_CONTENT_URI for photos
+- Do not query only app-specific folders
+- Sort by DATE_ADDED DESC
+- Check MIME_TYPE filter is not too strict
+
+2. Android version permission handling
+- Android 13+:
+  READ_MEDIA_VIDEO for videos
+  READ_MEDIA_IMAGES for photos
+- Android 14+:
+  handle READ_MEDIA_VISUAL_USER_SELECTED if partial access is granted
+- Android 12 and below:
+  READ_EXTERNAL_STORAGE
+- After permission granted, reload media immediately
+
+3. URI creation
+- Build content URI correctly:
+  ContentUris.withAppendedId(collectionUri, mediaId)
+- Do not use raw file paths directly
+- Do not depend on DATA column because it is deprecated
+
+4. Cursor handling
+- Check cursor is not null
+- Check moveToFirst / moveToNext correctly
+- Log cursor.count
+- Log each media id, uri, displayName, duration
+- Close cursor safely
+
+5. UI state bug
+- Make sure loaded media list updates state
+- Do not reset mediaList to empty after load
+- Do not filter videos/photos incorrectly in UI
+- Verify selected tab actually queries correct media type
+
+6. Debug logs required
+Add logs:
+- Android SDK version
+- Granted permissions
+- Current selected tab
+- Query URI
+- Cursor count
+- Final media list size
+
+Expected result:
+- Media Picker must load all videos/photos from device gallery
+- Show empty state only when cursor.count == 0
+- Work on Android 10, 11, 12, 13, 14, 15+
 
 ### Core Features
 - Splash screen followed by onboarding and main app flow
@@ -646,12 +700,9 @@ OUTPUT
 
 ### Main Screens
 - Media Picker Screen
-- Templates Screen
-- Profile Screen
-- Language Screen
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Keep the existing local app storage and ViewModel-driven flows. Use MediaStore for device video discovery, preserve current app preference storage for language selection, and use static/mock in-memory data sources for Templates and Profile until real backend or repository data is introduced.
+- storage: Keep existing local ViewModel-driven state and MediaStore-based gallery access. Continue using content URIs built from MediaStore IDs, avoid deprecated DATA-path access, and preserve current app preference/storage behavior outside the picker.
 <!-- AUTO-GENERATED:CORE_END -->

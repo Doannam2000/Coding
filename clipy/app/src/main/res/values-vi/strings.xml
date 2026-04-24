@@ -243,6 +243,14 @@
     <string name="media_picker_empty_live">Chua co media live nao trong album nay.</string>
     <string name="media_picker_empty_title">Khong tim thay video</string>
     <string name="media_picker_empty_hint">Thu doi album, cap nhat quyen truy cap, hoac quay them mot clip moi.</string>
+    <string name="media_picker_status_refreshing">Dang lam moi thu vien</string>
+    <string name="media_picker_status_refreshing_detail">Da cap quyen, dang tai media cho tab hien tai.</string>
+    <string name="media_picker_status_loaded">Thu vien san sang</string>
+    <string name="media_picker_status_loaded_detail">Da tai %1$d muc cho tab hien tai.</string>
+    <string name="media_picker_status_partial">Quyen truy cap thu vien bi gioi han</string>
+    <string name="media_picker_status_partial_detail">Dang hien thi %1$d muc ma Android hien cho phep Clipy doc.</string>
+    <string name="media_picker_status_error">Khong the lam moi thu vien</string>
+    <string name="media_picker_status_retry">Thu lai</string>
     <string name="media_picker_camera">May anh</string>
     <string name="media_picker_camera_unavailable">Chuc nang mo may anh chua duoc noi vao MVP nay.</string>
     <string name="media_picker_live_badge">LIVE</string>
