@@ -1,6 +1,7 @@
 package com.nantcompany.clipy.ui
 
 import android.app.Application
+import android.content.ContentResolver
 import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 
 class ClipyViewModel(application: Application) : AndroidViewModel(application) {
   private val repository = ClipyRepository.getInstance(application)
@@ -257,12 +259,18 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
         id = selectedItem.id,
         uri = selectedItem.uri,
         type = selectedItem.type,
+        mimeType = selectedItem.mimeType,
+        displayName = selectedItem.displayName,
         thumbnailUri = selectedItem.thumbnailUri,
         durationMs = selectedItem.durationMs,
         order = state.selectedItems.size + 1,
       )
     }
-    mediaPickerState.value = state.copy(selectedItems = normalizeSelectionOrders(updatedSelection))
+    mediaPickerState.value = state.copy(
+      selectedItems = normalizeSelectionOrders(updatedSelection),
+      validationError = null,
+      isProcessingContinue = false,
+    )
     rebuildSelectedItems()
   }
 
@@ -282,11 +290,73 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
     mediaPickerState.value = mediaPickerState.value.copy(previewItemId = itemId)
   }
 
-  fun confirmPickerSelection(): Uri? {
-    val first = mediaPickerState.value.selectedItems.firstOrNull() ?: return null
-    val uri = Uri.parse(first.uri)
-    repository.loadVideo(uri)
-    return uri
+  fun clearContinueValidationError() {
+    mediaPickerState.value = mediaPickerState.value.copy(validationError = null, isProcessingContinue = false)
+  }
+
+  fun confirmPickerSelection(): ContinuePayload? {
+    val state = mediaPickerState.value
+    val resolution = resolveContinueSelectionState(state.selectedItems, state.mediaItems)
+    val resolvedSelection = resolution.item
+    val validationError = resolution.issue
+    if (validationError != null) {
+      mediaPickerState.value = state.copy(validationError = validationError, isProcessingContinue = false)
+      return null
+    }
+
+    mediaPickerState.value = state.copy(isProcessingContinue = true, validationError = null)
+    val selectedItem = resolvedSelection
+    if (selectedItem == null) {
+      mediaPickerState.value = mediaPickerState.value.copy(
+        isProcessingContinue = false,
+        validationError = ContinueValidationIssue.UnreadableMedia,
+      )
+      return null
+    }
+
+    val payloadMediaType = selectedItem.type.asPayloadMediaType(selectedItem.mimeType)
+
+    val uri = runCatching { Uri.parse(selectedItem.uri) }.getOrNull()
+    if (uri == null || selectedItem.uri.isBlank() || !canOpenSelectedUri(uri)) {
+      mediaPickerState.value = mediaPickerState.value.copy(
+        isProcessingContinue = false,
+        validationError = ContinueValidationIssue.UnreadableMedia,
+      )
+      return null
+    }
+
+    val didLoad = runCatching {
+      repository.loadSelectedMedia(
+        uri = uri,
+        mediaType = payloadMediaType,
+        displayNameHint = selectedItem.displayName,
+      )
+    }.onFailure {
+      Log.e("ClipyMediaPicker", "confirmPickerSelection failed for uri=$uri", it)
+    }.isSuccess
+    if (!didLoad) {
+      mediaPickerState.value = mediaPickerState.value.copy(
+        isProcessingContinue = false,
+        validationError = ContinueValidationIssue.UnreadableMedia,
+      )
+      return null
+    }
+
+    mediaPickerState.value = mediaPickerState.value.copy(isProcessingContinue = false, validationError = null)
+    return ContinuePayload(
+      uris = listOf(selectedItem.uri),
+      primaryMediaType = payloadMediaType,
+      source = "media_picker",
+    )
+  }
+
+  private fun String.asPayloadMediaType(mimeType: String?): String {
+    val normalized = lowercase(Locale.getDefault())
+    return when {
+      normalized == "video" || mimeType?.startsWith("video/") == true -> "video"
+      normalized == "photo" || normalized == "image" || mimeType?.startsWith("image/") == true -> "image"
+      else -> normalized.ifBlank { "unknown" }
+    }
   }
 
   private fun rebuildSelectedItems() {
@@ -294,8 +364,18 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
     mediaPickerState.value = mediaPickerState.value.copy(
       selectedItems = normalizeSelectionOrders(mediaPickerState.value.selectedItems),
       mediaItems = applySelection(mediaPickerState.value.mediaItems, selectedIds),
-      isNextEnabled = selectedIds.isNotEmpty(),
+      isNextEnabled = selectedIds.isNotEmpty() && validateContinueSelection(mediaPickerState.value.selectedItems, mediaPickerState.value.mediaItems) == null,
     )
+  }
+
+  private fun canOpenSelectedUri(uri: Uri): Boolean {
+    val resolver = getApplication<Application>().contentResolver
+    return runCatching {
+      resolver.openAssetFileDescriptor(uri, "r")?.use { true } ?: false
+    }.getOrElse {
+      Log.w("ClipyMediaPicker", "Unable to open selected uri=$uri", it)
+      false
+    }
   }
 
   private fun applySelection(items: List<MediaGridItemUiModel>, selectedIds: List<String>): List<MediaGridItemUiModel> {

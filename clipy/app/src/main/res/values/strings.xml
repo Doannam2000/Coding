@@ -61,6 +61,7 @@
     <string name="editor_preview">Preview</string>
     <string name="editor_pick_video">Pick video</string>
     <string name="editor_pick_video_hint">Pick a clip to enable Media3 playback.</string>
+    <string name="editor_image_not_supported_hint">This photo was handed off safely, but the current editor still supports video clips only. Choose a video to continue editing or export.</string>
     <string name="editor_source_label">Source clip</string>
     <string name="editor_video_required">Import a video to enable export and history-ready output.</string>
     <string name="editor_trim_label">Trim window</string>
@@ -254,4 +255,15 @@
     <string name="media_picker_camera">Camera</string>
     <string name="media_picker_camera_unavailable">Camera capture is not wired into this MVP yet.</string>
     <string name="media_picker_live_badge">LIVE</string>
+    <string name="media_picker_continue_processing">Loading</string>
+    <string name="media_picker_continue_processing_detail">Checking your selected media before opening the editor.</string>
+    <string name="media_picker_selection_helper_empty">Select a photo or video to continue</string>
+    <string name="media_picker_continue_hint_empty">Choose one video from the grid to enable Continue.</string>
+    <string name="media_picker_continue_hint_invalid">Only video clips can open the current editor flow.</string>
+    <string name="media_picker_continue_error_title">Couldn\'t continue with this selection</string>
+    <string name="media_picker_continue_error_missing_uri">This item is missing its media location. Choose another clip.</string>
+    <string name="media_picker_continue_error_unsupported_type">Photos are not supported by the current editor yet. Pick a video clip instead.</string>
+    <string name="media_picker_continue_error_unreadable">Clipy couldn\'t reopen this media item. Retry or choose another clip.</string>
+    <string name="media_picker_continue_choose_another">Choose another</string>
+    <string name="media_picker_continue_cancel">Cancel</string>
 </resources>

@@ -143,6 +143,8 @@ data class MediaGridItemUiModel(
   val id: String,
   val uri: String,
   val type: String,
+  val mimeType: String?,
+  val displayName: String?,
   val thumbnailUri: String,
   val durationMs: Long?,
   val createdAtEpochMs: Long,
@@ -180,6 +182,8 @@ data class SelectedMediaUiModel(
   val id: String,
   val uri: String,
   val type: String,
+  val mimeType: String?,
+  val displayName: String?,
   val thumbnailUri: String,
   val durationMs: Long?,
   val order: Int,
@@ -194,6 +198,7 @@ data class MediaPickerUiState(
   val selectionLimit: Int? = 12,
   val isLoading: Boolean = false,
   val isNextEnabled: Boolean = false,
+  val isProcessingContinue: Boolean = false,
   val initialScrollTarget: String? = null,
   val previewItemId: String? = null,
   val hasMediaPermission: Boolean = false,
@@ -202,7 +207,83 @@ data class MediaPickerUiState(
   val lastQueryCursorCount: Int? = null,
   val isUsingPartialAccess: Boolean = false,
   val errorMessage: String? = null,
+  val validationError: ContinueValidationIssue? = null,
 )
+
+enum class ContinueValidationIssue {
+  MissingUri,
+  UnsupportedMediaType,
+  UnreadableMedia,
+}
+
+data class SelectedMediaItem(
+  val id: String,
+  val contentUri: String,
+  val mediaType: MediaTab,
+  val mimeType: String?,
+  val displayName: String?,
+  val durationMs: Long?,
+)
+
+data class ContinuePayload(
+  val uris: List<String>,
+  val primaryMediaType: String,
+  val source: String,
+)
+
+internal data class ContinueSelectionResolution(
+  val item: SelectedMediaUiModel?,
+  val issue: ContinueValidationIssue?,
+)
+
+internal fun resolveContinueSelectionState(
+  selectedItems: List<SelectedMediaUiModel>,
+  visibleItems: List<MediaGridItemUiModel>? = null,
+): ContinueSelectionResolution {
+  val resolvedItem = when {
+    visibleItems == null -> selectedItems.firstOrNull()
+    selectedItems.isEmpty() -> null
+    else -> resolveContinueSelection(selectedItems, visibleItems)
+  }
+  if (resolvedItem == null) {
+    return ContinueSelectionResolution(
+      item = null,
+      issue = if (selectedItems.isEmpty()) ContinueValidationIssue.MissingUri else ContinueValidationIssue.UnreadableMedia,
+    )
+  }
+  if (resolvedItem.uri.isBlank()) {
+    return ContinueSelectionResolution(item = resolvedItem, issue = ContinueValidationIssue.MissingUri)
+  }
+  return ContinueSelectionResolution(item = resolvedItem, issue = null)
+}
+
+internal fun resolveContinueSelection(
+  selectedItems: List<SelectedMediaUiModel>,
+  visibleItems: List<MediaGridItemUiModel>,
+): SelectedMediaUiModel? {
+  selectedItems.forEach { selectedItem ->
+    val visibleMatch = visibleItems.firstOrNull { !it.isCameraItem && it.id == selectedItem.id } ?: return@forEach
+    return selectedItem.copy(
+      uri = visibleMatch.uri,
+      type = visibleMatch.type,
+      mimeType = visibleMatch.mimeType ?: selectedItem.mimeType,
+      displayName = visibleMatch.displayName ?: selectedItem.displayName,
+      thumbnailUri = visibleMatch.thumbnailUri,
+      durationMs = visibleMatch.durationMs ?: selectedItem.durationMs,
+    )
+  }
+  return null
+}
+
+internal fun validateContinueSelection(
+  selectedItems: List<SelectedMediaUiModel>,
+  visibleItems: List<MediaGridItemUiModel>? = null,
+): ContinueValidationIssue? {
+  return resolveContinueSelectionState(
+    selectedItems = selectedItems,
+    visibleItems = visibleItems,
+  ).issue
+}
 
 private const val MEDIA_PAGE_SIZE = 60
 private const val MEDIA_PICKER_LOG_TAG = "ClipyMediaPicker"
@@ -219,6 +300,7 @@ fun MediaPickerScreen(
   onToggleSelection: (String) -> Unit,
   onReorderSelection: (String, Int) -> Unit,
   onPreviewItem: (String?) -> Unit,
+  onClearValidationError: () -> Unit,
   onConfirmSelection: () -> Unit,
   onLoadMore: () -> Unit,
 ) {
@@ -280,9 +362,9 @@ fun MediaPickerScreen(
             color = ClipyOnDark,
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
           )
-          TextButton(onClick = onConfirmSelection, enabled = state.isNextEnabled) {
+          TextButton(onClick = onConfirmSelection, enabled = state.isNextEnabled && !state.isProcessingContinue) {
             Text(
-              text = stringResource(R.string.media_picker_next),
+              text = stringResource(if (state.isProcessingContinue) R.string.media_picker_continue_processing else R.string.media_picker_next),
               color = if (state.isNextEnabled) ClipyPrimary else Color(0xFF6B7280),
               style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium),
             )
@@ -347,7 +429,7 @@ fun MediaPickerScreen(
       }
     },
     bottomBar = {
-      AnimatedVisibility(visible = state.selectedItems.isNotEmpty()) {
+      AnimatedVisibility(visible = true) {
         Surface(
           color = Color(0xF218181B),
           tonalElevation = 0.dp,
@@ -365,7 +447,11 @@ fun MediaPickerScreen(
               verticalAlignment = Alignment.CenterVertically,
             ) {
               Text(
-                text = stringResource(R.string.media_picker_selected_count, state.selectedItems.size),
+                text = if (state.selectedItems.isEmpty()) {
+                  stringResource(R.string.media_picker_selection_helper_empty)
+                } else {
+                  stringResource(R.string.media_picker_selected_count, state.selectedItems.size)
+                },
                 color = ClipyOnDark,
                 style = MaterialTheme.typography.labelLarge,
               )
@@ -378,54 +464,70 @@ fun MediaPickerScreen(
               }
             }
             Text(
-              text = stringResource(R.string.media_picker_reorder_hint),
-              color = ClipyMuted,
+              text = when {
+                state.validationError != null -> stringResource(validationErrorMessageRes(state.validationError))
+                state.isProcessingContinue -> stringResource(R.string.media_picker_continue_processing_detail)
+                state.selectedItems.isEmpty() -> stringResource(R.string.media_picker_continue_hint_empty)
+                state.isNextEnabled -> stringResource(R.string.media_picker_reorder_hint)
+                else -> stringResource(R.string.media_picker_continue_hint_invalid)
+              },
+              color = if (state.validationError != null) Color(0xFFFFA3B3) else ClipyMuted,
               style = MaterialTheme.typography.bodySmall,
             )
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(end = 4.dp)) {
-              items(state.selectedItems, key = { it.id }) { item ->
-                var dragAmount by remember(item.id) { mutableFloatStateOf(0f) }
-                Box(
-                  modifier = Modifier
-                    .size(width = 86.dp, height = 96.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF111317))
-                    .pointerInput(item.id) {
-                      detectDragGestures(
-                        onDragEnd = {
-                          val steps = (dragAmount / 64f).roundToInt()
-                          if (steps != 0) {
-                            onReorderSelection(item.id, steps)
-                          }
-                          dragAmount = 0f
-                        },
-                        onDragCancel = { dragAmount = 0f },
-                      ) { change, drag ->
-                        change.consume()
-                        dragAmount += drag.x
-                      }
-                    },
-                ) {
-                  MediaThumbnail(
-                    uri = item.thumbnailUri,
-                    type = item.type,
-                    modifier = Modifier.fillMaxSize(),
-                  )
+            AnimatedVisibility(visible = state.validationError != null) {
+              ContinueErrorBanner(
+                issue = state.validationError,
+                onRetry = onConfirmSelection,
+                onChooseAnother = onClearValidationError,
+                onCancel = onClearValidationError,
+              )
+            }
+            AnimatedVisibility(visible = state.selectedItems.isNotEmpty()) {
+              LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(end = 4.dp)) {
+                items(state.selectedItems, key = { it.id }) { item ->
+                  var dragAmount by remember(item.id) { mutableFloatStateOf(0f) }
                   Box(
                     modifier = Modifier
-                      .align(Alignment.TopStart)
-                      .padding(6.dp)
-                      .clip(CircleShape)
-                      .background(ClipyPrimary)
-                      .padding(horizontal = 7.dp, vertical = 3.dp),
+                      .size(width = 86.dp, height = 96.dp)
+                      .clip(RoundedCornerShape(12.dp))
+                      .background(Color(0xFF111317))
+                      .pointerInput(item.id) {
+                        detectDragGestures(
+                          onDragEnd = {
+                            val steps = (dragAmount / 64f).roundToInt()
+                            if (steps != 0) {
+                              onReorderSelection(item.id, steps)
+                            }
+                            dragAmount = 0f
+                          },
+                          onDragCancel = { dragAmount = 0f },
+                        ) { change, drag ->
+                          change.consume()
+                          dragAmount += drag.x
+                        }
+                      },
                   ) {
-                    Text(item.order.toString(), color = Color.White, style = MaterialTheme.typography.labelSmall)
-                  }
-                  IconButton(
-                    onClick = { onToggleSelection(item.id) },
-                    modifier = Modifier.align(Alignment.TopEnd).size(28.dp),
-                  ) {
-                    Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.media_picker_remove), tint = Color.White)
+                    MediaThumbnail(
+                      uri = item.thumbnailUri,
+                      type = item.type,
+                      modifier = Modifier.fillMaxSize(),
+                    )
+                    Box(
+                      modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp)
+                        .clip(CircleShape)
+                        .background(ClipyPrimary)
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                    ) {
+                      Text(item.order.toString(), color = Color.White, style = MaterialTheme.typography.labelSmall)
+                    }
+                    IconButton(
+                      onClick = { onToggleSelection(item.id) },
+                      modifier = Modifier.align(Alignment.TopEnd).size(28.dp),
+                    ) {
+                      Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.media_picker_remove), tint = Color.White)
+                    }
                   }
                 }
               }
@@ -433,9 +535,18 @@ fun MediaPickerScreen(
             Button(
               onClick = onConfirmSelection,
               modifier = Modifier.fillMaxWidth().height(52.dp),
+              enabled = state.isNextEnabled && !state.isProcessingContinue,
               colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary),
             ) {
-              Text(stringResource(R.string.media_picker_next))
+              if (state.isProcessingContinue) {
+                CircularProgressIndicator(
+                  modifier = Modifier.size(18.dp),
+                  strokeWidth = 2.dp,
+                  color = Color.White,
+                )
+                Spacer(Modifier.width(10.dp))
+              }
+              Text(stringResource(if (state.isProcessingContinue) R.string.media_picker_continue_processing else R.string.media_picker_next))
             }
           }
         }
@@ -509,6 +620,8 @@ fun MediaPickerScreen(
             id = it.id,
             uri = it.uri,
             type = it.type,
+            mimeType = it.mimeType,
+            displayName = it.displayName,
             thumbnailUri = it.thumbnailUri,
             durationMs = it.durationMs,
             createdAtEpochMs = 0L,
@@ -1072,6 +1185,8 @@ fun queryDeviceMedia(
         id = "asset-$id",
         uri = contentUri.toString(),
         type = inferredType,
+        mimeType = mimeType.ifBlank { null },
+        displayName = displayName.ifBlank { null },
         thumbnailUri = contentUri.toString(),
         durationMs = durationMs,
         createdAtEpochMs = cursor.getLong(dateColumn) * 1000L,
@@ -1112,6 +1227,8 @@ fun queryDeviceMedia(
             id = "cover-$id",
             uri = coverUri,
             type = if (tab == MediaTab.Videos) "video" else "photo",
+            mimeType = null,
+            displayName = null,
             thumbnailUri = coverUri,
             durationMs = null,
             createdAtEpochMs = 0L,
@@ -1151,6 +1268,8 @@ fun queryDeviceMedia(
       id = "camera",
       uri = "",
       type = "camera",
+      mimeType = null,
+      displayName = null,
       thumbnailUri = "",
       durationMs = null,
       createdAtEpochMs = Long.MAX_VALUE,
@@ -1165,6 +1284,57 @@ fun queryDeviceMedia(
     items = withCamera,
     cursorCount = cursorCount,
   )
+}
+
+@Composable
+private fun ContinueErrorBanner(
+  issue: ContinueValidationIssue?,
+  onRetry: () -> Unit,
+  onChooseAnother: () -> Unit,
+  onCancel: () -> Unit,
+) {
+  if (issue == null) return
+  Card(
+    shape = RoundedCornerShape(14.dp),
+    colors = CardDefaults.cardColors(containerColor = Color(0xFF2A1820)),
+  ) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 12.dp, vertical = 10.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      Text(
+        text = stringResource(R.string.media_picker_continue_error_title),
+        color = ClipyOnDark,
+        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+      )
+      Text(
+        text = stringResource(validationErrorMessageRes(issue)),
+        color = Color(0xFFFFA3B3),
+        style = MaterialTheme.typography.bodySmall,
+      )
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        TextButton(onClick = onRetry) {
+          Text(text = stringResource(R.string.media_picker_status_retry), color = ClipyPrimary)
+        }
+        TextButton(onClick = onChooseAnother) {
+          Text(text = stringResource(R.string.media_picker_continue_choose_another), color = ClipyPrimary)
+        }
+        TextButton(onClick = onCancel) {
+          Text(text = stringResource(R.string.media_picker_continue_cancel), color = ClipyMuted)
+        }
+      }
+    }
+  }
+}
+
+private fun validationErrorMessageRes(issue: ContinueValidationIssue): Int {
+  return when (issue) {
+    ContinueValidationIssue.MissingUri -> R.string.media_picker_continue_error_missing_uri
+    ContinueValidationIssue.UnsupportedMediaType -> R.string.media_picker_continue_error_unsupported_type
+    ContinueValidationIssue.UnreadableMedia -> R.string.media_picker_continue_error_unreadable
+  }
 }
 
 private fun queryMediaCursor(

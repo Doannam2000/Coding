@@ -233,6 +233,10 @@ private const val MIN_TRIM_GAP_MS = 250L
 private const val TIMELINE_PREVIEW_SEEK_THROTTLE_MS = 90L
 private const val TIMELINE_SETTLE_DELAY_MS = 48L
 
+internal fun shouldLoadVideoTimelineFrames(sourceUri: String, isVideoSource: Boolean): Boolean {
+  return sourceUri.isNotBlank() && isVideoSource
+}
+
 private val timelineThumbnailCache = object : LruCache<String, Bitmap>(48) {}
 private val timelineThumbnailRequests = mutableSetOf<String>()
 
@@ -404,6 +408,7 @@ fun ClipyApp(finishApp: () -> Unit) {
           onToggleSelection = viewModel::togglePickerSelection,
           onReorderSelection = viewModel::reorderPickerSelection,
           onPreviewItem = viewModel::previewPickerItem,
+          onClearValidationError = viewModel::clearContinueValidationError,
           onLoadMore = viewModel::loadMorePickerItems,
           onConfirmSelection = {
             if (viewModel.confirmPickerSelection() != null) {
@@ -1133,6 +1138,7 @@ private fun EditorScreen(
 ) {
   val context = LocalContext.current
   val draft = state.draft
+  val isVideoSource = draft.sourceMediaType.equals("video", ignoreCase = true)
   val player = remember { ExoPlayer.Builder(context).build() }
   val timeline = remember(draft) { draft.timelineSnapshot() }
   var selectedControlTab by rememberSaveable { mutableStateOf(EditorControlTab.Frame) }
@@ -1260,8 +1266,8 @@ private fun EditorScreen(
     )
   }
 
-  LaunchedEffect(draft.sourceUri) {
-    if (draft.sourceUri.isBlank()) {
+  LaunchedEffect(draft.sourceUri, isVideoSource) {
+    if (draft.sourceUri.isBlank() || !isVideoSource) {
       player.stop()
       player.clearMediaItems()
     } else {
@@ -1271,8 +1277,9 @@ private fun EditorScreen(
     }
   }
 
-  LaunchedEffect(draft.playheadMs, draft.sourceUri) {
+  LaunchedEffect(draft.playheadMs, draft.sourceUri, isVideoSource) {
     if (
+      isVideoSource &&
       draft.sourceUri.isNotBlank() &&
       !timelineInteracting &&
       abs(player.currentPosition - draft.playheadMs) > timelineFrameStepMs(draft.sourceDurationMs)
@@ -1281,10 +1288,13 @@ private fun EditorScreen(
     }
   }
 
-  LaunchedEffect(player, draft.trimStartMs, draft.trimEndMs, draft.sourceUri) {
+  LaunchedEffect(player, draft.trimStartMs, draft.trimEndMs, draft.sourceUri, isVideoSource) {
     while (isActive) {
       delay(66)
-      if (draft.sourceUri.isBlank()) continue
+      if (draft.sourceUri.isBlank() || !isVideoSource) {
+        isPlaying = false
+        continue
+      }
       isPlaying = player.isPlaying
       val currentPosition = player.currentPosition.coerceAtLeast(0L)
       val boundedPosition = currentPosition.coerceIn(draft.trimStartMs, draft.trimEndMs)
@@ -1362,12 +1372,14 @@ private fun EditorScreen(
           }
           if (draft.sourceUri.isBlank()) {
             Text(stringResource(R.string.editor_video_required), color = MaterialTheme.colorScheme.error)
+          } else if (!isVideoSource) {
+            Text(stringResource(R.string.editor_image_not_supported_hint), color = MaterialTheme.colorScheme.error)
           }
           Button(
             onClick = onExport,
             modifier = Modifier.fillMaxWidth().height(56.dp),
             colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary),
-            enabled = draft.sourceUri.isNotBlank(),
+            enabled = draft.sourceUri.isNotBlank() && isVideoSource,
           ) {
             Text(stringResource(if (draft.exportFormat == ExportFormat.Gif) R.string.editor_export_gif else R.string.editor_export_mp4))
           }
@@ -1457,6 +1469,21 @@ private fun EditorScreen(
                     Spacer(Modifier.height(8.dp))
                     Text(draft.displayName)
                     Text(stringResource(R.string.editor_pick_video_hint), color = ClipyMuted)
+                  }
+                } else if (!isVideoSource) {
+                  Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                  ) {
+                    Icon(Icons.Rounded.FitScreen, contentDescription = null, modifier = Modifier.size(52.dp), tint = ClipyAccent)
+                    Text(draft.displayName, color = ClipyOnDark, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+                    Text(
+                      stringResource(R.string.editor_image_not_supported_hint),
+                      color = ClipyMuted,
+                      style = MaterialTheme.typography.bodyMedium,
+                      textAlign = TextAlign.Center,
+                    )
                   }
                 } else {
                   AndroidView(
@@ -1614,167 +1641,170 @@ private fun EditorScreen(
                 }
               }
 
-              Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-              ) {
+              if (isVideoSource) {
                 Row(
-                  modifier = Modifier.weight(1f),
+                  modifier = Modifier.fillMaxWidth(),
                   horizontalArrangement = Arrangement.spacedBy(8.dp),
                   verticalAlignment = Alignment.CenterVertically,
                 ) {
-                  TransportIconButton(
-                    icon = Icons.Rounded.SkipPrevious,
-                    contentDescription = stringResource(R.string.editor_transport_previous),
-                    onClick = onStepBackward,
-                  )
-                  TransportIconButton(
-                    icon = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                    contentDescription = stringResource(R.string.editor_transport_play),
-                    onClick = {
-                      if (player.isPlaying) player.pause() else player.play()
-                      isPlaying = player.isPlaying
-                    },
-                    highlighted = true,
-                  )
-                  TransportIconButton(
-                    icon = Icons.Rounded.SkipNext,
-                    contentDescription = stringResource(R.string.editor_transport_next),
-                    onClick = onStepForward,
-                  )
-                }
-                Column(
-                  modifier = Modifier.weight(1f),
-                  horizontalAlignment = Alignment.CenterHorizontally,
-                  verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                  Text(dockState.playheadLabel, color = ClipyOnDark, style = MaterialTheme.typography.titleMedium)
-                  Text(dockState.trimLabel, color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
-                }
-                TimelineCompactBadge(primary = dockState.zoomLabel, secondary = stringResource(R.string.editor_timeline_ruler))
-              }
-
-              Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-              ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                  AssistChip(
-                    onClick = {
-                      val newId = "seg-${audioSegments.size}"
-                      val startMs = draft.playheadMs.coerceIn(0L, draft.sourceDurationMs.coerceAtLeast(MIN_TRIM_GAP_MS * 2) - MIN_TRIM_GAP_MS)
-                      val endMs = (startMs + 1800L).coerceAtMost(draft.sourceDurationMs.coerceAtLeast(startMs + MIN_TRIM_GAP_MS))
-                      audioSegments = audioSegments + AudioSegmentUi(newId, startMs, endMs)
-                      selectedAudioSegmentId = newId
-                      selectedTrack = EditorTrack.Audio
-                      selectedPrimaryTool = EditorPrimaryTool.Audio
-                      recordEditorAction(context.getString(R.string.editor_history_add_audio))
-                    },
-                    leadingIcon = { Icon(Icons.Rounded.MusicNote, contentDescription = null) },
-                    label = { Text(stringResource(R.string.editor_quick_add_audio)) },
-                  )
-                  AssistChip(
-                    onClick = {
-                      val newId = "text-${textClips.size}"
-                      val startMs = draft.playheadMs.coerceIn(draft.trimStartMs, draft.trimEndMs)
-                      val endMs = (startMs + 2200L).coerceAtMost(draft.trimEndMs)
-                      textClips = textClips + TextClipUi(newId, context.getString(R.string.editor_text_overlay_default), startMs, endMs)
-                      selectedTextClipId = newId
-                      selectedTrack = EditorTrack.Text
-                      selectedPrimaryTool = EditorPrimaryTool.Text
-                      recordEditorAction(context.getString(R.string.editor_history_add_text))
-                    },
-                    leadingIcon = { Icon(Icons.Rounded.TextFields, contentDescription = null) },
-                    label = { Text(stringResource(R.string.editor_quick_add_text)) },
-                  )
-                }
-                Surface(shape = RoundedCornerShape(999.dp), color = Color(0x33161C28)) {
-                  Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.Layers, contentDescription = null, tint = ClipyAccent)
-                    Text(stringResource(R.string.editor_quick_layers), color = ClipyOnDark, style = MaterialTheme.typography.labelMedium)
-                  }
-                }
-              }
-
-              Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                color = Color(0xFF10141C),
-              ) {
-                Column(
-                  modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
-                  verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
                   Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                   ) {
-                    TimelineMetaBadge(label = stringResource(R.string.editor_trim_label), value = if (selectedTrack == EditorTrack.Video) dockState.trimLabel else formatTimelineWindow(audioTrimStartMs, audioTrimEndMs), modifier = Modifier.weight(1f))
-                    Spacer(Modifier.width(6.dp))
-                    TimelineMetaBadge(label = stringResource(R.string.editor_playhead_label), value = dockState.playheadLabel, modifier = Modifier.weight(1f))
-                    Spacer(Modifier.width(6.dp))
-                    TimelineMetaBadge(label = stringResource(R.string.editor_timeline_zoom, timeline.zoom), value = dockState.zoomLabel, modifier = Modifier.weight(1f))
+                    TransportIconButton(
+                      icon = Icons.Rounded.SkipPrevious,
+                      contentDescription = stringResource(R.string.editor_transport_previous),
+                      onClick = onStepBackward,
+                    )
+                    TransportIconButton(
+                      icon = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                      contentDescription = stringResource(R.string.editor_transport_play),
+                      onClick = {
+                        if (player.isPlaying) player.pause() else player.play()
+                        isPlaying = player.isPlaying
+                      },
+                      highlighted = true,
+                    )
+                    TransportIconButton(
+                      icon = Icons.Rounded.SkipNext,
+                      contentDescription = stringResource(R.string.editor_transport_next),
+                      onClick = onStepForward,
+                    )
                   }
-                  Text(
-                    text = stringResource(R.string.editor_timeline_precision),
-                    color = ClipyMuted,
-                    style = MaterialTheme.typography.labelMedium,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                  )
-                  TimelineEditor(
-                    sourceUri = draft.sourceUri,
-                    timeline = timeline,
-                    selectedTrack = selectedTrack,
-                    selectedTool = selectedTimelineTool,
-                    audioTrimStartMs = audioTrimStartMs,
-                    audioTrimEndMs = audioTrimEndMs,
-                    audioSegments = audioSegments,
-                    selectedAudioSegmentId = selectedAudioSegmentId,
-                    textClips = textClips,
-                    selectedTextClipId = selectedTextClipId,
-                    audioGain = audioGain,
-                    isMuted = draft.isMuted,
-                    onTrimStartChange = onTrimStartChange,
-                    onTrimEndChange = onTrimEndChange,
-                    onAudioTrimStartChange = { audioTrimStartMs = it.coerceIn(0L, audioTrimEndMs - MIN_TRIM_GAP_MS) },
-                    onAudioTrimEndChange = { audioTrimEndMs = it.coerceIn(audioTrimStartMs + MIN_TRIM_GAP_MS, draft.sourceDurationMs) },
-                    onPlayheadChange = onPlayheadChange,
-                    onZoomChange = onTimelineZoomChange,
-                    onTrackSelected = { selectedTrack = it },
-                    onToolSelected = { selectedTimelineTool = it },
-                    onAudioSegmentSelected = { selectedAudioSegmentId = it },
-                    onTextClipSelected = { selectedTextClipId = it },
-                    onAudioCut = {
-                      val updated = splitAudioSegments(audioSegments, selectedAudioSegmentId, draft.playheadMs)
-                      audioSegments = updated
-                      selectedAudioSegmentId = updated.lastOrNull { draft.playheadMs in it.startMs..it.endMs }?.id ?: updated.lastOrNull()?.id ?: selectedAudioSegmentId
-                    },
-                    onAudioGainChange = { audioGain = it.coerceIn(0f, 1.5f) },
-                    onInteractionChange = {
-                      timelineInteracting = it
-                      if (!it) pendingSeekMs = null
-                    },
-                    onPendingSeekChange = { pendingSeekMs = it },
-                    onVisibleWindowChange = { startMs, endMs ->
-                      visibleWindowStartMs = startMs
-                      visibleWindowEndMs = endMs
-                    },
-                  )
-                  Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                  Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                  ) {
+                    Text(dockState.playheadLabel, color = ClipyOnDark, style = MaterialTheme.typography.titleMedium)
+                    Text(dockState.trimLabel, color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
+                  }
+                  TimelineCompactBadge(primary = dockState.zoomLabel, secondary = stringResource(R.string.editor_timeline_ruler))
+                }
+
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.CenterVertically,
+                ) {
+                  Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    AssistChip(
+                      onClick = {
+                        val newId = "seg-${audioSegments.size}"
+                        val startMs = draft.playheadMs.coerceIn(0L, draft.sourceDurationMs.coerceAtLeast(MIN_TRIM_GAP_MS * 2) - MIN_TRIM_GAP_MS)
+                        val endMs = (startMs + 1800L).coerceAtMost(draft.sourceDurationMs.coerceAtLeast(startMs + MIN_TRIM_GAP_MS))
+                        audioSegments = audioSegments + AudioSegmentUi(newId, startMs, endMs)
+                        selectedAudioSegmentId = newId
+                        selectedTrack = EditorTrack.Audio
+                        selectedPrimaryTool = EditorPrimaryTool.Audio
+                        recordEditorAction(context.getString(R.string.editor_history_add_audio))
+                      },
+                      leadingIcon = { Icon(Icons.Rounded.MusicNote, contentDescription = null) },
+                      label = { Text(stringResource(R.string.editor_quick_add_audio)) },
+                    )
+                    AssistChip(
+                      onClick = {
+                        val newId = "text-${textClips.size}"
+                        val startMs = draft.playheadMs.coerceIn(draft.trimStartMs, draft.trimEndMs)
+                        val endMs = (startMs + 2200L).coerceAtMost(draft.trimEndMs)
+                        textClips = textClips + TextClipUi(newId, context.getString(R.string.editor_text_overlay_default), startMs, endMs)
+                        selectedTextClipId = newId
+                        selectedTrack = EditorTrack.Text
+                        selectedPrimaryTool = EditorPrimaryTool.Text
+                        recordEditorAction(context.getString(R.string.editor_history_add_text))
+                      },
+                      leadingIcon = { Icon(Icons.Rounded.TextFields, contentDescription = null) },
+                      label = { Text(stringResource(R.string.editor_quick_add_text)) },
+                    )
+                  }
+                  Surface(shape = RoundedCornerShape(999.dp), color = Color(0x33161C28)) {
+                    Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                      Icon(Icons.Rounded.Layers, contentDescription = null, tint = ClipyAccent)
+                      Text(stringResource(R.string.editor_quick_layers), color = ClipyOnDark, style = MaterialTheme.typography.labelMedium)
+                    }
+                  }
+                }
+
+                Surface(
+                  modifier = Modifier.fillMaxWidth(),
+                  shape = RoundedCornerShape(20.dp),
+                  color = Color(0xFF10141C),
+                ) {
+                  Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                  ) {
+                    Row(
+                      modifier = Modifier.fillMaxWidth(),
+                      horizontalArrangement = Arrangement.SpaceBetween,
+                      verticalAlignment = Alignment.CenterVertically,
                     ) {
-                    EditorStatChip(label = stringResource(R.string.editor_timeline_focus_video), value = when (selectedTrack) {
-                      EditorTrack.Video -> stringResource(R.string.editor_timeline_video_track)
-                      EditorTrack.Audio -> stringResource(R.string.editor_timeline_audio_track)
-                      EditorTrack.Text -> stringResource(R.string.editor_timeline_text_track)
-                    }, modifier = Modifier.weight(1f))
-                    EditorStatChip(label = stringResource(R.string.editor_duration_label), value = dockState.durationLabel, modifier = Modifier.weight(1f))
-                    EditorStatChip(label = stringResource(R.string.editor_timeline_ruler), value = dockState.visibleWindowLabel, modifier = Modifier.weight(1f))
+                      TimelineMetaBadge(label = stringResource(R.string.editor_trim_label), value = if (selectedTrack == EditorTrack.Video) dockState.trimLabel else formatTimelineWindow(audioTrimStartMs, audioTrimEndMs), modifier = Modifier.weight(1f))
+                      Spacer(Modifier.width(6.dp))
+                      TimelineMetaBadge(label = stringResource(R.string.editor_playhead_label), value = dockState.playheadLabel, modifier = Modifier.weight(1f))
+                      Spacer(Modifier.width(6.dp))
+                      TimelineMetaBadge(label = stringResource(R.string.editor_timeline_zoom, timeline.zoom), value = dockState.zoomLabel, modifier = Modifier.weight(1f))
+                    }
+                    Text(
+                      text = stringResource(R.string.editor_timeline_precision),
+                      color = ClipyMuted,
+                      style = MaterialTheme.typography.labelMedium,
+                      textAlign = TextAlign.Center,
+                      modifier = Modifier.fillMaxWidth(),
+                    )
+                    TimelineEditor(
+                      sourceUri = draft.sourceUri,
+                      canLoadVideoFrames = shouldLoadVideoTimelineFrames(draft.sourceUri, isVideoSource),
+                      timeline = timeline,
+                      selectedTrack = selectedTrack,
+                      selectedTool = selectedTimelineTool,
+                      audioTrimStartMs = audioTrimStartMs,
+                      audioTrimEndMs = audioTrimEndMs,
+                      audioSegments = audioSegments,
+                      selectedAudioSegmentId = selectedAudioSegmentId,
+                      textClips = textClips,
+                      selectedTextClipId = selectedTextClipId,
+                      audioGain = audioGain,
+                      isMuted = draft.isMuted,
+                      onTrimStartChange = onTrimStartChange,
+                      onTrimEndChange = onTrimEndChange,
+                      onAudioTrimStartChange = { audioTrimStartMs = it.coerceIn(0L, audioTrimEndMs - MIN_TRIM_GAP_MS) },
+                      onAudioTrimEndChange = { audioTrimEndMs = it.coerceIn(audioTrimStartMs + MIN_TRIM_GAP_MS, draft.sourceDurationMs) },
+                      onPlayheadChange = onPlayheadChange,
+                      onZoomChange = onTimelineZoomChange,
+                      onTrackSelected = { selectedTrack = it },
+                      onToolSelected = { selectedTimelineTool = it },
+                      onAudioSegmentSelected = { selectedAudioSegmentId = it },
+                      onTextClipSelected = { selectedTextClipId = it },
+                      onAudioCut = {
+                        val updated = splitAudioSegments(audioSegments, selectedAudioSegmentId, draft.playheadMs)
+                        audioSegments = updated
+                        selectedAudioSegmentId = updated.lastOrNull { draft.playheadMs in it.startMs..it.endMs }?.id ?: updated.lastOrNull()?.id ?: selectedAudioSegmentId
+                      },
+                      onAudioGainChange = { audioGain = it.coerceIn(0f, 1.5f) },
+                      onInteractionChange = {
+                        timelineInteracting = it
+                        if (!it) pendingSeekMs = null
+                      },
+                      onPendingSeekChange = { pendingSeekMs = it },
+                      onVisibleWindowChange = { startMs, endMs ->
+                        visibleWindowStartMs = startMs
+                        visibleWindowEndMs = endMs
+                      },
+                    )
+                    Row(
+                      modifier = Modifier.fillMaxWidth(),
+                      horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                      EditorStatChip(label = stringResource(R.string.editor_timeline_focus_video), value = when (selectedTrack) {
+                        EditorTrack.Video -> stringResource(R.string.editor_timeline_video_track)
+                        EditorTrack.Audio -> stringResource(R.string.editor_timeline_audio_track)
+                        EditorTrack.Text -> stringResource(R.string.editor_timeline_text_track)
+                      }, modifier = Modifier.weight(1f))
+                      EditorStatChip(label = stringResource(R.string.editor_duration_label), value = dockState.durationLabel, modifier = Modifier.weight(1f))
+                      EditorStatChip(label = stringResource(R.string.editor_timeline_ruler), value = dockState.visibleWindowLabel, modifier = Modifier.weight(1f))
+                    }
                   }
                 }
               }
@@ -2338,6 +2368,7 @@ private fun ToggleRow(title: String, checked: Boolean, onToggle: () -> Unit) {
 @Composable
 private fun TimelineEditor(
   sourceUri: String,
+  canLoadVideoFrames: Boolean,
   timeline: TimelineSnapshot,
   selectedTrack: EditorTrack,
   selectedTool: TimelineTool,
@@ -2479,8 +2510,8 @@ private fun TimelineEditor(
       .collect { window -> visibleWindow = window }
   }
 
-  LaunchedEffect(sourceUri, prefetchRange, frameCount) {
-    if (sourceUri.isBlank() || prefetchRange.isEmpty()) {
+  LaunchedEffect(sourceUri, canLoadVideoFrames, prefetchRange, frameCount) {
+    if (!canLoadVideoFrames || prefetchRange.isEmpty()) {
       timelineBitmaps = emptyMap()
       return@LaunchedEffect
     }
@@ -2940,7 +2971,7 @@ private fun TimelineEditor(
           style = MaterialTheme.typography.labelMedium,
         )
       }
-      if (timelineBitmaps.isEmpty() && sourceUri.isNotBlank()) {
+      if (timelineBitmaps.isEmpty() && canLoadVideoFrames) {
         Box(
           modifier = Modifier
             .align(Alignment.BottomStart)
@@ -3581,14 +3612,19 @@ private fun TransportIconButton(
   contentDescription: String,
   onClick: () -> Unit,
   highlighted: Boolean = false,
+  enabled: Boolean = true,
 ) {
   Surface(
     modifier = Modifier.size(if (highlighted) 44.dp else 38.dp),
     shape = CircleShape,
-    color = if (highlighted) ClipyAccent else Color(0xFF1C2230),
+    color = if (!enabled) Color(0xFF161B25) else if (highlighted) ClipyAccent else Color(0xFF1C2230),
   ) {
-    IconButton(onClick = onClick) {
-      Icon(icon, contentDescription = contentDescription, tint = if (highlighted) Color.White else ClipyOnDark)
+    IconButton(onClick = onClick, enabled = enabled) {
+      Icon(
+        icon,
+        contentDescription = contentDescription,
+        tint = if (!enabled) ClipyMuted else if (highlighted) Color.White else ClipyOnDark,
+      )
     }
   }
 }
@@ -3774,10 +3810,26 @@ private fun LanguageCard(language: AppLanguage, selected: Boolean, isRecommended
 @Composable
 private fun ClipySurfaceVariant(): Color = MaterialTheme.colorScheme.surfaceVariant
 
+@Composable
+private fun UnsupportedMediaPreview(title: String, message: String) {
+  Column(
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.spacedBy(8.dp),
+    modifier = Modifier.padding(horizontal = 24.dp),
+  ) {
+    Icon(Icons.Rounded.Info, contentDescription = null, modifier = Modifier.size(44.dp), tint = ClipyOnDark)
+    Text(title, color = ClipyOnDark, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+    Text(message, color = ClipyMuted, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+  }
+}
+
 private fun exportSummary(state: AppSnapshot): String {
   val draft = state.draft
   if (draft.sourceUri.isBlank()) {
     return ""
+  }
+  if (!draft.isVideoSource) {
+    return "Unsupported source type"
   }
   return if (draft.exportFormat == ExportFormat.Gif) {
     "GIF • ${draft.cropRatio.label} • ${draft.gifFps} FPS • ${draft.gifResolution}"

@@ -61,6 +61,7 @@
     <string name="editor_preview">Xem truoc</string>
     <string name="editor_pick_video">Chon video</string>
     <string name="editor_pick_video_hint">Chon mot clip de bat phat Media3.</string>
+    <string name="editor_image_not_supported_hint">Anh nay da duoc mo an toan, nhung trinh bien tap hien tai van chi ho tro clip video. Hay chon video de tiep tuc chinh sua hoac xuat.</string>
     <string name="editor_source_label">Clip nguon</string>
     <string name="editor_video_required">Can nhap video truoc khi xuat va luu vao lich su.</string>
     <string name="editor_trim_label">Khoang cat</string>
@@ -254,4 +255,15 @@
     <string name="media_picker_camera">May anh</string>
     <string name="media_picker_camera_unavailable">Chuc nang mo may anh chua duoc noi vao MVP nay.</string>
     <string name="media_picker_live_badge">LIVE</string>
+    <string name="media_picker_continue_processing">Dang mo</string>
+    <string name="media_picker_continue_processing_detail">Dang kiem tra media da chon truoc khi mo trinh bien tap.</string>
+    <string name="media_picker_selection_helper_empty">Chon anh hoac video de tiep tuc</string>
+    <string name="media_picker_continue_hint_empty">Hay chon mot video trong luoi de bat nut Tiep.</string>
+    <string name="media_picker_continue_hint_invalid">Luong hien tai chi ho tro mo clip video.</string>
+    <string name="media_picker_continue_error_title">Khong the tiep tuc voi muc da chon</string>
+    <string name="media_picker_continue_error_missing_uri">Muc nay khong co duong dan media hop le. Hay chon clip khac.</string>
+    <string name="media_picker_continue_error_unsupported_type">Anh chua duoc ho tro trong trinh bien tap hien tai. Hay chon video.</string>
+    <string name="media_picker_continue_error_unreadable">Clipy khong the mo lai media nay. Thu lai hoac chon clip khac.</string>
+    <string name="media_picker_continue_choose_another">Chon muc khac</string>
+    <string name="media_picker_continue_cancel">Huy</string>
 </resources>

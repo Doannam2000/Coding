@@ -22,6 +22,7 @@ import com.nantcompany.clipy.model.timelineMsToTrackPx
 import com.nantcompany.clipy.model.timelineTrackPxToMs
 import com.nantcompany.clipy.model.timelineThumbnailCount
 import com.nantcompany.clipy.model.validateExport
+import com.nantcompany.clipy.shouldLoadVideoTimelineFrames
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -65,6 +66,26 @@ class ClipyViewModelTest {
 
     val badGif = ProjectDraft(sourceUri = "content://clip", gifFps = 17)
     assertFalse(badGif.validateExport().isValid)
+  }
+
+  @Test
+  fun validateExport_rejectsImageSourcesInVideoEditorFlow() {
+    val imageDraft = ProjectDraft(
+      sourceUri = "content://photo",
+      sourceMediaType = "image",
+      trimStartMs = 0L,
+      trimEndMs = 2_000L,
+    )
+
+    assertFalse(imageDraft.validateExport().isValid)
+    assertEquals("Only video clips can be exported in the current editor flow.", imageDraft.validateExport().message)
+  }
+
+  @Test
+  fun shouldLoadVideoTimelineFrames_onlyAllowsNonBlankVideoSources() {
+    assertTrue(shouldLoadVideoTimelineFrames(sourceUri = "content://clip", isVideoSource = true))
+    assertFalse(shouldLoadVideoTimelineFrames(sourceUri = "content://photo", isVideoSource = false))
+    assertFalse(shouldLoadVideoTimelineFrames(sourceUri = "", isVideoSource = true))
   }
 
   @Test

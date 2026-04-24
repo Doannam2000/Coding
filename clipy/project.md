@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-24 00:24 UTC
+- Last updated: 2026-04-24 15:56 UTC
 - App: Clipy
 - Slug: clipy
 - Tagline: Fast social-ready video edits and GIF exports in seconds.
 - Target users: Content creators, TikTok/Reels users, meme makers, casual users needing fast video editing
-- Design direction: Preserve the current dark, polished gallery language and add only diagnostic and recovery-focused picker states. The picker should feel more trustworthy and responsive during permission handoff, media reload, and true-empty detection, without changing navigation or the overall tab/grid structure.
+- Design direction: Preserve the current Media Picker look and navigation flow, adding only clear selection-confirmation and error-recovery states around the existing image/video continue action so the handoff feels stable and trustworthy.
 - Core constraints: Android only, no backend, lightweight but powerful, limit GIF size/duration, smooth UX, handle large videos safely
 Design style must align with: Modern dark creator-tool UI, clean layout, smooth animations, rounded cards, premium feel
 Typography should align with: Inter
@@ -676,6 +676,7 @@ Expected result:
 - Media Picker must load all videos/photos from device gallery
 - Show empty state only when cursor.count == 0
 - Work on Android 10, 11, 12, 13, 14, 15+
+Additional follow-up requirement: [fixbug] crash when select video/image and continue
 
 ### Core Features
 - Splash screen followed by onboarding and main app flow
@@ -700,9 +701,10 @@ Expected result:
 
 ### Main Screens
 - Media Picker Screen
+- Post-Selection Destination Screen
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Keep existing local ViewModel-driven state and MediaStore-based gallery access. Continue using content URIs built from MediaStore IDs, avoid deprecated DATA-path access, and preserve current app preference/storage behavior outside the picker.
+- storage: Keep existing ViewModel-managed UI state and MediaStore/content-URI based access. Reuse current selection and navigation mechanisms, adding only minimal validation and safe argument transfer needed to prevent the crash.
 <!-- AUTO-GENERATED:CORE_END -->

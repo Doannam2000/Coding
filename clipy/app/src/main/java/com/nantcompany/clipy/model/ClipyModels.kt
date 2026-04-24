@@ -43,6 +43,7 @@ enum class SaveBehavior {
 data class ProjectDraft(
   val id: String = "draft",
   val sourceUri: String = "",
+  val sourceMediaType: String = "video",
   val displayName: String = "No clip selected",
   val sourceDurationMs: Long = 12000L,
   val keyframeTimesMs: List<Long> = emptyList(),
@@ -546,6 +547,9 @@ fun buildExportPlan(draft: ProjectDraft): ExportPlan {
 
 fun ProjectDraft.validateExport(): ExportValidation {
   if (sourceUri.isBlank()) return ExportValidation(false, "Import a video before exporting.")
+  if (!sourceMediaType.equals("video", ignoreCase = true)) {
+    return ExportValidation(false, "Only video clips can be exported in the current editor flow.")
+  }
   if (trimEndMs - trimStartMs < MIN_TRIM_GAP_MS) return ExportValidation(false, "Trim range must be at least 250 ms.")
   if (sanitizeOutputName(outputName).isBlank()) return ExportValidation(false, "Output name is invalid.")
   if (exportFormat == ExportFormat.Gif && gifFps !in SupportedGifFps) {

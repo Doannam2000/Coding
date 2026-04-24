@@ -76,8 +76,14 @@ class ClipyRepository private constructor(context: Context) {
   }
 
   fun loadVideo(uri: Uri) {
+    loadSelectedMedia(uri = uri, mediaType = "video")
+  }
+
+  fun loadSelectedMedia(uri: Uri, mediaType: String, displayNameHint: String? = null) {
     val name = uri.lastPathSegment?.substringAfterLast('/')?.ifBlank { "Selected clip" } ?: "Selected clip"
-    val durationMs = readDurationMs(uri) ?: 12_000L
+    val safeMediaType = mediaType.lowercase(Locale.getDefault())
+    val resolvedName = displayNameHint?.ifBlank { null } ?: name
+    val durationMs = if (safeMediaType == "video") readDurationMs(uri) ?: 12_000L else 12_000L
     val keyframeTimes = readKeyframeTimes(durationMs)
     if (shouldPersistUri(uri.toString())) {
       runCatching {
@@ -87,14 +93,15 @@ class ClipyRepository private constructor(context: Context) {
     updateDraft {
       it.copy(
         sourceUri = uri.toString(),
-        displayName = name,
+        sourceMediaType = safeMediaType,
+        displayName = resolvedName,
         sourceDurationMs = durationMs,
         keyframeTimesMs = keyframeTimes,
         trimStartMs = 0L,
         trimEndMs = durationMs.coerceAtMost(12_000L),
         playheadMs = 0L,
         timelineZoom = 1f,
-        outputName = sanitizeOutputName(name.substringBeforeLast('.')),
+        outputName = sanitizeOutputName(resolvedName.substringBeforeLast('.')),
         exportFormat = ExportFormat.Gif,
       )
     }
@@ -169,6 +176,7 @@ class ClipyRepository private constructor(context: Context) {
     updateDraft {
       it.copy(
         sourceUri = record.sourceUri,
+        sourceMediaType = "video",
         displayName = record.outputName,
         sourceDurationMs = record.durationMs.coerceAtLeast(1_000L),
         keyframeTimesMs = readKeyframeTimes(record.durationMs.coerceAtLeast(1_000L)),
