@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd.exe /c \"opencode models --verbose 2>&1\")",
+      "Bash(cmd.exe /c \"opencode models 2>&1\")",
+      "Bash(powershell.exe *)",
+      "Bash(cmd.exe /c \"node %APPDATA%\\\\\\\\npm\\\\\\\\node_modules\\\\\\\\opencode-ai\\\\\\\\bin\\\\\\\\opencode.js models 2>&1\")",
+      "Bash(cmd.exe *)",
+      "Bash(curl -s http://127.0.0.1:4096/model)",
+      "Bash(curl -s http://127.0.0.1:4096/provider)",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); openai=next\\(\\(p for p in data['all'] if p['id']=='openai'\\),None\\); codex={k:v for k,v in \\(openai.get\\('models',{}\\) if openai else {}\\).items\\(\\) if 'codex' in k.lower\\(\\)}; print\\(json.dumps\\(codex, indent=2\\)\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(npx tsc *)",
+      "Bash(codex --help)",
+      "Bash(codex exec *)"
+    ]
+  }
+}

@@ -1,0 +1,31 @@
+module.exports = {
+  apps: [
+    {
+      name: 'discord-terminal-bot',
+      script: './dist/combined.js',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '1G',
+      exp_backoff_restart_delay: 200,
+      max_restarts: 50,
+      min_uptime: '20s',
+      restart_delay: 4000,
+      kill_timeout: 10000,
+      cron_restart: '0 */6 * * *',
+      env: {
+        NODE_ENV: 'production',
+        DISCORD_TOKEN: process.env.DISCORD_TOKEN,
+        TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+        CLIENT_ID: process.env.CLIENT_ID,
+        GUILD_ID: process.env.GUILD_ID,
+        OWNER_IDS: process.env.OWNER_IDS,
+      },
+      error_file: './logs/error.log',
+      out_file: './logs/out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      time: true,
+    },
+  ],
+};
