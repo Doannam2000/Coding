@@ -2,17 +2,22 @@ package com.nantcompany.clipy.ui
 
 import android.content.ContentUris
 import android.content.Context
+import android.content.ContentResolver
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Size
 import android.widget.Toast
+import androidx.collection.LruCache
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -21,6 +26,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -56,7 +62,10 @@ import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Collections
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -79,6 +88,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -90,6 +100,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.semantics.contentDescription
@@ -108,6 +119,7 @@ import com.nantcompany.clipy.theme.ClipyOnDark
 import com.nantcompany.clipy.theme.ClipyPrimary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.math.roundToInt
 
 enum class MediaTab {
@@ -157,7 +169,12 @@ data class MediaPickerUiState(
   val initialScrollTarget: String? = null,
   val previewItemId: String? = null,
   val hasMediaPermission: Boolean = false,
+  val canLoadMore: Boolean = false,
+  val loadCursor: Int = 0,
 )
+
+private const val MEDIA_PAGE_SIZE = 60
+private val thumbnailMemoryCache = LruCache<String, Bitmap>(96)
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -171,15 +188,10 @@ fun MediaPickerScreen(
   onReorderSelection: (String, Int) -> Unit,
   onPreviewItem: (String?) -> Unit,
   onConfirmSelection: () -> Unit,
+  onLoadMore: () -> Unit,
 ) {
   val context = LocalContext.current
-  val permissions = remember {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      arrayOf(android.Manifest.permission.READ_MEDIA_VIDEO, android.Manifest.permission.READ_MEDIA_IMAGES)
-    } else {
-      arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
-    }
-  }
+  val permissions = remember(state.activeTab) { permissionsForTab(state.activeTab, Build.VERSION.SDK_INT) }
   val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
     onRequestPermissionRefresh()
   }
@@ -406,11 +418,11 @@ fun MediaPickerScreen(
     ) {
       when {
         !state.hasMediaPermission -> {
-          PermissionEmptyState(onGrant = { permissionLauncher.launch(permissions) })
+          PermissionEmptyState(tab = state.activeTab, onGrant = { permissionLauncher.launch(permissions) })
         }
 
         state.isLoading -> {
-          CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = ClipyPrimary)
+          ShimmerMediaGrid(modifier = Modifier.fillMaxSize())
         }
 
         state.mediaItems.isEmpty() -> {
@@ -434,6 +446,8 @@ fun MediaPickerScreen(
               items = pageItems,
               selectedItems = state.selectedItems,
               initialScrollTarget = if (pageTab == state.activeTab) state.initialScrollTarget else null,
+              canLoadMore = pageTab == state.activeTab && state.canLoadMore,
+              onLoadMore = onLoadMore,
               onItemClick = { item ->
                 if (item.isCameraItem) {
                   Toast.makeText(context, R.string.media_picker_camera_unavailable, Toast.LENGTH_SHORT).show()
@@ -478,6 +492,8 @@ private fun MediaPickerGrid(
   items: List<MediaGridItemUiModel>,
   selectedItems: List<SelectedMediaUiModel>,
   initialScrollTarget: String?,
+  canLoadMore: Boolean,
+  onLoadMore: () -> Unit,
   onItemClick: (MediaGridItemUiModel) -> Unit,
   onItemLongPress: (MediaGridItemUiModel) -> Unit,
 ) {
@@ -495,6 +511,16 @@ private fun MediaPickerGrid(
       }
     }
 
+    LaunchedEffect(gridState, items, canLoadMore) {
+      snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
+        .distinctUntilChanged()
+        .collect { lastVisibleIndex ->
+          if (canLoadMore && lastVisibleIndex != null && lastVisibleIndex >= items.lastIndex - columns * 2) {
+            onLoadMore()
+          }
+        }
+    }
+
     LazyVerticalGrid(
       state = gridState,
       columns = GridCells.Fixed(columns),
@@ -509,12 +535,29 @@ private fun MediaPickerGrid(
           onLongPress = { onItemLongPress(item) },
         )
       }
+      if (canLoadMore) {
+        items(columns) { index ->
+          if (index == 0) {
+            Box(
+              modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f),
+              contentAlignment = Alignment.Center,
+            ) {
+              CircularProgressIndicator(color = ClipyPrimary, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+            }
+          } else {
+            Box(modifier = Modifier.aspectRatio(1f))
+          }
+        }
+      }
     }
   }
 }
 
 @Composable
-private fun PermissionEmptyState(onGrant: () -> Unit) {
+private fun PermissionEmptyState(tab: MediaTab, onGrant: () -> Unit) {
+  val icon = if (tab == MediaTab.Videos) Icons.Rounded.VideoLibrary else Icons.Rounded.Collections
   Column(
     modifier = Modifier
       .fillMaxSize()
@@ -522,6 +565,12 @@ private fun PermissionEmptyState(onGrant: () -> Unit) {
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.Center,
   ) {
+    Surface(shape = CircleShape, color = ClipyPrimary.copy(alpha = 0.14f)) {
+      Box(modifier = Modifier.padding(18.dp), contentAlignment = Alignment.Center) {
+        Icon(icon, contentDescription = null, tint = ClipyPrimary, modifier = Modifier.size(28.dp))
+      }
+    }
+    Spacer(Modifier.height(18.dp))
     Text(stringResource(R.string.media_picker_permission_title), color = ClipyOnDark, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
     Spacer(Modifier.height(10.dp))
     Text(stringResource(R.string.media_picker_permission_body), color = ClipyMuted, textAlign = TextAlign.Center)
@@ -539,6 +588,7 @@ private fun EmptyMediaState(tab: MediaTab) {
     MediaTab.Photos -> R.string.media_picker_empty_photos
     MediaTab.Live -> R.string.media_picker_empty_live
   }
+  val icon = if (tab == MediaTab.Videos) Icons.Rounded.VideoLibrary else Icons.Rounded.Collections
   Column(
     modifier = Modifier
       .fillMaxSize()
@@ -546,8 +596,65 @@ private fun EmptyMediaState(tab: MediaTab) {
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.Center,
   ) {
+    Surface(shape = CircleShape, color = Color(0xFF182033)) {
+      Box(modifier = Modifier.padding(18.dp), contentAlignment = Alignment.Center) {
+        Icon(icon, contentDescription = null, tint = ClipyPrimary, modifier = Modifier.size(28.dp))
+      }
+    }
+    Spacer(Modifier.height(16.dp))
+    Text(stringResource(R.string.media_picker_empty_title), color = ClipyOnDark, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+    Spacer(Modifier.height(8.dp))
     Text(stringResource(bodyRes), color = ClipyMuted, textAlign = TextAlign.Center)
+    Spacer(Modifier.height(16.dp))
+    Text(
+      text = stringResource(R.string.media_picker_empty_hint),
+      color = ClipyMuted,
+      textAlign = TextAlign.Center,
+      style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic),
+    )
   }
+}
+
+@Composable
+private fun ShimmerMediaGrid(modifier: Modifier = Modifier) {
+  BoxWithConstraints(modifier = modifier.padding(horizontal = 4.dp, vertical = 8.dp)) {
+    val columns = if (maxWidth >= 600.dp) 4 else 3
+    LazyVerticalGrid(
+      columns = GridCells.Fixed(columns),
+      contentPadding = PaddingValues(bottom = 24.dp),
+      horizontalArrangement = Arrangement.spacedBy(6.dp),
+      verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+      items(15) {
+        ShimmerTile()
+      }
+    }
+  }
+}
+
+@Composable
+private fun ShimmerTile() {
+  val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "pickerShimmer")
+  val shimmerOffset by transition.animateFloat(
+    initialValue = 0f,
+    targetValue = 1f,
+    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+      animation = androidx.compose.animation.core.tween(durationMillis = 900),
+      repeatMode = androidx.compose.animation.core.RepeatMode.Restart,
+    ),
+    label = "pickerShimmerOffset",
+  )
+  val brush = Brush.linearGradient(
+    colors = listOf(Color(0xFF141923), Color(0xFF20293B), Color(0xFF141923)),
+    start = androidx.compose.ui.geometry.Offset.Zero,
+    end = androidx.compose.ui.geometry.Offset(280f * shimmerOffset, 280f * shimmerOffset),
+  )
+  Box(
+    modifier = Modifier
+      .aspectRatio(1f)
+      .clip(RoundedCornerShape(12.dp))
+      .background(brush),
+  )
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -736,7 +843,9 @@ private fun MediaThumbnail(uri: String, type: String, modifier: Modifier = Modif
   val context = LocalContext.current
   var bitmap by remember(uri, type) { mutableStateOf<Bitmap?>(null) }
   LaunchedEffect(uri, type) {
-    bitmap = withContext(Dispatchers.IO) { loadThumbnailBitmap(context, uri, type, 420) }
+    bitmap = thumbnailMemoryCache.get(uri) ?: withContext(Dispatchers.IO) { loadThumbnailBitmap(context, uri, type, 420) }?.also {
+      thumbnailMemoryCache.put(uri, it)
+    }
   }
   Box(modifier = modifier.background(Color(0xFF1A1D22)), contentAlignment = Alignment.Center) {
     bitmap?.let {
@@ -765,10 +874,21 @@ private suspend fun loadThumbnailBitmap(context: Context, uriString: String, typ
         BitmapFactory.decodeStream(input)
       }
     }
-  }.getOrNull()
+  }.getOrNull()?.let { bitmap ->
+    if (bitmap.width > sizePx * 2 || bitmap.height > sizePx * 2) {
+      Bitmap.createScaledBitmap(bitmap, sizePx.coerceAtLeast(1), sizePx.coerceAtLeast(1), true)
+    } else {
+      bitmap
+    }
+  }
 }
 
-fun queryDeviceMedia(context: Context, tab: MediaTab): Pair<List<MediaAlbumUiModel>, List<MediaGridItemUiModel>> {
+fun queryDeviceMedia(
+  context: Context,
+  tab: MediaTab,
+  limit: Int = MEDIA_PAGE_SIZE,
+  offset: Int = 0,
+): Pair<List<MediaAlbumUiModel>, List<MediaGridItemUiModel>> {
   val collection = when (tab) {
     MediaTab.Videos -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
     MediaTab.Photos, MediaTab.Live -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
@@ -785,7 +905,17 @@ fun queryDeviceMedia(context: Context, tab: MediaTab): Pair<List<MediaAlbumUiMod
   val sortOrder = "${MediaStore.MediaColumns.DATE_ADDED} DESC"
   val rows = mutableListOf<MediaGridItemUiModel>()
   val albums = linkedMapOf<String, Pair<String, MutableList<MediaGridItemUiModel>>>()
-  context.contentResolver.query(collection, projection, null, null, sortOrder)?.use { cursor ->
+  val cursor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+    val queryArgs = Bundle().apply {
+      putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, sortOrder)
+      putInt(ContentResolver.QUERY_ARG_LIMIT, limit)
+      putInt(ContentResolver.QUERY_ARG_OFFSET, offset)
+    }
+    context.contentResolver.query(collection, projection, queryArgs, null)
+  } else {
+    context.contentResolver.query(collection, projection, null, null, "$sortOrder LIMIT $limit OFFSET $offset")
+  }
+  cursor?.use { cursor ->
     val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
     val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
     val mimeColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
@@ -827,10 +957,48 @@ fun queryDeviceMedia(context: Context, tab: MediaTab): Pair<List<MediaAlbumUiMod
     }
   }
 
+  if (offset == 0) {
+    context.contentResolver.query(
+      collection,
+      arrayOf(
+        MediaStore.MediaColumns._ID,
+        MediaStore.MediaColumns.BUCKET_ID,
+        MediaStore.MediaColumns.BUCKET_DISPLAY_NAME,
+      ),
+      null,
+      null,
+      sortOrder,
+    )?.use { albumCursor ->
+      val idColumn = albumCursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+      val bucketIdColumn = albumCursor.getColumnIndexOrThrow(MediaStore.MediaColumns.BUCKET_ID)
+      val bucketNameColumn = albumCursor.getColumnIndexOrThrow(MediaStore.MediaColumns.BUCKET_DISPLAY_NAME)
+      while (albumCursor.moveToNext()) {
+        val bucketId = albumCursor.getString(bucketIdColumn) ?: "recent"
+        val bucketName = albumCursor.getString(bucketNameColumn) ?: context.getString(R.string.media_picker_album)
+        val id = albumCursor.getLong(idColumn)
+        val coverUri = ContentUris.withAppendedId(collection, id).toString()
+        val bucketEntry = albums.getOrPut(bucketId) { bucketName to mutableListOf() }
+        if (bucketEntry.second.isEmpty()) {
+          bucketEntry.second += MediaGridItemUiModel(
+            id = "cover-$id",
+            uri = coverUri,
+            type = if (tab == MediaTab.Videos) "video" else "photo",
+            thumbnailUri = coverUri,
+            durationMs = null,
+            createdAtEpochMs = 0L,
+            isCameraItem = false,
+            selectionOrder = null,
+            isSelected = false,
+          )
+        }
+      }
+    }
+  }
+
   val recentAlbum = MediaAlbumUiModel(
     id = "recent",
     name = context.getString(R.string.media_picker_recent),
-    count = rows.size,
+    count = if (offset == 0) rows.size else -1,
     coverUri = rows.firstOrNull()?.thumbnailUri,
     isSelected = true,
   )
@@ -872,11 +1040,23 @@ private fun formatDuration(durationMs: Long): String {
   return "%d:%02d".format(minutes, seconds)
 }
 
-fun hasMediaAccess(context: Context): Boolean {
+fun hasMediaAccess(context: Context, tab: MediaTab = MediaTab.Videos): Boolean {
   return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-    ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_MEDIA_VIDEO) == android.content.pm.PackageManager.PERMISSION_GRANTED &&
-      ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_MEDIA_IMAGES) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    permissionsForTab(tab, Build.VERSION.SDK_INT).all { permission ->
+      ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+    }
   } else {
-    ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_EXTERNAL_STORAGE) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+  }
+}
+
+internal fun permissionsForTab(tab: MediaTab, sdkInt: Int): Array<String> {
+  return if (sdkInt >= Build.VERSION_CODES.TIRAMISU) {
+    when (tab) {
+      MediaTab.Videos -> arrayOf(android.Manifest.permission.READ_MEDIA_VIDEO)
+      MediaTab.Photos, MediaTab.Live -> arrayOf(android.Manifest.permission.READ_MEDIA_IMAGES)
+    }
+  } else {
+    arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
   }
 }

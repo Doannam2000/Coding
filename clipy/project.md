@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-23 23:36 UTC
+- Last updated: 2026-04-24 00:01 UTC
 - App: Clipy
 - Slug: clipy
 - Tagline: Fast social-ready video edits and GIF exports in seconds.
 - Target users: Content creators, TikTok/Reels users, meme makers, casual users needing fast video editing
-- Design direction: Dark, creator-focused mobile editing flow that tightens the existing Clipy home-to-picker-to-editor journey into a more cohesive CapCut-inspired experience. Preserve the current dark landing visual language, emphasize fast project entry and direct manipulation in the editor, and use restrained blue highlights, rounded media surfaces, and motion-led transitions to make the flow feel polished without changing the app's underlying architecture.
+- Design direction: Incremental dark creator-tool polish that keeps Clipy's current CapCut-inspired visual language, while making bug fixes and placeholder destinations feel intentional, responsive, and production-ready. Emphasize clearer media states, stronger content hierarchy, rounded dark surfaces, and focused blue selection accents without changing the existing Compose + MVVM architecture.
 - Core constraints: Android only, no backend, lightweight but powerful, limit GIF size/duration, smooth UX, handle large videos safely
 Design style must align with: Modern dark creator-tool UI, clean layout, smooth animations, rounded cards, premium feel
 Typography should align with: Inter
@@ -511,6 +511,117 @@ OUTPUT
 - Full UI design for 3 screens
 - Ready for implementation
 - Clear component hierarchy
+Additional follow-up requirement: [fixbug] Fix critical bugs and improve UI/UX across the app (Home, Media Picker, Templates, Profile, Language screen).
+
+-----------------------------------
+1. BUG: Media Picker not loading videos
+-----------------------------------
+
+Issues:
+- Video list is empty or not loading
+- Thumbnails not displayed
+- Slow or broken loading
+
+Fix:
+- Ensure proper permission handling:
+  + Android 13+: READ_MEDIA_VIDEO
+  + Below Android 13: READ_EXTERNAL_STORAGE
+- Query device media using MediaStore correctly
+- Load videos sorted by date (latest first)
+- Generate thumbnails efficiently
+- Handle empty state (show "No videos found")
+- Add loading state (shimmer grid)
+
+Performance:
+- Use lazy loading / pagination
+- Cache thumbnails
+- Avoid blocking UI thread
+
+-----------------------------------
+2. BUG: Templates & Profile tabs are empty
+-----------------------------------
+
+Fix Templates tab:
+- Add placeholder UI:
+  + List of template cards
+  + Thumbnail + title
+  + "Coming soon" badge
+- Optional:
+  + Fake/mock data for now
+  + Category filter (Trending, Vlog, TikTok)
+
+Fix Profile tab:
+- Add basic profile UI:
+  + Avatar (circle)
+  + Username
+  + Email (optional)
+- Add menu list:
+  + My Projects
+  + Settings
+  + Language
+  + About
+- Add logout button (UI only if no backend)
+
+-----------------------------------
+3. UI ISSUE: Language screen looks bad
+-----------------------------------
+
+Redesign Language Screen:
+
+Style:
+- Modern, minimal, clean
+- Dark mode
+- Rounded cards
+
+Layout:
+- Top:
+  + Title: "Language"
+  + Back button
+
+- List:
+  + Language items (English, Vietnamese, etc.)
+  + Each item:
+    * Language name
+    * Optional flag icon
+    * Radio/check indicator
+
+UX:
+- Highlight selected language (blue accent #2563EB)
+- Smooth selection animation
+- Large touch area
+- Divider or card spacing
+
+Extra:
+- Auto-detect system language
+- Show "Recommended" label
+
+-----------------------------------
+4. GENERAL UI IMPROVEMENTS
+-----------------------------------
+
+- Fix spacing and alignment issues
+- Ensure no overlapping UI
+- Improve typography hierarchy
+- Add loading states (skeleton/shimmer)
+- Add empty states (friendly message + icon)
+
+-----------------------------------
+5. PERFORMANCE & UX
+-----------------------------------
+
+- Ensure smooth scrolling (60fps)
+- Avoid unnecessary recomposition / re-render
+- Optimize image loading
+- Improve gesture responsiveness
+
+-----------------------------------
+OUTPUT
+-----------------------------------
+
+- Fixed Media Picker (video loading works)
+- Functional Templates & Profile UI (even with mock data)
+- Redesigned Language screen (clean, modern)
+- Stable and smooth UX
 
 ### Core Features
 - Splash screen followed by onboarding and main app flow
@@ -534,12 +645,13 @@ OUTPUT
 - Explicit exit action within the app shell
 
 ### Main Screens
-- Home Screen
 - Media Picker Screen
-- Video Editor Screen
+- Templates Screen
+- Profile Screen
+- Language Screen
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Continue using the existing ViewModel-driven local project flow and current media-picker-to-editor handoff, persisting recent-project/editor state through the app's current local storage approach while avoiding any broader storage redesign unless required for timeline interaction state.
+- storage: Keep the existing local app storage and ViewModel-driven flows. Use MediaStore for device video discovery, preserve current app preference storage for language selection, and use static/mock in-memory data sources for Templates and Profile until real backend or repository data is introduced.
 <!-- AUTO-GENERATED:CORE_END -->

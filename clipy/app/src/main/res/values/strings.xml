@@ -20,6 +20,7 @@
     <string name="language_english_helper">Fast workflow copy in English</string>
     <string name="language_vietnamese_helper">Fast workflow copy in Vietnamese</string>
     <string name="language_apply">Apply language</string>
+    <string name="language_recommended">Recommended</string>
     <string name="language_screen_body">Choose the language Clipy uses across onboarding, settings, and the editing workflow.</string>
     <string name="nav_history">History</string>
     <string name="nav_settings">Settings</string>
@@ -42,6 +43,15 @@
     <string name="home_shell_templates_body">Keep this shell lightweight for now while the main creator flow stays focused on quick import and editing.</string>
     <string name="home_shell_profile_title">Profile stays minimal in this pass</string>
     <string name="home_shell_profile_body">Settings, language, and local export behavior already cover the current MVP account surface.</string>
+    <string name="templates_title">Templates</string>
+    <string name="templates_body">Mock creator presets keep this tab usable while Clipy stays focused on fast edits and exports.</string>
+    <string name="templates_category_trending">Trending</string>
+    <string name="templates_category_vlog">Vlog</string>
+    <string name="templates_category_tiktok">TikTok</string>
+    <string name="templates_preview_label">Preview soon</string>
+    <string name="profile_name">Creator Mode</string>
+    <string name="profile_email">clipy.local@device</string>
+    <string name="profile_logout">Log out</string>
     <string name="home_recent_meta_duration">Duration %1$s</string>
     <string name="editor_ready">Ready for export</string>
     <string name="editor_gif_hint">Duration capped for compact sharing.</string>
@@ -231,6 +241,8 @@
     <string name="media_picker_empty_videos">No videos found in this album yet.</string>
     <string name="media_picker_empty_photos">No photos found in this album yet.</string>
     <string name="media_picker_empty_live">No live media found in this album yet.</string>
+    <string name="media_picker_empty_title">No videos found</string>
+    <string name="media_picker_empty_hint">Try switching albums, refreshing permissions, or capturing a new clip.</string>
     <string name="media_picker_camera">Camera</string>
     <string name="media_picker_camera_unavailable">Camera capture is not wired into this MVP yet.</string>
     <string name="media_picker_live_badge">LIVE</string>

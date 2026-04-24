@@ -20,6 +20,7 @@
     <string name="language_english_helper">Giao dien quy trinh nhanh bang tieng Anh</string>
     <string name="language_vietnamese_helper">Giao dien quy trinh nhanh bang tieng Viet</string>
     <string name="language_apply">Ap dung ngon ngu</string>
+    <string name="language_recommended">De xuat</string>
     <string name="language_screen_body">Chon ngon ngu ma Clipy su dung trong onboarding, cai dat va quy trinh bien tap.</string>
     <string name="nav_history">Lich su</string>
     <string name="nav_settings">Cai dat</string>
@@ -42,6 +43,15 @@
     <string name="home_shell_templates_body">Tam thoi giu phan nay nhe de luong lam viec chinh van tap trung vao nhap media va bien tap nhanh.</string>
     <string name="home_shell_profile_title">Ho so duoc giu toi gian trong lan cap nhat nay</string>
     <string name="home_shell_profile_body">Cai dat, ngon ngu va hanh vi luu cuc bo da bao phu be mat tai khoan cua MVP hien tai.</string>
+    <string name="templates_title">Mau</string>
+    <string name="templates_body">Nhung mau giao dien gia lap giup tab nay co chu dich hon trong khi Clipy van tap trung vao chinh sua va xuat nhanh.</string>
+    <string name="templates_category_trending">Thinh hanh</string>
+    <string name="templates_category_vlog">Vlog</string>
+    <string name="templates_category_tiktok">TikTok</string>
+    <string name="templates_preview_label">Sap co xem truoc</string>
+    <string name="profile_name">Che do nha sang tao</string>
+    <string name="profile_email">clipy.local@device</string>
+    <string name="profile_logout">Dang xuat</string>
     <string name="home_recent_meta_duration">Thoi luong %1$s</string>
     <string name="editor_ready">San sang de xuat</string>
     <string name="editor_gif_hint">Thoi luong duoc gioi han de de chia se gon nhe.</string>
@@ -231,6 +241,8 @@
     <string name="media_picker_empty_videos">Chua co video nao trong album nay.</string>
     <string name="media_picker_empty_photos">Chua co anh nao trong album nay.</string>
     <string name="media_picker_empty_live">Chua co media live nao trong album nay.</string>
+    <string name="media_picker_empty_title">Khong tim thay video</string>
+    <string name="media_picker_empty_hint">Thu doi album, cap nhat quyen truy cap, hoac quay them mot clip moi.</string>
     <string name="media_picker_camera">May anh</string>
     <string name="media_picker_camera_unavailable">Chuc nang mo may anh chua duoc noi vao MVP nay.</string>
     <string name="media_picker_live_badge">LIVE</string>

@@ -72,12 +72,19 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ArrowForwardIos
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Logout
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
@@ -102,6 +109,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -120,10 +128,10 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -396,6 +404,7 @@ fun ClipyApp(finishApp: () -> Unit) {
           onToggleSelection = viewModel::togglePickerSelection,
           onReorderSelection = viewModel::reorderPickerSelection,
           onPreviewItem = viewModel::previewPickerItem,
+          onLoadMore = viewModel::loadMorePickerItems,
           onConfirmSelection = {
             if (viewModel.confirmPickerSelection() != null) {
               navController.navigate(EDITOR) {
@@ -603,7 +612,7 @@ private fun IntroScreen(
           }
         }
         AppLanguage.entries.forEach { option ->
-          LanguageCard(language = option, selected = language == option, onClick = { language = option })
+          LanguageCard(language = option, selected = language == option, isRecommended = false, onClick = { language = option })
         }
       }
 
@@ -645,6 +654,7 @@ private fun HomeScreen(
 ) {
   var confirmExit by rememberSaveable { mutableStateOf(false) }
   var selectedDestination by rememberSaveable { mutableStateOf(HomeDestination.Home) }
+  var selectedTemplateCategory by rememberSaveable { mutableStateOf(TemplateCategory.Trending) }
   val recentExports = remember(state.history) { state.history.take(6) }
 
   Scaffold(
@@ -781,15 +791,10 @@ private fun HomeScreen(
               }
             }
           }
+        } else if (destination == HomeDestination.Templates) {
+          TemplatesSection(selectedCategory = selectedTemplateCategory, onCategorySelected = { selectedTemplateCategory = it })
         } else {
-          HomeDestinationShell(
-            title = stringResource(
-              if (destination == HomeDestination.Templates) R.string.home_shell_templates_title else R.string.home_shell_profile_title,
-            ),
-            body = stringResource(
-              if (destination == HomeDestination.Templates) R.string.home_shell_templates_body else R.string.home_shell_profile_body,
-            ),
-          )
+          ProfileSection(onOpenSettings = onOpenSettings)
         }
 
         PremiumCard {
@@ -837,6 +842,12 @@ private enum class HomeDestination {
   Home,
   Templates,
   Profile,
+}
+
+private enum class TemplateCategory {
+  Trending,
+  Vlog,
+  TikTok,
 }
 
 @Composable
@@ -907,12 +918,159 @@ private fun RecentProjectCard(item: ExportRecordUi, onClick: () -> Unit) {
   }
 }
 
+private data class TemplateCardModel(
+  val title: String,
+  val subtitle: String,
+  val badge: String,
+  val accent: Color,
+)
+
+private data class ProfileMenuModel(
+  val title: String,
+  val subtitle: String,
+  val icon: androidx.compose.ui.graphics.vector.ImageVector,
+)
+
 @Composable
-private fun HomeDestinationShell(title: String, body: String) {
+private fun TemplatesSection(selectedCategory: TemplateCategory, onCategorySelected: (TemplateCategory) -> Unit) {
+  val templates = remember(selectedCategory) {
+    when (selectedCategory) {
+      TemplateCategory.Trending -> listOf(
+        TemplateCardModel("Beat Cut", "Fast rhythm edits for short highlight drops", "Coming soon", ClipyPrimary),
+        TemplateCardModel("Loop Flash", "Boomerang-friendly pacing for meme moments", "Coming soon", ClipySecondary),
+        TemplateCardModel("Caption Pop", "Quick headline overlays for hooks and teasers", "Coming soon", ClipyAccent),
+      )
+      TemplateCategory.Vlog -> listOf(
+        TemplateCardModel("Daily Recap", "Soft framing and quick trims for daily stories", "Coming soon", Color(0xFF38BDF8)),
+        TemplateCardModel("Travel Stack", "Layered opener for scenic clips and transitions", "Coming soon", Color(0xFF22C55E)),
+      )
+      TemplateCategory.TikTok -> listOf(
+        TemplateCardModel("Hook First", "Front-load the moment with title-safe spacing", "Coming soon", Color(0xFFF472B6)),
+        TemplateCardModel("Reaction Loop", "Built for repeatable gags and boomerang energy", "Coming soon", Color(0xFFF59E0B)),
+      )
+    }
+  }
+
   PremiumCard {
-    Text(title, style = MaterialTheme.typography.titleLarge)
-    Spacer(Modifier.height(8.dp))
-    Text(body, color = ClipyMuted)
+    Text(stringResource(R.string.templates_title), style = MaterialTheme.typography.titleLarge)
+    Spacer(Modifier.height(6.dp))
+    Text(stringResource(R.string.templates_body), color = ClipyMuted)
+    Spacer(Modifier.height(14.dp))
+    ChipRow(items = TemplateCategory.entries.toList(), selected = selectedCategory, label = { Text(templateCategoryLabel(it)) }, onSelected = onCategorySelected)
+  }
+
+  templates.forEach { template ->
+    Card(
+      modifier = Modifier.fillMaxWidth(),
+      shape = RoundedCornerShape(22.dp),
+      colors = CardDefaults.cardColors(containerColor = Color(0xFF121827)),
+    ) {
+      Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Box(
+          modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(16f / 9f)
+            .background(
+              Brush.linearGradient(
+                listOf(template.accent.copy(alpha = 0.42f), Color(0xFF151C2F), Color(0xFF0B1020)),
+              ),
+            ),
+        ) {
+          Surface(
+            modifier = Modifier.align(Alignment.TopStart).padding(14.dp),
+            shape = RoundedCornerShape(999.dp),
+            color = Color.Black.copy(alpha = 0.26f),
+          ) {
+            Row(
+              modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+              horizontalArrangement = Arrangement.spacedBy(6.dp),
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = template.accent, modifier = Modifier.size(14.dp))
+              Text(template.badge, color = ClipyOnDark, style = MaterialTheme.typography.labelMedium)
+            }
+          }
+          Text(
+            text = stringResource(R.string.templates_preview_label),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(14.dp),
+            color = Color.White.copy(alpha = 0.74f),
+            style = MaterialTheme.typography.labelSmall,
+          )
+        }
+        Column(
+          modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+          verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+          Text(template.title, color = ClipyOnDark, style = MaterialTheme.typography.titleMedium)
+          Text(template.subtitle, color = ClipyMuted, style = MaterialTheme.typography.bodyMedium)
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun ProfileSection(onOpenSettings: () -> Unit) {
+  val menuItems = remember {
+    listOf(
+      ProfileMenuModel("My Projects", "Jump back into local exports and reusable drafts", Icons.Rounded.FolderOpen),
+      ProfileMenuModel("Settings", "Language, defaults, and storage behavior", Icons.Rounded.Settings),
+      ProfileMenuModel("Language", "Adjust app copy for your creator workflow", Icons.Rounded.Language),
+      ProfileMenuModel("About", "Privacy-first on-device editing for quick exports", Icons.Rounded.Info),
+    )
+  }
+
+  PremiumCard {
+    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+      Surface(shape = CircleShape, color = ClipyPrimary.copy(alpha = 0.18f), modifier = Modifier.size(68.dp)) {
+        Box(contentAlignment = Alignment.Center) {
+          Text("CL", color = ClipyOnDark, style = MaterialTheme.typography.titleMedium)
+        }
+      }
+      Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(stringResource(R.string.profile_name), color = ClipyOnDark, style = MaterialTheme.typography.titleLarge)
+        Text(stringResource(R.string.profile_email), color = ClipyMuted, style = MaterialTheme.typography.bodyMedium)
+      }
+    }
+  }
+
+  PremiumCard {
+    menuItems.forEachIndexed { index, item ->
+      ProfileMenuRow(item = item, onClick = onOpenSettings)
+      if (index != menuItems.lastIndex) {
+        HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+      }
+    }
+  }
+
+  OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth().height(54.dp)) {
+    Icon(Icons.Rounded.Logout, contentDescription = null, tint = ClipyMuted)
+    Spacer(Modifier.width(8.dp))
+    Text(stringResource(R.string.profile_logout), color = ClipyMuted)
+  }
+}
+
+@Composable
+private fun ProfileMenuRow(item: ProfileMenuModel, onClick: () -> Unit) {
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .clip(RoundedCornerShape(18.dp))
+      .clickable(onClick = onClick)
+      .padding(vertical = 14.dp),
+    horizontalArrangement = Arrangement.spacedBy(14.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Surface(shape = CircleShape, color = Color(0xFF172033)) {
+      Box(modifier = Modifier.padding(10.dp), contentAlignment = Alignment.Center) {
+        Icon(item.icon, contentDescription = null, tint = ClipyPrimary, modifier = Modifier.size(18.dp))
+      }
+    }
+    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+      Text(item.title, color = ClipyOnDark, style = MaterialTheme.typography.titleSmall)
+      Text(item.subtitle, color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
+    }
+    Icon(Icons.Rounded.ArrowForwardIos, contentDescription = null, tint = ClipyMuted, modifier = Modifier.size(14.dp))
   }
 }
 
@@ -1889,6 +2047,7 @@ private fun SettingsScreen(
 @Composable
 private fun LanguageScreen(selectedLanguage: String, onBack: () -> Unit, onApply: (AppLanguage) -> Unit) {
   var language by rememberSaveable { mutableStateOf(AppLanguage.entries.first { it.code == selectedLanguage }) }
+  val systemLanguageCode = remember { java.util.Locale.getDefault().language }
 
   Scaffold(
     containerColor = ClipyBackground,
@@ -1919,14 +2078,20 @@ private fun LanguageScreen(selectedLanguage: String, onBack: () -> Unit, onApply
       modifier = Modifier
         .fillMaxSize()
         .padding(padding)
-        .padding(16.dp),
+        .padding(16.dp)
+        .verticalScroll(rememberScrollState()),
       verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-      PremiumCard {
+      PremiumCard(modifier = Modifier.fillMaxWidth()) {
         Text(stringResource(R.string.language_screen_body), color = ClipyMuted)
       }
       AppLanguage.entries.forEach { option ->
-        LanguageCard(language = option, selected = language == option, onClick = { language = option })
+        LanguageCard(
+          language = option,
+          selected = language == option,
+          isRecommended = option.code == systemLanguageCode,
+          onClick = { language = option },
+        )
       }
     }
   }
@@ -3548,21 +3713,61 @@ private enum class HistoryFilter {
 }
 
 @Composable
-private fun LanguageCard(language: AppLanguage, selected: Boolean, onClick: () -> Unit) {
-  val borderColor = if (selected) ClipyPrimary else Color.Transparent
-  PremiumCard(
+private fun LanguageCard(language: AppLanguage, selected: Boolean, isRecommended: Boolean, onClick: () -> Unit) {
+  val borderColor by animateFloatAsState(targetValue = if (selected) 1f else 0f, label = "languageBorder")
+  Card(
     modifier = Modifier
       .fillMaxWidth()
-      .border(1.dp, borderColor, RoundedCornerShape(24.dp))
+      .border(1.dp, ClipyPrimary.copy(alpha = borderColor), RoundedCornerShape(24.dp))
+      .clip(RoundedCornerShape(24.dp))
       .clickable(
         interactionSource = remember { MutableInteractionSource() },
         indication = null,
         onClick = onClick,
       ),
+    shape = RoundedCornerShape(24.dp),
+    colors = CardDefaults.cardColors(containerColor = if (selected) Color(0xFF182443) else ClipySurfaceVariant()),
   ) {
-    Text(languageLabel(language), style = MaterialTheme.typography.titleLarge)
-    Spacer(Modifier.height(6.dp))
-    Text(languageHelper(language), color = ClipyMuted)
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(18.dp),
+      horizontalArrangement = Arrangement.spacedBy(14.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Surface(shape = CircleShape, color = if (selected) ClipyPrimary.copy(alpha = 0.18f) else Color(0xFF1A2234)) {
+        Box(modifier = Modifier.size(46.dp), contentAlignment = Alignment.Center) {
+          Text(languageEmoji(language), style = MaterialTheme.typography.titleMedium)
+        }
+      }
+      Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+          Text(languageLabel(language), color = ClipyOnDark, style = MaterialTheme.typography.titleMedium)
+          if (isRecommended) {
+            Surface(shape = RoundedCornerShape(999.dp), color = ClipyPrimary.copy(alpha = 0.14f)) {
+              Text(
+                text = stringResource(R.string.language_recommended),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                color = ClipyPrimary,
+                style = MaterialTheme.typography.labelSmall,
+              )
+            }
+          }
+        }
+        Text(languageHelper(language), color = ClipyMuted)
+      }
+      Surface(
+        shape = CircleShape,
+        color = if (selected) ClipyPrimary else Color.Transparent,
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) ClipyPrimary else ClipyMuted),
+      ) {
+        Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+          if (selected) {
+            Icon(Icons.Rounded.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+          }
+        }
+      }
+    }
   }
 }
 
@@ -3591,6 +3796,22 @@ private fun languageLabel(language: AppLanguage): String =
 @Composable
 private fun languageHelper(language: AppLanguage): String =
   stringResource(if (language == AppLanguage.English) R.string.language_english_helper else R.string.language_vietnamese_helper)
+
+private fun languageEmoji(language: AppLanguage): String =
+  when (language) {
+    AppLanguage.English -> "EN"
+    AppLanguage.Vietnamese -> "VI"
+  }
+
+@Composable
+private fun templateCategoryLabel(category: TemplateCategory): String =
+  stringResource(
+    when (category) {
+      TemplateCategory.Trending -> R.string.templates_category_trending
+      TemplateCategory.Vlog -> R.string.templates_category_vlog
+      TemplateCategory.TikTok -> R.string.templates_category_tiktok
+    },
+  )
 
 @Composable
 private fun watermarkPositionLabel(position: WatermarkPosition): String =

@@ -54,7 +54,7 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
   fun refreshMediaPermissionAndContent(forceTab: MediaTab? = null) {
     val context = getApplication<Application>()
     val tab = forceTab ?: mediaPickerState.value.activeTab
-    val hasPermission = hasMediaAccess(context)
+    val hasPermission = hasMediaAccess(context, tab)
     if (!hasPermission) {
       mediaPickerState.value = mediaPickerState.value.copy(
         activeTab = tab,
@@ -62,6 +62,8 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
         isLoading = false,
         albums = emptyList(),
         mediaItems = emptyList(),
+        canLoadMore = false,
+        loadCursor = 0,
       )
       return
     }
@@ -69,7 +71,7 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
       mediaPickerState.value = mediaPickerState.value.copy(activeTab = tab, hasMediaPermission = true, isLoading = true)
       val selectedIds = mediaPickerState.value.selectedItems.map { it.id }
       val selectedAlbumId = mediaPickerState.value.selectedAlbumId
-      val (albums, items) = withContext(Dispatchers.IO) { queryDeviceMedia(context, tab) }
+      val (albums, items) = withContext(Dispatchers.IO) { queryDeviceMedia(context, tab, offset = 0) }
       mediaPickerState.value = mediaPickerState.value.copy(
         activeTab = tab,
         hasMediaPermission = true,
@@ -79,10 +81,36 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
         selectedAlbumId = selectedAlbumId,
         isNextEnabled = mediaPickerState.value.selectedItems.isNotEmpty(),
         initialScrollTarget = items.firstOrNull { !it.isCameraItem }?.id,
+        canLoadMore = items.count { !it.isCameraItem } >= 60,
+        loadCursor = items.count { !it.isCameraItem },
       )
       if (selectedIds.isNotEmpty()) {
         rebuildSelectedItems()
       }
+    }
+  }
+
+  fun loadMorePickerItems() {
+    val currentState = mediaPickerState.value
+    if (currentState.isLoading || !currentState.canLoadMore || currentState.selectedAlbumId != null && currentState.selectedAlbumId != "recent") {
+      return
+    }
+    val context = getApplication<Application>()
+    val tab = currentState.activeTab
+    viewModelScope.launch {
+      mediaPickerState.value = currentState.copy(isLoading = true)
+      val (_, items) = withContext(Dispatchers.IO) {
+        queryDeviceMedia(context, tab, offset = currentState.loadCursor)
+      }
+      val existingIds = mediaPickerState.value.mediaItems.map { it.id }.toSet()
+      val appended = items.filterNot { it.id in existingIds || it.isCameraItem }
+      val mergedItems = mediaPickerState.value.mediaItems + appended
+      mediaPickerState.value = mediaPickerState.value.copy(
+        isLoading = false,
+        mediaItems = applySelection(mergedItems, mediaPickerState.value.selectedItems.map { it.id }),
+        canLoadMore = appended.isNotEmpty() && appended.size >= 60,
+        loadCursor = currentState.loadCursor + appended.size,
+      )
     }
   }
 
