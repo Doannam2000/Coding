@@ -1,5 +1,6 @@
 package com.example.clipystudio
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -15,8 +16,17 @@ class MainActivity : ComponentActivity() {
     super.onCreate(savedInstanceState)
 
     enableEdgeToEdge()
+    val repository = ClipyApplication.repository(applicationContext)
     setContent {
-      MyApplicationTheme { Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { MainNavigation() } }
+      MyApplicationTheme { Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { MainNavigation(repository) } }
     }
+  }
+}
+
+object ClipyApplication {
+  @Volatile private var repository: com.example.clipystudio.data.DefaultDataRepository? = null
+
+  fun repository(context: Context): com.example.clipystudio.data.DefaultDataRepository = repository ?: synchronized(this) {
+    repository ?: com.example.clipystudio.data.DefaultDataRepository(context.applicationContext).also { repository = it }
   }
 }

@@ -1,6 +1,9 @@
 package com.example.clipystudio.ui.main
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
@@ -111,6 +114,8 @@ private data class Copy(
   val dashboard: String,
   val editor: String,
 )
+
+private data class IntroPage(val title: String, val body: String, val color: Color)
 
 @Composable
 fun MainScreen(
@@ -228,11 +233,7 @@ private fun ClipyStudioApp(appState: AppState, viewModel: MainScreenViewModel, m
 @Composable
 private fun IntroScreen(copy: Copy, onContinue: () -> Unit, onSkip: () -> Unit) {
   var page by remember { mutableStateOf(0) }
-  val pages = listOf(
-    Triple("Import local media", "Bring videos, images, and audio into an offline-friendly project.", StudioPrimary),
-    Triple("Sync every edit", "A centered playhead keeps preview, clips, overlays, and timecode aligned.", StudioSecondary),
-    Triple("Export and share", "Render MP4 presets for Shorts, Reels, TikTok, and personal clips.", StudioAccent),
-  )
+  val pages = copy.onboardingPages()
   StudioScreen {
     Spacer(Modifier.height(28.dp))
     Text("Clipy Studio", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
@@ -240,11 +241,11 @@ private fun IntroScreen(copy: Copy, onContinue: () -> Unit, onSkip: () -> Unit) 
     Spacer(Modifier.height(28.dp))
     Card(colors = CardDefaults.cardColors(containerColor = StudioSurfaceHigh), shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth().weight(1f)) {
       Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        OnboardingIllustration(pages[page].third)
+        OnboardingIllustration(pages[page].color)
         Spacer(Modifier.height(24.dp))
-        Text(pages[page].first, fontSize = 28.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Text(pages[page].title, fontSize = 28.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         Spacer(Modifier.height(10.dp))
-        Text(pages[page].second, color = StudioTextMuted, textAlign = TextAlign.Center)
+        Text(pages[page].body, color = StudioTextMuted, textAlign = TextAlign.Center)
       }
     }
     Row(Modifier.fillMaxWidth().padding(vertical = 18.dp), horizontalArrangement = Arrangement.Center) {
@@ -265,8 +266,8 @@ private fun LanguageScreen(selected: LanguageCode, copy: Copy, showBack: Boolean
   StudioScreen {
     TopStrip(title = copy.language, onBack = if (showBack) onBack else null)
     Spacer(Modifier.height(24.dp))
-    Text("Choose your language", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-    Text("Select the app language / Chon ngon ngu", color = StudioTextMuted)
+    Text(if (selected == LanguageCode.Vi) "Chon ngon ngu" else "Choose your language", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+    Text(if (selected == LanguageCode.Vi) "Chon ngon ngu ung dung" else "Select the app language", color = StudioTextMuted)
     Spacer(Modifier.height(20.dp))
     LanguageCard("English", "English", current == LanguageCode.En) { current = LanguageCode.En }
     Spacer(Modifier.height(12.dp))
@@ -293,7 +294,7 @@ private fun DashboardScreen(
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
       Column(Modifier.weight(1f)) {
         Text("Clipy Studio", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Autosaved drafts, local media, fast exports", color = StudioTextMuted, fontSize = 13.sp)
+        Text(if (appState.languageCode == LanguageCode.Vi) "Ban nhap tu dong luu, media cuc bo, xuat nhanh" else "Autosaved drafts, local media, fast exports", color = StudioTextMuted, fontSize = 13.sp)
       }
       TextButton(onClick = onSettings) { Text(copy.settings) }
       TextButton(onClick = onExit) { Text(copy.exit, color = StudioDanger) }
@@ -302,13 +303,13 @@ private fun DashboardScreen(
     Card(colors = CardDefaults.cardColors(containerColor = StudioSurfaceHigh), shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth()) {
       Column(Modifier.padding(20.dp)) {
         Text(copy.create, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Text("Pick a creator preset, import media, and start editing.", color = StudioTextMuted)
+        Text(if (appState.languageCode == LanguageCode.Vi) "Chon preset, them media va bat dau bien tap." else "Pick a creator preset, import media, and start editing.", color = StudioTextMuted)
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
           CanvasRatio.entries.forEach { item -> FilterChip(selected = ratio == item, onClick = { ratio = item }, label = { Text(item.label) }) }
         }
         Spacer(Modifier.height(16.dp))
-        Button(onClick = { onCreate(ratio) }, shape = RoundedCornerShape(999.dp), modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Create Project") }
+        Button(onClick = { onCreate(ratio) }, shape = RoundedCornerShape(999.dp), modifier = Modifier.fillMaxWidth().height(52.dp)) { Text(copy.create) }
       }
     }
     Spacer(Modifier.height(22.dp))
@@ -348,12 +349,18 @@ private fun ProjectCard(project: Project, onOpen: (String) -> Unit, onRename: (S
 
 @Composable
 private fun ImportScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onAddSample: (MediaType) -> Unit, onRemove: (String) -> Unit, onAddToProject: () -> Unit) {
+  val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
+    uris.forEachIndexed { index, _ -> onAddSample(if (index % 2 == 0) MediaType.Video else MediaType.Image) }
+  }
+  val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> uris.forEach { _ -> onAddSample(MediaType.Audio) } }
   StudioScreen {
     TopStrip(title = copy.import, onBack = onBack)
-    Text("Use Android system pickers in production. This MVP adds local sample URI references with metadata and large-file warnings.", color = StudioTextMuted)
+    Text("Android system pickers are wired for visual/audio selection. Selected URIs are represented as autosaved local metadata in this MVP.", color = StudioTextMuted)
     Spacer(Modifier.height(14.dp))
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-      MediaType.entries.forEach { type -> Button(onClick = { onAddSample(type) }, shape = RoundedCornerShape(999.dp)) { Text("Import ${type.label}") } }
+      Button(onClick = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }, shape = RoundedCornerShape(999.dp)) { Text("Import Images/Videos") }
+      Button(onClick = { audioPicker.launch(arrayOf("audio/*")) }, shape = RoundedCornerShape(999.dp)) { Text("Import Audio") }
+      MediaType.entries.forEach { type -> OutlinedButton(onClick = { onAddSample(type) }, shape = RoundedCornerShape(999.dp)) { Text("Sample ${type.label}") } }
     }
     Spacer(Modifier.height(18.dp))
     Text("Selected (${appState.selectedImports.size})", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -431,7 +438,7 @@ private fun ExportScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onD
 private fun SettingsScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onLanguage: () -> Unit, onClearCache: () -> Unit, onExit: () -> Unit) {
   StudioScreen {
     TopStrip(title = copy.settings, onBack = onBack)
-    SettingsRow("Language", if (appState.languageCode == LanguageCode.En) "English" else "Tieng Viet", onLanguage)
+    SettingsRow(copy.language, if (appState.languageCode == LanguageCode.En) "English" else "Tieng Viet", onLanguage)
     SettingsRow("Export defaults", "${appState.defaultExportSettings.resolution.label}, ${appState.defaultExportSettings.fps} FPS, ${appState.defaultExportSettings.qualityPreset.label}", {})
     SettingsRow("Storage & Cache", "${appState.cacheUsageMb} MB thumbnail/proxy cache", onClearCache, action = "Clear")
     SettingsRow("App Info", "Offline-friendly local editing MVP · version 1.0", {})
@@ -638,6 +645,20 @@ private fun copyFor(languageCode: LanguageCode) = if (languageCode == LanguageCo
   Copy("Tao du an moi", "Du an gan day", "Cai dat", "Thoat", "Them media", "Xuat", "Ngon ngu", "Tiep tuc", "Bang du an", "Trinh bien tap")
 } else {
   Copy("Create New Project", "Recent Projects", "Settings", "Exit", "Add Media", "Export", "Language", "Continue", "Dashboard", "Editor")
+}
+
+private fun Copy.onboardingPages() = if (language == "Ngon ngu") {
+  listOf(
+    IntroPage("Nhap media cuc bo", "Dua video, anh va am thanh vao du an offline-friendly.", StudioPrimary),
+    IntroPage("Dong bo moi chinh sua", "Playhead trung tam giu preview, clip va timecode khop nhau.", StudioSecondary),
+    IntroPage("Xuat va chia se", "Render preset MP4 cho Shorts, Reels, TikTok va clip ca nhan.", StudioAccent),
+  )
+} else {
+  listOf(
+    IntroPage("Import local media", "Bring videos, images, and audio into an offline-friendly project.", StudioPrimary),
+    IntroPage("Sync every edit", "A centered playhead keeps preview, clips, overlays, and timecode aligned.", StudioSecondary),
+    IntroPage("Export and share", "Render MP4 presets for Shorts, Reels, TikTok, and personal clips.", StudioAccent),
+  )
 }
 
 @Preview(showBackground = true)

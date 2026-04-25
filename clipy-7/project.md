@@ -2,7 +2,7 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 05:55 UTC
+- Last updated: 2026-04-25 06:04 UTC
 - App: Clipy Studio
 - Slug: clipy
 - Tagline: A premium offline-friendly Android video editor for fast, polished social videos.

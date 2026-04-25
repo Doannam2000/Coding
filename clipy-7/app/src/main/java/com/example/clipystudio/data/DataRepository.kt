@@ -1,5 +1,6 @@
 package com.example.clipystudio.data
 
+import android.content.Context
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
@@ -35,13 +36,14 @@ interface DataRepository {
   fun clearCache()
 }
 
-class DefaultDataRepository : DataRepository {
-  private val state = MutableStateFlow(AppState())
+class DefaultDataRepository(context: Context? = null) : DataRepository {
+  private val preferences = context?.getSharedPreferences("clipy_state", Context.MODE_PRIVATE)
+  private val state = MutableStateFlow(loadInitialState())
   override val appState: Flow<AppState> = state
 
-  override fun completeIntro() = state.update { it.copy(hasCompletedIntro = true) }
+  override fun completeIntro() = persistUpdate { it.copy(hasCompletedIntro = true) }
 
-  override fun setLanguage(languageCode: LanguageCode) = state.update { it.copy(languageCode = languageCode, hasCompletedIntro = true) }
+  override fun setLanguage(languageCode: LanguageCode) = persistUpdate { it.copy(languageCode = languageCode, hasCompletedIntro = true) }
 
   override fun createProject(ratio: CanvasRatio) {
     val now = System.currentTimeMillis()
@@ -53,7 +55,7 @@ class DefaultDataRepository : DataRepository {
       canvasRatio = ratio,
       timeline = Timeline.defaultTimeline(),
     )
-    state.update { it.copy(projects = listOf(project) + it.projects, activeProjectId = project.id, selectedImports = emptyList()) }
+    persistUpdate { it.copy(projects = listOf(project) + it.projects, activeProjectId = project.id, selectedImports = emptyList()) }
   }
 
   override fun renameProject(projectId: String, name: String) = mutateProject(projectId) { it.copy(name = name.ifBlank { it.name }) }
@@ -72,16 +74,16 @@ class DefaultDataRepository : DataRepository {
         },
       ),
     )
-    state.update { it.copy(projects = listOf(copy) + it.projects, activeProjectId = copy.id) }
+    persistUpdate { it.copy(projects = listOf(copy) + it.projects, activeProjectId = copy.id) }
   }
 
-  override fun deleteProject(projectId: String) = state.update { app ->
+  override fun deleteProject(projectId: String) = persistUpdate { app ->
     app.copy(projects = app.projects.filterNot { it.id == projectId }, activeProjectId = app.activeProjectId.takeUnless { it == projectId })
   }
 
-  override fun openProject(projectId: String) = state.update { it.copy(activeProjectId = projectId) }
+  override fun openProject(projectId: String) = persistUpdate { it.copy(activeProjectId = projectId) }
 
-  override fun addImportedAsset(type: MediaType) = state.update { app ->
+  override fun addImportedAsset(type: MediaType) = persistUpdate { app ->
     val index = app.selectedImports.count { it.type == type } + 1
     val asset = MediaAsset(
       id = UUID.randomUUID().toString(),
@@ -102,7 +104,7 @@ class DefaultDataRepository : DataRepository {
     app.copy(selectedImports = app.selectedImports + asset)
   }
 
-  override fun removeImportedAsset(assetId: String) = state.update { it.copy(selectedImports = it.selectedImports.filterNot { asset -> asset.id == assetId }) }
+  override fun removeImportedAsset(assetId: String) = persistUpdate { it.copy(selectedImports = it.selectedImports.filterNot { asset -> asset.id == assetId }) }
 
   override fun addImportsToProject() {
     val app = state.value
@@ -145,7 +147,7 @@ class DefaultDataRepository : DataRepository {
       }
       project.copy(importedAssets = (project.importedAssets + imports).distinctBy { it.id }, timeline = baseTimeline.copy(tracks = updatedTracks).recalculateDuration())
     }
-    state.update { it.copy(selectedImports = emptyList()) }
+    persistUpdate { it.copy(selectedImports = emptyList()) }
   }
 
   override fun selectClip(clipId: String) = updateTimeline { it.copy(selectedClipId = clipId) }
@@ -197,39 +199,39 @@ class DefaultDataRepository : DataRepository {
     }
   }
 
-  override fun undo() = state.update { app ->
-    val activeId = app.activeProjectId ?: return@update app
-    val command = app.undoStack.lastOrNull() ?: return@update app
-    app.copy(
+  override fun undo() = persistUpdate { app ->
+    val activeId = app.activeProjectId
+    val command = app.undoStack.lastOrNull()
+    if (activeId == null || command == null) app else app.copy(
       projects = app.projects.map { if (it.id == activeId) command.before else it },
       undoStack = app.undoStack.dropLast(1),
       redoStack = app.redoStack + command,
     )
   }
 
-  override fun redo() = state.update { app ->
-    val activeId = app.activeProjectId ?: return@update app
-    val command = app.redoStack.lastOrNull() ?: return@update app
-    app.copy(
+  override fun redo() = persistUpdate { app ->
+    val activeId = app.activeProjectId
+    val command = app.redoStack.lastOrNull()
+    if (activeId == null || command == null) app else app.copy(
       projects = app.projects.map { if (it.id == activeId) command.after else it },
       undoStack = app.undoStack + command,
       redoStack = app.redoStack.dropLast(1),
     )
   }
 
-  override fun updateExportSettings(settings: ExportSettings) = state.update { it.copy(defaultExportSettings = settings) }
+  override fun updateExportSettings(settings: ExportSettings) = persistUpdate { it.copy(defaultExportSettings = settings) }
 
-  override fun startExport() = state.update { app ->
+  override fun startExport() = persistUpdate { app ->
     app.copy(exportJob = ExportJob(projectId = app.activeProjectId.orEmpty(), settings = app.defaultExportSettings, status = ExportStatus.Complete, progressPercent = 100, outputUri = "gallery://ClipyStudio/export-${System.currentTimeMillis()}.mp4"))
   }
 
-  override fun cancelExport() = state.update { it.copy(exportJob = it.exportJob?.copy(status = ExportStatus.Cancelled, progressPercent = 0)) }
+  override fun cancelExport() = persistUpdate { it.copy(exportJob = it.exportJob?.copy(status = ExportStatus.Cancelled, progressPercent = 0)) }
 
-  override fun clearExportResult() = state.update { it.copy(exportJob = null) }
+  override fun clearExportResult() = persistUpdate { it.copy(exportJob = null) }
 
-  override fun clearCache() = state.update { it.copy(cacheUsageMb = 0) }
+  override fun clearCache() = persistUpdate { it.copy(cacheUsageMb = 0) }
 
-  private fun mutateProject(projectId: String, transform: (Project) -> Project) = state.update { app ->
+  private fun mutateProject(projectId: String, transform: (Project) -> Project) = persistUpdate { app ->
     app.copy(projects = app.projects.map { project -> if (project.id == projectId) transform(project).copy(updatedAt = System.currentTimeMillis(), autosaveVersion = project.autosaveVersion + 1) else project })
   }
 
@@ -243,9 +245,27 @@ class DefaultDataRepository : DataRepository {
     val project = app.activeProject ?: return
     val after = transform(project).copy(updatedAt = System.currentTimeMillis(), autosaveVersion = project.autosaveVersion + 1)
     if (after == project) return
-    state.update { current ->
+    persistUpdate { current ->
       current.copy(projects = current.projects.map { if (it.id == project.id) after else it }, undoStack = current.undoStack + UndoRedoCommand(description, project, after), redoStack = emptyList())
     }
+  }
+
+  private fun loadInitialState(): AppState = AppState(
+    languageCode = LanguageCode.valueOf(preferences?.getString("language", LanguageCode.En.name) ?: LanguageCode.En.name),
+    hasCompletedIntro = preferences?.getBoolean("intro", false) ?: false,
+    activeProjectId = preferences?.getString("lastProjectId", null),
+    cacheUsageMb = preferences?.getInt("cacheUsageMb", 128) ?: 128,
+  )
+
+  private fun persistUpdate(transform: (AppState) -> AppState) = state.update { app -> transform(app).also(::persistSettings) }
+
+  private fun persistSettings(appState: AppState) {
+    preferences?.edit()
+      ?.putString("language", appState.languageCode.name)
+      ?.putBoolean("intro", appState.hasCompletedIntro)
+      ?.putString("lastProjectId", appState.activeProjectId)
+      ?.putInt("cacheUsageMb", appState.cacheUsageMb)
+      ?.apply()
   }
 
   private fun mapSelectedClip(project: Project, transform: (TimelineClip) -> TimelineClip): Project {
