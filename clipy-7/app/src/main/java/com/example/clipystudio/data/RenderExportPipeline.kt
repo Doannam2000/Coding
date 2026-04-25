@@ -63,6 +63,7 @@ data class TempRenderWorkspace(
   val videoTempPath: String? = null,
   val audioTempPath: String? = null,
   val muxedTempPath: String? = null,
+  val finalOutputPath: String? = null,
   val createdAtMs: Long,
   val isCleaned: Boolean = false,
 )
@@ -351,11 +352,17 @@ object CodecStrategySelector {
 
 interface TempFileManager {
   fun createWorkspace(projectId: String): TempRenderWorkspace
+  fun createShareableOutput(workspace: TempRenderWorkspace, displayName: String): File
   fun cleanup(workspace: TempRenderWorkspace): TempRenderWorkspace
+  fun cleanupStale(maxAgeMs: Long = 86_400_000L): Int
+  fun availableStorageBytes(): Long
+  fun owns(file: File): Boolean
 }
 
 class DefaultTempFileManager(private val root: File = File(System.getProperty("java.io.tmpdir"), "clipy-studio-exports")) : TempFileManager {
   override fun createWorkspace(projectId: String): TempRenderWorkspace {
+    cleanupStale()
+    root.mkdirs()
     val sessionId = "$projectId-${UUID.randomUUID()}"
     val directory = File(root, sessionId).apply { mkdirs() }
     val video = File(directory, "video.tmp")
@@ -364,13 +371,57 @@ class DefaultTempFileManager(private val root: File = File(System.getProperty("j
     video.writeText("")
     audio.writeText("")
     muxed.writeText("")
-    return TempRenderWorkspace(sessionId, directory.absolutePath, video.absolutePath, audio.absolutePath, muxed.absolutePath, System.currentTimeMillis(), false)
+    return TempRenderWorkspace(sessionId, directory.absolutePath, video.absolutePath, audio.absolutePath, muxed.absolutePath, null, System.currentTimeMillis(), false)
+  }
+
+  override fun createShareableOutput(workspace: TempRenderWorkspace, displayName: String): File {
+    val rootPath = root.canonicalFile.toPath()
+    val workspacePath = File(workspace.directoryPath).canonicalFile.toPath()
+    require(workspacePath != rootPath && workspacePath.startsWith(rootPath)) { "Workspace must stay inside app-owned export cache." }
+    val completedDirectory = File(root, "completed").apply { mkdirs() }
+    val safeDisplayName = displayName.replace(Regex("[^A-Za-z0-9._-]+"), "-").trim('-', '.').ifBlank { "clipy-export.mp4" }
+    val outputFile = File(completedDirectory, safeDisplayName)
+    require(outputFile.canonicalFile.toPath().startsWith(rootPath)) { "Output must stay inside app-owned export cache." }
+    return outputFile.apply { writeText("Clipy Studio export placeholder for ${workspace.sessionId}") }
   }
 
   override fun cleanup(workspace: TempRenderWorkspace): TempRenderWorkspace {
-    File(workspace.directoryPath).deleteRecursively()
+    val directory = File(workspace.directoryPath)
+    val rootPath = root.canonicalFile.toPath()
+    val directoryPath = directory.canonicalFile.toPath()
+    if (directoryPath != rootPath && directoryPath.startsWith(rootPath)) {
+      val finalOutputPath = workspace.finalOutputPath
+      if (finalOutputPath == null) {
+        directory.deleteRecursively()
+      } else {
+        File(finalOutputPath).canonicalFile.takeIf { it.toPath().startsWith(rootPath) }
+        directory.deleteRecursively()
+      }
+    }
     return workspace.copy(isCleaned = true)
   }
+
+  override fun cleanupStale(maxAgeMs: Long): Int {
+    root.mkdirs()
+    val now = System.currentTimeMillis()
+    return root.listFiles()?.count { file ->
+      val canonical = runCatching { file.canonicalFile }.getOrNull() ?: return@count false
+      val isOwned = canonical.toPath().startsWith(root.canonicalFile.toPath())
+      val isExpired = now - canonical.lastModified() > maxAgeMs
+      when {
+        !isOwned || !isExpired -> false
+        file.isDirectory && file.name.contains('-') -> runCatching { canonical.deleteRecursively() }.getOrDefault(false)
+        file.isDirectory && file.name == "completed" -> false
+        else -> false
+      }
+    } ?: 0
+  }
+
+  override fun availableStorageBytes(): Long = root.usableSpace.coerceAtLeast(0L)
+
+  override fun owns(file: File): Boolean = runCatching {
+    file.canonicalFile.toPath().startsWith(root.canonicalFile.toPath())
+  }.getOrDefault(false)
 }
 
 object RenderExportErrorClassifier {
@@ -385,6 +436,19 @@ object RenderExportErrorClassifier {
       phase == RenderExportPhase.SAVING_OUTPUT -> RenderExportErrorType.STORAGE_FAILURE
       else -> RenderExportErrorType.UNKNOWN
     }
-    return RenderExportError(type, throwable.message ?: "Export failed.", type != RenderExportErrorType.OUT_OF_MEMORY, throwable.cause?.message, phase)
+    return RenderExportError(type, friendlyMessage(type), type != RenderExportErrorType.OUT_OF_MEMORY, throwable::class.simpleName, phase)
+  }
+
+  private fun friendlyMessage(type: RenderExportErrorType): String = when (type) {
+    RenderExportErrorType.VALIDATION -> "Check your timeline and export settings, then try again."
+    RenderExportErrorType.CODEC_UNAVAILABLE -> "This device cannot use the selected codec settings. Try 1080p or 30 FPS."
+    RenderExportErrorType.DECODER_FAILURE -> "One media item could not be decoded. Replace it or choose another file."
+    RenderExportErrorType.FRAME_RENDER_FAILURE -> "The preview frame could not be rendered. Retry after closing other apps."
+    RenderExportErrorType.AUDIO_MIX_FAILURE -> "Audio mixing failed. Try muting or replacing the audio layer."
+    RenderExportErrorType.MUXER_FAILURE -> "Video packaging failed. Retry export with MP4 settings."
+    RenderExportErrorType.STORAGE_FAILURE -> "Clipy Studio could not save the export. Free space and retry."
+    RenderExportErrorType.CANCELLED -> "Export cancelled. Temporary files were cleaned."
+    RenderExportErrorType.OUT_OF_MEMORY -> "This export needs more memory. Try fewer layers or a lower resolution."
+    RenderExportErrorType.UNKNOWN -> "Export failed safely. Your project was not changed."
   }
 }

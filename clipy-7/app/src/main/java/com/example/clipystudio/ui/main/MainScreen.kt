@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.core.content.FileProvider
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -53,6 +54,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -113,6 +115,7 @@ import com.example.clipystudio.data.LanguageCode
 import com.example.clipystudio.data.MediaAsset
 import com.example.clipystudio.data.MediaType
 import com.example.clipystudio.data.Project
+import com.example.clipystudio.data.DefaultTempFileManager
 import com.example.clipystudio.data.RenderExportState
 import com.example.clipystudio.data.RenderExportStatus
 import com.example.clipystudio.data.RenderPipelineState
@@ -147,6 +150,7 @@ import com.example.clipystudio.theme.StudioTextMuted
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import java.io.File
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -223,19 +227,31 @@ private data class Copy(
   val editor: String,
 )
 
+private data class ImportPermissionNotice(
+  val title: String,
+  val body: String,
+  val confirmLabel: String,
+  val dismissLabel: String,
+  val openSettings: Boolean = false,
+)
+
 private data class IntroPage(val title: String, val body: String, val color: Color)
 
 @Composable
 fun MainScreen(
   onItemClick: (NavKey) -> Unit,
   modifier: Modifier = Modifier,
-  viewModel: MainScreenViewModel = viewModel { MainScreenViewModel() },
+  viewModel: MainScreenViewModel? = null,
 ) {
-  val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+  val context = LocalContext.current
+  val resolvedViewModel = viewModel ?: viewModel {
+    MainScreenViewModel(tempFileManager = DefaultTempFileManager(File(context.cacheDir, "exports")))
+  }
+  val uiState by resolvedViewModel.uiState.collectAsStateWithLifecycle()
   when (val state = uiState) {
     MainScreenUiState.Loading -> LoadingSurface(modifier)
     is MainScreenUiState.Error -> ErrorSurface(state.throwable.message.orEmpty(), modifier)
-    is MainScreenUiState.Success -> ClipyStudioApp(state.appState, state.editorUiState, viewModel, modifier)
+    is MainScreenUiState.Success -> ClipyStudioApp(state.appState, state.editorUiState, resolvedViewModel, modifier)
   }
 }
 
@@ -245,6 +261,7 @@ private fun ClipyStudioApp(appState: AppState, editorUiState: com.example.clipys
   var languageFromSettings by remember { mutableStateOf(false) }
   var exitRequested by remember { mutableStateOf(false) }
   val snackbarHostState = remember { SnackbarHostState() }
+  val scope = rememberCoroutineScope()
   val context = LocalContext.current
   val copy = copyFor(appState.languageCode)
   val shareEvent by viewModel.shareEvent.collectAsStateWithLifecycle()
@@ -256,13 +273,26 @@ private fun ClipyStudioApp(appState: AppState, editorUiState: com.example.clipys
   }
   LaunchedEffect(shareEvent) {
     val event = shareEvent ?: return@LaunchedEffect
-    context.startActivity(
-      Intent(Intent.ACTION_SEND).apply {
-        type = event.mimeType
-        putExtra(Intent.EXTRA_STREAM, Uri.parse(event.uri))
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-      },
-    )
+    val shareUri = event.uri.toShareUri(context)
+    if (shareUri.scheme != "content" || event.mimeType != "video/mp4") {
+      snackbarHostState.showSnackbar(if (appState.languageCode == LanguageCode.Vi) "Video xuat chua san sang de chia se an toan." else "The exported video is not ready to share safely.")
+      viewModel.consumeShareEvent()
+      return@LaunchedEffect
+    }
+    runCatching {
+      context.startActivity(
+        Intent.createChooser(
+          Intent(Intent.ACTION_SEND).apply {
+            type = event.mimeType
+            putExtra(Intent.EXTRA_STREAM, shareUri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+          },
+          event.chooserTitle,
+        ),
+      )
+    }.onFailure {
+      snackbarHostState.showSnackbar(if (appState.languageCode == LanguageCode.Vi) "Khong the mo bang chia se luc nay." else "Unable to open the share sheet right now.")
+    }
     viewModel.consumeShareEvent()
   }
 
@@ -312,6 +342,7 @@ private fun ClipyStudioApp(appState: AppState, editorUiState: com.example.clipys
         Screen.Import -> ImportScreen(
           appState = appState,
           copy = copy,
+          snackbarHostState = snackbarHostState,
           onBack = { screen = Screen.Dashboard },
           onAddAsset = viewModel::addImportedAsset,
           onRemove = viewModel::removeImportedAsset,
@@ -341,7 +372,10 @@ private fun ClipyStudioApp(appState: AppState, editorUiState: com.example.clipys
           copy = copy,
           onBack = { screen = Screen.Dashboard },
           onLanguage = { languageFromSettings = true; screen = Screen.Language },
-          onClearCache = viewModel::clearCache,
+          onClearCache = {
+            viewModel.clearCache()
+            scope.launch { snackbarHostState.showSnackbar(if (appState.languageCode == LanguageCode.Vi) "Da xoa tep tam. Media goc va video xuat khong bi xoa." else "Temporary files cleared. Original media and exported videos were not deleted.") }
+          },
           onExit = { exitRequested = true },
         )
       }
@@ -357,6 +391,17 @@ private fun ClipyStudioApp(appState: AppState, editorUiState: com.example.clipys
       }
     }
   }
+}
+
+private fun String.toShareUri(context: Context): Uri {
+  val parsed = Uri.parse(this)
+  if (parsed.scheme == "content") return parsed
+  if (parsed.scheme == "file") {
+    val path = parsed.path ?: return parsed
+    val file = java.io.File(path)
+    return runCatching { FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file) }.getOrDefault(parsed)
+  }
+  return parsed
 }
 
 @Composable
@@ -477,27 +522,113 @@ private fun ProjectCard(project: Project, onOpen: (String) -> Unit, onRename: (S
 }
 
 @Composable
-private fun ImportScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onAddAsset: (MediaType, String?, String?, Long?) -> Unit, onRemove: (String) -> Unit, onAddToProject: () -> Unit) {
+private fun ImportScreen(appState: AppState, copy: Copy, snackbarHostState: SnackbarHostState, onBack: () -> Unit, onAddAsset: (MediaType, String?, String?, Long?) -> Unit, onRemove: (String) -> Unit, onAddToProject: () -> Unit) {
   val context = LocalContext.current
+  val scope = rememberCoroutineScope()
+  var pendingPicker by remember { mutableStateOf<MediaType?>(null) }
+  var permissionNotice by remember { mutableStateOf<ImportPermissionNotice?>(null) }
+  val largeFileLimitBytes = 512L * 1024L * 1024L
+  fun importMessage(en: String, vi: String) = if (appState.languageCode == LanguageCode.Vi) vi else en
+  fun permissionNotice(titleEn: String, titleVi: String, bodyEn: String, bodyVi: String, openSettings: Boolean = false) =
+    ImportPermissionNotice(
+      title = importMessage(titleEn, titleVi),
+      body = importMessage(bodyEn, bodyVi),
+      confirmLabel = if (openSettings) importMessage("Open settings", "Mo cai dat") else importMessage("Choose media", "Chon media"),
+      dismissLabel = importMessage("Cancel", "Huy"),
+      openSettings = openSettings,
+    )
   val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
+    if (uris.isEmpty()) {
+      scope.launch { snackbarHostState.showSnackbar(importMessage("Media selection cancelled. Your project was not changed.", "Da huy chon media. Du an khong thay doi.")) }
+      return@rememberLauncherForActivityResult
+    }
     uris.forEach { uri ->
-      val metadata = context.readUriMetadata(uri)
-      onAddAsset(if (metadata.mimeType?.startsWith("image") == true) MediaType.Image else MediaType.Video, uri.toString(), metadata.displayName, metadata.sizeBytes)
+      val metadata = context.readUriMetadataSafely(uri)
+      if (metadata == null) {
+        scope.launch { snackbarHostState.showSnackbar(importMessage("This media item could not be read. Try another file.", "Khong the doc media nay. Hay thu tep khac.")) }
+      } else if (metadata.mimeType?.startsWith("image") != true && metadata.mimeType?.startsWith("video") != true) {
+        scope.launch { snackbarHostState.showSnackbar(importMessage("This file type is not supported for image/video import.", "Loai tep nay khong duoc ho tro cho anh/video.")) }
+      } else if ((metadata.sizeBytes ?: 0L) > largeFileLimitBytes) {
+        scope.launch { snackbarHostState.showSnackbar(importMessage("This file is too large to import safely in this MVP build.", "Tep qua lon de nhap an toan trong ban MVP.")) }
+      } else {
+        onAddAsset(if (metadata.mimeType?.startsWith("image") == true) MediaType.Image else MediaType.Video, uri.toString(), metadata.displayName, metadata.sizeBytes)
+      }
     }
   }
   val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+    if (uris.isEmpty()) {
+      scope.launch { snackbarHostState.showSnackbar(importMessage("Audio selection cancelled. Your project was not changed.", "Da huy chon am thanh. Du an khong thay doi.")) }
+      return@rememberLauncherForActivityResult
+    }
     uris.forEach { uri ->
-      val metadata = context.readUriMetadata(uri)
-      onAddAsset(MediaType.Audio, uri.toString(), metadata.displayName, metadata.sizeBytes)
+      if (!context.persistReadPermission(uri)) {
+        permissionNotice = permissionNotice(
+          titleEn = "Limited audio access",
+          titleVi = "Quyen truy cap am thanh bi gioi han",
+          bodyEn = "Clipy Studio can still use this audio in the current session, but Android did not grant long-term access. Re-pick it if it is missing later.",
+          bodyVi = "Clipy Studio van co the dung tep am thanh nay trong phien hien tai, nhung Android khong cap quyen truy cap lau dai. Hay chon lai neu tep bi mat sau do.",
+        )
+      }
+      val metadata = context.readUriMetadataSafely(uri)
+      if (metadata == null || metadata.mimeType?.startsWith("audio") != true) {
+        scope.launch { snackbarHostState.showSnackbar(importMessage("This audio file is not supported.", "Tep am thanh khong duoc ho tro.")) }
+      } else if ((metadata.sizeBytes ?: 0L) > largeFileLimitBytes) {
+        scope.launch { snackbarHostState.showSnackbar(importMessage("This audio file is too large to import safely.", "Tep am thanh qua lon de nhap an toan.")) }
+      } else {
+        onAddAsset(MediaType.Audio, uri.toString(), metadata.displayName, metadata.sizeBytes)
+      }
     }
   }
   StudioScreen {
     TopStrip(title = copy.import, onBack = onBack)
-    Text(if (appState.languageCode == LanguageCode.Vi) "Dung bo chon he thong de them video, anh va am thanh. URI duoc luu thanh metadata ban nhap." else "Use Android system pickers for visual and audio media. Selected URIs are autosaved as draft metadata.", color = StudioTextMuted)
+    Text(if (appState.languageCode == LanguageCode.Vi) "Dung bo chon he thong de them media. Android 13+ chi cap quyen cho tep ban chon; Clipy Studio khong yeu cau truy cap bo nho rong." else "Use Android system pickers. On Android 13+, Clipy Studio works with media you choose instead of requesting broad storage access.", color = StudioTextMuted)
     Spacer(Modifier.height(14.dp))
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-      Button(onClick = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }, shape = RoundedCornerShape(999.dp)) { Text(if (appState.languageCode == LanguageCode.Vi) "Them anh/video" else "Import Images/Videos") }
-      Button(onClick = { audioPicker.launch(arrayOf("audio/*")) }, shape = RoundedCornerShape(999.dp)) { Text(if (appState.languageCode == LanguageCode.Vi) "Them am thanh" else "Import Audio") }
+      Button(onClick = { pendingPicker = MediaType.Video }, shape = RoundedCornerShape(999.dp)) { Text(if (appState.languageCode == LanguageCode.Vi) "Them anh/video" else "Import Images/Videos") }
+      Button(onClick = { pendingPicker = MediaType.Audio }, shape = RoundedCornerShape(999.dp)) { Text(if (appState.languageCode == LanguageCode.Vi) "Them am thanh" else "Import Audio") }
+    }
+    permissionNotice?.let { notice ->
+      Spacer(Modifier.height(12.dp))
+      OutlinedCard(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+          Text(notice.title, color = StudioAccent, fontWeight = FontWeight.Bold)
+          Text(notice.body, color = StudioTextMuted, fontSize = 13.sp, modifier = Modifier.weight(1f))
+          TextButton(onClick = { permissionNotice = null }) { Text(if (appState.languageCode == LanguageCode.Vi) "Dong" else "Dismiss") }
+        }
+      }
+    }
+    if (pendingPicker != null) {
+      val isAudio = pendingPicker == MediaType.Audio
+      AlertDialog(
+        onDismissRequest = { pendingPicker = null },
+        title = { Text(if (isAudio) importMessage("Choose audio safely", "Chon am thanh an toan") else importMessage("Choose media safely", "Chon media an toan")) },
+        text = {
+          Text(
+            if (isAudio) {
+              importMessage(
+                "Clipy Studio opens the Android document picker for audio and only reads files you choose. It does not need broad Music and audio permission for this import path.",
+                "Clipy Studio mo bo chon tai lieu Android cho am thanh va chi doc cac tep ban chon. Duong nhap nay khong can quyen Nhac va am thanh rong.",
+              )
+            } else {
+              importMessage(
+                "Clipy Studio only reads the files you choose for editing and export. Clearing temporary files will not delete original media.",
+                "Clipy Studio chi doc nhung tep ban chon de tao va xuat video. Media goc khong bi xoa khi xoa cache.",
+              )
+            },
+          )
+        },
+        confirmButton = {
+          TextButton(onClick = {
+            pendingPicker = null
+            if (isAudio) {
+              audioPicker.launch(arrayOf("audio/*"))
+            } else {
+              photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+            }
+          }) { Text(if (appState.languageCode == LanguageCode.Vi) "Chon media" else "Choose media") }
+        },
+        dismissButton = { TextButton(onClick = { pendingPicker = null }) { Text(if (appState.languageCode == LanguageCode.Vi) "Huy" else "Cancel") } },
+      )
     }
     Spacer(Modifier.height(18.dp))
     Text("Selected (${appState.selectedImports.size})", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -643,6 +774,21 @@ private fun ExportScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onD
     Spacer(Modifier.height(18.dp))
     ExportOptionCard("Estimated output", "${settings.bitrateMbps.toInt()} Mbps", "Snapshot includes timeline clips, overlays, text, stickers, effects, transitions, speed, canvas, and audio state.")
     Spacer(Modifier.height(12.dp))
+    Card(colors = CardDefaults.cardColors(containerColor = StudioSurfaceHigh), shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
+      Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(if (appState.languageCode == LanguageCode.Vi) "Luu tru an toan" else "Storage safety", fontWeight = FontWeight.Bold)
+        Text(
+          if (appState.languageCode == LanguageCode.Vi) {
+            "Clipy Studio chi tao tep tam trong cache cua ung dung trong luc xuat. Chia se chi bat dau sau khi video MP4 hop le duoc tao thanh cong."
+          } else {
+            "Clipy Studio keeps temporary render files inside app cache and only enables sharing after a valid MP4 output exists."
+          },
+          color = StudioTextMuted,
+          fontSize = 13.sp,
+        )
+      }
+    }
+    Spacer(Modifier.height(12.dp))
     RenderPipelineSummary(renderState, exportState, appState.activeProject?.timeline?.durationMs ?: 0L)
     if (!hasExportableContent) {
       Text("Import media or add a visible clip before export.", color = StudioDanger, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
@@ -730,9 +876,12 @@ private fun ExportProgressPanel(exportState: RenderExportState, viewModel: MainS
       Text("${exportState.progress.percent.roundToInt()}% · ${exportState.status.name.lowercase().replaceFirstChar { it.uppercase() }}", color = if (exportState.status == RenderExportStatus.FAILED) StudioDanger else StudioSecondary, fontWeight = FontWeight.Bold)
       Text("Frame ${exportState.progress.renderedFrames} of ${exportState.progress.totalFrames} · ${exportState.progress.currentTimeMs.asTimecode()}", color = StudioTextMuted, fontSize = 13.sp)
       exportState.codecStrategy?.let { Text("${it.selected.name.replace('_', ' ')} · ${it.videoMimeType}", color = StudioTextMuted, fontSize = 13.sp) }
-      exportState.tempWorkspace?.let { Text(if (it.isCleaned) "Temp files cleaned" else "Temp workspace active", color = StudioTextMuted, fontSize = 13.sp) }
+      exportState.tempWorkspace?.let { Text(if (it.isCleaned) "Temporary files cleaned. Final export kept." else "Temp workspace active", color = StudioTextMuted, fontSize = 13.sp) }
       exportState.diagnostics.audioSync?.let { Text("Audio sync drift ${it.driftMs} ms", color = if (it.withinTolerance) StudioTextMuted else StudioAccent, fontSize = 13.sp) }
       exportState.error?.let { Text(it.message, color = StudioDanger, fontSize = 13.sp) }
+      if (exportState.status == RenderExportStatus.CANCELLED) {
+        Text("You can retry export when you're ready. The project and completed exports were kept.", color = StudioTextMuted, fontSize = 13.sp, textAlign = TextAlign.Center)
+      }
       Column(Modifier.fillMaxWidth().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         exportState.diagnostics.stages.forEach { stage ->
           Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -764,7 +913,7 @@ private fun ExportSuccessPanel(exportState: RenderExportState, onBack: () -> Uni
       Text("${output.width}x${output.height} · ${output.fps} FPS · ${output.durationMs.asTimecode()} · ${output.sizeBytes.asSizeLabel()}", color = StudioTextMuted, textAlign = TextAlign.Center)
       exportState.codecStrategy?.let { Text("${it.selected.name.replace('_', ' ')} save path ready for sharing", color = StudioTextMuted, fontSize = 13.sp, textAlign = TextAlign.Center) }
       Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = viewModel::requestShare, enabled = output.uri.isNotBlank(), modifier = Modifier.height(48.dp)) { Text("Share") }
+        Button(onClick = viewModel::requestShare, enabled = exportState.status == RenderExportStatus.COMPLETED && output.uri.isNotBlank(), modifier = Modifier.height(48.dp)) { Text("Share") }
         Button(onClick = viewModel::clearExportResult, modifier = Modifier.height(48.dp)) { Text("New Export") }
         OutlinedButton(onClick = onBack) { Text("Return to editor") }
         OutlinedButton(onClick = onDashboard) { Text("Dashboard") }
@@ -780,6 +929,21 @@ private fun SettingsScreen(appState: AppState, copy: Copy, onBack: () -> Unit, o
     SettingsRow(copy.language, if (appState.languageCode == LanguageCode.En) "English" else "Tieng Viet", onLanguage)
     SettingsRow(if (appState.languageCode == LanguageCode.Vi) "Mac dinh xuat" else "Export defaults", "${appState.defaultExportSettings.resolution.label}, ${appState.defaultExportSettings.fps} FPS, ${appState.defaultExportSettings.qualityPreset.label}", {})
     SettingsRow(if (appState.languageCode == LanguageCode.Vi) "Luu tru va cache" else "Storage & Cache", "${appState.cacheUsageMb} MB thumbnail/proxy cache", onClearCache, action = if (appState.languageCode == LanguageCode.Vi) "Xoa" else "Clear")
+    Card(colors = CardDefaults.cardColors(containerColor = StudioSurfaceHigh), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+      Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(if (appState.languageCode == LanguageCode.Vi) "Bao mat quyen rieng tu" else "Privacy-safe storage", fontWeight = FontWeight.Bold)
+        Text(
+          if (appState.languageCode == LanguageCode.Vi) {
+            "Media nhap vao van nam o vi tri ban chon. Xoa tep tam chi xoa cache cua ung dung va khong xoa video da xuat."
+          } else {
+            "Imported media stays in the location you selected. Clearing temporary files only removes app cache and does not delete exported videos."
+          },
+          color = StudioTextMuted,
+          fontSize = 13.sp,
+        )
+      }
+    }
+    Spacer(Modifier.height(12.dp))
     SettingsRow(if (appState.languageCode == LanguageCode.Vi) "Thong tin ung dung" else "App Info", if (appState.languageCode == LanguageCode.Vi) "Bien tap cuc bo offline-friendly MVP - version 1.0" else "Offline-friendly local editing MVP - version 1.0", {})
     SettingsRow(copy.exit, "Close after autosave/export confirmation", onExit, danger = true)
   }
@@ -1859,9 +2023,20 @@ private fun Copy.onboardingPages() = if (language == "Ngon ngu") {
 
 private data class UriMetadata(val displayName: String?, val sizeBytes: Long?, val mimeType: String?)
 
+private fun Context.readUriMetadataSafely(uri: Uri): UriMetadata? = runCatching { readUriMetadata(uri) }.getOrNull()
+
+private fun Context.persistReadPermission(uri: Uri): Boolean {
+  val grants = contentResolver.persistedUriPermissions
+  if (grants.any { it.uri == uri && it.isReadPermission }) return true
+  return runCatching {
+    contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+  }.isSuccess
+}
+
 private fun Context.readUriMetadata(uri: Uri): UriMetadata {
   var displayName: String? = null
   var sizeBytes: Long? = null
+  requireNotNull(contentResolver.openInputStream(uri)) { "Selected media is not readable." }.use { }
   contentResolver.query(uri, null, null, null, null)?.use { cursor ->
     val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
     val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)

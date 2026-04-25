@@ -65,6 +65,32 @@ class RenderPipelineEngineTest {
   }
 
   @Test
+  fun tempFileManager_deletesOnlyWorkspaceUnderConfiguredRoot() {
+    val root = createTempDirectory().toFile()
+    val manager = DefaultTempFileManager(root)
+    val workspace = manager.createWorkspace("p1")
+
+    val cleaned = manager.cleanup(workspace)
+
+    assertTrue(cleaned.isCleaned)
+    assertFalse(java.io.File(workspace.directoryPath).exists())
+    assertTrue(root.exists())
+  }
+
+  @Test
+  fun tempFileManager_doesNotDeleteRootOrSiblingPaths() {
+    val root = createTempDirectory(prefix = "clipy-root").toFile()
+    val sibling = java.io.File(root.parentFile, "${root.name}-sibling").apply { mkdirs() }
+    val manager = DefaultTempFileManager(root)
+
+    manager.cleanup(TempRenderWorkspace("root", root.absolutePath, createdAtMs = 0L))
+    manager.cleanup(TempRenderWorkspace("sibling", sibling.absolutePath, createdAtMs = 0L))
+
+    assertTrue(root.exists())
+    assertTrue(sibling.exists())
+  }
+
+  @Test
   fun planFrame_resolvesActiveLayersTransitionAndText() {
     val input = RenderPipelineEngine.collectInput(sampleRenderTimeline(), sampleProject())
     val encoder = ExportSettingsMapper.map(ExportOptions(), input.settings, input.durationMs).getOrThrow()

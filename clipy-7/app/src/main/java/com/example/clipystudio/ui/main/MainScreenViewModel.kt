@@ -42,6 +42,7 @@ import com.example.clipystudio.editor.model.EditorUiState
 import com.example.clipystudio.editor.model.toEditorUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -52,10 +53,11 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class MainScreenViewModel(
   private val dataRepository: DataRepository = DefaultDataRepository(),
-  private val tempFileManager: TempFileManager = DefaultTempFileManager(),
+  private val tempFileManager: TempFileManager,
 ) : ViewModel() {
   private val _renderPipelineState = MutableStateFlow(RenderPipelineState())
   val renderPipelineState: StateFlow<RenderPipelineState> = _renderPipelineState.asStateFlow()
@@ -65,6 +67,10 @@ class MainScreenViewModel(
   val shareEvent: StateFlow<ShareOutputEvent?> = _shareEvent.asStateFlow()
   private var exportJob: Job? = null
   private var latestAppState: AppState? = null
+
+  init {
+    viewModelScope.launch(Dispatchers.IO) { tempFileManager.cleanupStale() }
+  }
 
   val uiState: StateFlow<MainScreenUiState> =
     dataRepository.appState
@@ -175,8 +181,28 @@ class MainScreenViewModel(
       _renderExportState.value = RenderExportState(status = RenderExportStatus.FAILED, phase = RenderExportPhase.PREPARING_GRAPH, error = RenderExportError(RenderExportErrorType.VALIDATION, "No active project is open.", true, null, RenderExportPhase.PREPARING_GRAPH), canRetry = true)
       return
     }
+    if (project.timeline.durationMs <= 0L || project.timeline.tracks.all { it.clips.isEmpty() }) {
+      _renderExportState.value = RenderExportState(status = RenderExportStatus.FAILED, phase = RenderExportPhase.PREPARING_GRAPH, error = RenderExportError(RenderExportErrorType.VALIDATION, "Add at least one media clip before exporting.", true, null, RenderExportPhase.PREPARING_GRAPH), canRetry = true)
+      return
+    }
     val pipeline = _renderPipelineState.value.takeIf { it.status == RenderPipelineStatus.READY && it.graph != null && it.encoderConfig != null } ?: run {
       prepareRenderPipeline(appState)
+      return
+    }
+    val exportPreflightError = validateExportPreflight(project, pipeline)
+    if (exportPreflightError != null) {
+      _renderExportState.value = RenderExportState(
+        status = RenderExportStatus.FAILED,
+        phase = RenderExportPhase.SAVING_OUTPUT,
+        options = pipeline.options,
+        pipelineState = pipeline,
+        error = exportPreflightError,
+        canRetry = exportPreflightError.recoverable,
+        diagnostics = RenderDiagnostics(
+          stages = RenderExportPlanner.stageDiagnostics(RenderExportPhase.SAVING_OUTPUT, error = exportPreflightError),
+          lastFailureCategory = exportPreflightError.type,
+        ),
+      )
       return
     }
     exportJob?.cancel()
@@ -279,13 +305,15 @@ class MainScreenViewModel(
             stages = RenderExportPlanner.stageDiagnostics(RenderExportPhase.SAVING_OUTPUT, framePlan = _renderExportState.value.diagnostics.lastFramePlan, audioPlan = audioPlan, audioSync = syncReport, codecStrategy = codec, workspace = workspace),
           ),
         )
+        val displayName = "ClipyStudio-${project.name.ifBlank { project.id }.toSafeFileSegment()}-${System.currentTimeMillis()}.mp4"
+        val outputFile = withContext(Dispatchers.IO) { tempFileManager.createShareableOutput(workspace, displayName) }
         val output = withContext(Dispatchers.IO) {
           ExportOutput(
-            uri = "content://com.example.clipystudio.exports/${workspace.sessionId}.mp4",
-            displayName = "ClipyStudio-${project.name.ifBlank { project.id }}-${System.currentTimeMillis()}.mp4",
+            uri = outputFile.toURI().toString(),
+            displayName = displayName,
             mimeType = "video/mp4",
             durationMs = graph.durationMs,
-            sizeBytes = (graph.encoderConfig.videoBitrate / 8L * (graph.durationMs.coerceAtLeast(1L) / 1_000L).coerceAtLeast(1L)).coerceAtLeast(1_024L),
+            sizeBytes = outputFile.length().coerceAtLeast((graph.encoderConfig.videoBitrate / 8L * (graph.durationMs.coerceAtLeast(1L) / 1_000L).coerceAtLeast(1L)).coerceAtLeast(1_024L)),
             width = graph.encoderConfig.width,
             height = graph.encoderConfig.height,
             fps = graph.encoderConfig.fps,
@@ -293,7 +321,7 @@ class MainScreenViewModel(
           )
         }
 
-        val cleaned = withContext(Dispatchers.IO) { tempFileManager.cleanup(workspace) }
+        val cleaned = withContext(Dispatchers.IO) { tempFileManager.cleanup(workspace.copy(finalOutputPath = outputFile.canonicalPath)) }
         _renderExportState.value = _renderExportState.value.copy(
           status = RenderExportStatus.COMPLETED,
           phase = RenderExportPhase.SHARING_READY,
@@ -364,7 +392,20 @@ class MainScreenViewModel(
   }
 
   fun requestShare() {
-    val output = _renderExportState.value.output ?: return
+    val state = _renderExportState.value
+    if (state.status != RenderExportStatus.COMPLETED) {
+      _renderExportState.value = state.copy(
+        status = RenderExportStatus.FAILED,
+        error = RenderExportError(RenderExportErrorType.STORAGE_FAILURE, "Export is not ready to share yet. Please finish export first.", true, null, RenderExportPhase.SHARING_READY),
+        canRetry = true,
+      )
+      return
+    }
+    val output = state.output?.takeIf { it.uri.isShareableExportUri() && it.mimeType == "video/mp4" } ?: run {
+      _renderExportState.value = state.copy(status = RenderExportStatus.FAILED, error = RenderExportError(RenderExportErrorType.STORAGE_FAILURE, "Export is not ready to share yet. Please export again.", true, null, RenderExportPhase.SHARING_READY), canRetry = true)
+      return
+    }
+    _renderExportState.value = state.copy(error = null, canRetry = false)
     _shareEvent.value = ShareOutputEvent(output.uri, output.mimeType, "Share exported video")
   }
 
@@ -380,13 +421,80 @@ class MainScreenViewModel(
     )
   }
 
-  fun clearCache() = dataRepository.clearCache()
+  fun clearCache() {
+    dataRepository.clearCache()
+    viewModelScope.launch(Dispatchers.IO) {
+      runCatching {
+        tempFileManager.cleanupStale(0L)
+      }.onSuccess {
+        _renderExportState.value = _renderExportState.value.copy(
+          error = null,
+          progress = _renderExportState.value.progress.copy(
+            message = "Temporary files cleared. Original media and completed exports were kept.",
+            updatedAtMs = System.currentTimeMillis(),
+          ),
+        )
+      }.onFailure { throwable ->
+        val error = RenderExportErrorClassifier.classify(throwable, RenderExportPhase.CLEANING_UP)
+        _renderExportState.value = _renderExportState.value.copy(
+          error = error.copy(message = "Clipy Studio could not clear temporary files right now. Try again."),
+          progress = _renderExportState.value.progress.copy(
+            message = "Temporary files were not cleared.",
+            updatedAtMs = System.currentTimeMillis(),
+          ),
+        )
+      }
+    }
+  }
+
+  override fun onCleared() {
+    exportJob?.cancel()
+    val workspace = _renderExportState.value.tempWorkspace
+    if (workspace != null && !workspace.isCleaned) {
+      runCatching { tempFileManager.cleanup(workspace) }
+    }
+    super.onCleared()
+  }
+
+  private fun validateExportPreflight(project: com.example.clipystudio.data.Project, pipeline: RenderPipelineState): RenderExportError? {
+    val graph = pipeline.graph ?: return RenderExportError(RenderExportErrorType.VALIDATION, "Export pipeline is not ready yet. Try again.", true, null, RenderExportPhase.PREPARING_GRAPH)
+    val estimatedBytes = (graph.encoderConfig.videoBitrate / 8L * (graph.durationMs.coerceAtLeast(1L) / 1_000L).coerceAtLeast(1L)).coerceAtLeast(1_048_576L)
+    val availableBytes = tempFileManager.availableStorageBytes()
+    if (availableBytes in 1 until estimatedBytes * 2) {
+      return RenderExportError(
+        RenderExportErrorType.STORAGE_FAILURE,
+        "Not enough free space for export. Clear temporary files or choose a lower preset.",
+        true,
+        null,
+        RenderExportPhase.SAVING_OUTPUT,
+      )
+    }
+    val missingMedia = project.importedAssets.firstOrNull { it.uri.isBlank() }
+    if (missingMedia != null) {
+      return RenderExportError(
+        RenderExportErrorType.VALIDATION,
+        "One imported item is no longer available. Replace it before exporting.",
+        true,
+        null,
+        RenderExportPhase.PREPARING_GRAPH,
+      )
+    }
+    return null
+  }
 
   private fun ensureActiveSession() {
+    viewModelScope.coroutineContext.ensureActive()
     if (_renderExportState.value.status == RenderExportStatus.CANCELLING) {
       throw kotlinx.coroutines.CancellationException("Export cancelled")
     }
   }
+
+  private fun String.toSafeFileSegment(): String = replace(Regex("[^A-Za-z0-9._-]+"), "-").trim('-', '.').ifBlank { "project" }.take(80)
+
+  private fun String.isShareableExportUri(): Boolean = startsWith("content://") || runCatching {
+    val file = File(java.net.URI(this))
+    file.isFile && tempFileManager.owns(file)
+  }.getOrDefault(false)
 }
 
 sealed interface MainScreenUiState {

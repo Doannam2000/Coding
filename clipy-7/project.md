@@ -13,12 +13,12 @@ New editor-facing code should prefer stable models under `editor.model` (`Projec
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 10:55 UTC
+- Last updated: 2026-04-25 11:00 UTC
 - App: Clipy Studio
 - Slug: clipy
 - Tagline: A premium offline-friendly Android video editor for fast, polished social videos.
 - Target users: General users
-- Design direction: Incremental testing-state design updates for Clipy Studio that preserve the existing editor architecture and visual language. Focus the UI guidance on observable states, validation feedback, disabled/enabled affordances, recovery paths, and testable readiness indicators across media, editing, export, sharing, and error scenarios.
+- Design direction: Incremental release-hardening updates that preserve Clipy Studio's existing editor-first visual language while making production states feel safer, clearer, and more trustworthy. Focus on permission education, recoverable error states, cache/storage transparency, release identity polish, and non-disruptive feedback during memory-heavy media operations.
 - Core constraints: android only, MVP first, offline-friendly where possible
 Design style must align with: modern minimal premium
 Typography should align with: clean geometric sans
@@ -541,6 +541,7 @@ Function: gestures must be stable across small screens, large screens, landscape
 Additional follow-up requirement: PROJECT ARCHITECTURE FINALIZATION: Split app into clear modules: ui, editor, timeline, media, render, data, design-system. Create stable models Project, Track, Clip, Overlay, AudioClip, TextClip, StickerClip, EffectClip, Transition, Keyframe, ExportSettings. Ensure every screen uses ViewModel + StateFlow and no business logic is hidden inside Composable.
 Additional follow-up requirement: QUALITY + BUGFIX PASS: Review the entire app and fix all broken flows: media import, editor open, timeline sync, preview playback, add audio/text/sticker, trim/split/delete, undo/redo, autosave, export, save/share. Remove all placeholder buttons, fake logic, unused code, broken navigation, UI overlap, clipped text, and laggy gestures.
 Additional follow-up requirement: TESTING SCENARIOS: Add manual and automated test cases for: image-only project, video-only project, mixed image/video, add music, extract audio, add text, add sticker, apply filter/effect, transition, trim, split, reorder, undo/redo, reopen draft, export 720p/1080p, cancel export, share video, permission denied, missing file, low storage.
+Additional follow-up requirement: RELEASE HARDENING: Prepare app for production release. Optimize memory, clear temp cache, handle Android permissions correctly, support Android 13+ media permissions, fix crashes, add friendly error messages, add app icon/name, privacy-safe storage behavior, ProGuard/R8 safe rules if needed, and ensure release build compiles without lint/manifest errors.
 
 ### Core Features
 - Splash -> onboarding/intro -> main app flow
@@ -567,11 +568,13 @@ Additional follow-up requirement: TESTING SCENARIOS: Add manual and automated te
 
 ### Main Screens
 - Main Editor Screen
+- Media Permission And Picker Flow
 - Export And Share UI
-- Error And Edge Case States
+- Release App Identity
+- Release Build And Diagnostics
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Keep the existing single-module Android project, MVVM boundaries, and repository-compatible storage models. Add tests around current ViewModel, timeline, media import, export, persistence mapping, and UI-state behavior. Prefer fixture builders and fake repository/media/export collaborators inside test sources instead of production rewrites. If a requested scenario targets a feature that is intentionally unavailable in the current app, test that the UI is disabled or reports unavailable state rather than adding fake behavior.
+- storage: Keep existing repository and editor persistence boundaries. Harden storage by using app-owned cache/temp directories for intermediate render files, privacy-safe scoped storage or MediaStore/FileProvider content URIs for exported/shared videos, and persistable URI permissions only for user-selected media that must survive process restarts. Do not add broad external storage access or rewrite project persistence. Add cleanup, permission, error-mapping, and release-build safeguards around existing ViewModel, repository, media import, render/export, manifest, and resource boundaries.
 <!-- AUTO-GENERATED:CORE_END -->
