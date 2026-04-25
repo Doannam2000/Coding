@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 07:29 UTC
+- Last updated: 2026-04-25 07:35 UTC
 - App: Clipy Studio
 - Slug: clipy
 - Tagline: A premium offline-friendly Android video editor for fast, polished social videos.
 - Target users: General users
-- Design direction: Incremental refinement of the existing compact dark Clipy Studio timeline editor: keep the fixed-playhead, multi-lane architecture stable while adding production-grade interaction states for pinch zoom, visible-only thumbnail loading, snap feedback, active clip highlighting, transition overlaps, keyframe editing, autosave status, and undo/redo confidence. The design should feel technical, precise, and responsive rather than decorative, with subtle motion and clear state feedback during timeline manipulation.
+- Design direction: Incremental render-pipeline design update for the existing dark Clipy Studio editor shell. Keep the timeline-first workspace, compact status pills, thumbnail placeholders, guide overlays, and subdued technical visual language. Add export/render states as non-disruptive feedback surfaces: a render readiness summary, encoder settings confirmation, frame scheduling progress, layer-stack diagnostics, and per-layer render badges without redesigning core editing screens.
 - Core constraints: android only, MVP first, offline-friendly where possible
 Design style must align with: modern minimal premium
 Typography should align with: clean geometric sans
@@ -326,6 +326,37 @@ Function: optimize recomposition, scrolling, dragging, and memory usage.
 
 20. STRICT:
 Function: no fake timeline, no desync, no lag, production-ready behavior.
+Additional follow-up requirement: RENDER PIPELINE PART 1:
+
+1. RENDER INPUT:
+Function: collect full project state including all tracks, clips, overlays, filters, effects, transitions, audio, and settings.
+
+2. EXPORT SETTINGS:
+Function: map user options (resolution, fps, format, quality) to encoder config.
+
+3. RENDER GRAPH:
+Function: build ordered render pipeline combining all layers.
+
+4. FRAME SCHEDULER:
+Function: iterate frames using fps and calculate currentTimeMs per frame.
+
+5. MAIN VIDEO RENDER:
+Function: render correct video/image frame with trim, speed, crop, transform.
+
+6. IMAGE CLIP RENDER:
+Function: convert image clips into timed frames with duration and animations.
+
+7. VIDEO CLIP RENDER:
+Function: decode and seek correct source frame using timeline mapping.
+
+8. TRANSITION RENDER:
+Function: blend frames between clips using transition progress.
+
+9. OVERLAY RENDER:
+Function: render overlays above main layer with transform and opacity.
+
+10. TEXT RENDER:
+Function: draw text with style, animation, and timing.
 
 ### Core Features
 - Splash -> onboarding/intro -> main app flow
@@ -351,14 +382,12 @@ Function: no fake timeline, no desync, no lag, production-ready behavior.
 - Performance foundations including lazy thumbnail loading, background rendering/export, media proxy strategies for large files, memory-aware preview, and responsive Compose UI
 
 ### Main Screens
-- Editor Timeline Workspace
-- Preview Canvas Synchronization
-- Timeline Interaction Layer
-- Timeline State Recovery
-- Timeline Engine Unit Tests
+- Export Settings Entry Point
+- Render Pipeline Status Surface
+- Render Graph Debug Coverage
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Continue using the existing SharedPreferences-backed DataRepository and ProjectTimeline projection. Add deterministic TimelineEngine functions for zoom focal preservation, visible range calculation, snap target resolution, active composition resolution, transition overlap math, and keyframe interpolation. Keep Compose rendering from EditorUiState only, with gesture callbacks dispatching intents to MainScreenViewModel. Add a small thumbnail coordinator/cache behind the ViewModel or repository boundary so UI asks for visible thumbnail state without decoding images directly in composables. Persist new timeline fields with safe defaults for existing saved projects, debounce autosave on committed mutations, and keep undo/redo snapshots in memory while saving exact ProjectTimeline state for restore.
+- storage: Continue using the existing SharedPreferences-backed DataRepository for ProjectTimeline persistence. Add render/export planning as deterministic Kotlin engine code, likely in a new RenderPipelineEngine or TimelineRenderEngine file under the data/domain layer, with MainScreenViewModel collecting current EditorUiState.timeline and export options. Compose should only display export settings and render preparation status, never decode video frames or build frame data directly. EncoderConfig mapping, render graph construction, frame scheduling, active layer resolution, transition frame planning, and text/overlay frame planning should be pure functions with unit tests. Platform MediaCodec, MediaExtractor, bitmap decoding, and final file writing can be added behind the same graph and frame plan boundary in a later render pipeline part.
 <!-- AUTO-GENERATED:CORE_END -->

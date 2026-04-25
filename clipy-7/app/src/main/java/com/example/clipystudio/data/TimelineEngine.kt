@@ -51,6 +51,10 @@ data class ProjectTimelineClip(
   val effect: String? = null,
   val trackType: TrackType,
   val trackIndex: Int = 0,
+  val keyframes: List<Keyframe> = emptyList(),
+  val text: String? = null,
+  val textStyleRef: String? = null,
+  val animationRef: String? = null,
 )
 
 data class TimelineViewportState(
@@ -348,7 +352,26 @@ object TimelineEngine {
   }
 
   private fun Timeline.projectClips(type: TrackType): List<ProjectTimelineClip> = tracks.firstOrNull { it.type == type }?.clips.orEmpty().map { clip ->
-    ProjectTimelineClip(clip.id, clip.clipType, clip.assetId, clip.startMs, clip.durationMs, clip.sourceInMs, 0, clip.videoProperties.speed, clip.audioProperties.volume, clip.transform, clip.filterAdjustments.filterId, clip.filterAdjustments.filterId, type, 0)
+    ProjectTimelineClip(
+      id = clip.id,
+      type = clip.clipType,
+      mediaUri = clip.assetId,
+      startTimeMs = clip.startMs,
+      durationMs = clip.durationMs,
+      trimStartMs = clip.sourceInMs,
+      trimEndMs = 0,
+      speed = clip.videoProperties.speed,
+      volume = clip.audioProperties.volume,
+      transform = clip.transform,
+      filter = clip.filterAdjustments.filterId,
+      effect = if (clip.clipType == ClipType.Effect) clip.filterAdjustments.filterId ?: clip.title else null,
+      trackType = type,
+      trackIndex = tracks.firstOrNull { it.type == type }?.orderIndex ?: 0,
+      keyframes = clip.keyframes,
+      text = clip.textProperties.content.takeIf { clip.clipType == ClipType.Text || clip.clipType == ClipType.Sticker },
+      textStyleRef = listOf(clip.textProperties.fontSizeSp, clip.textProperties.color, clip.textProperties.backgroundColor, clip.textProperties.alignment).joinToString("|"),
+      animationRef = clip.textProperties.animation,
+    )
   }
 
   fun resolveSnap(timeline: Timeline, trackType: TrackType, clipId: String, proposed: Long): TimelineSnapResult {

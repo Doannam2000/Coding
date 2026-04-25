@@ -13,7 +13,10 @@ import com.example.clipystudio.data.LanguageCode
 import com.example.clipystudio.data.MediaAsset
 import com.example.clipystudio.data.MediaType
 import com.example.clipystudio.data.CanvasBackground
+import com.example.clipystudio.data.Project
+import com.example.clipystudio.data.RenderPipelineStatus
 import com.example.clipystudio.data.StickerAsset
+import com.example.clipystudio.data.Timeline
 import com.example.clipystudio.data.TransitionType
 import com.example.clipystudio.data.TrimHandle
 import junit.framework.TestCase.assertEquals
@@ -29,10 +32,33 @@ class MainScreenViewModelTest {
     val viewModel = MainScreenViewModel(FakeClipyRepository())
     assertEquals(MainScreenUiState.Loading, viewModel.uiState.first())
   }
+
+  @Test
+  fun prepareRenderPipeline_setsReadyForValidProject() = runTest {
+    val project = Project("p1", "Render", 0, 0, timeline = Timeline.defaultTimeline())
+    val appState = AppState(hasCompletedIntro = true, projects = listOf(project), activeProjectId = project.id)
+    val viewModel = MainScreenViewModel(FakeClipyRepository(appState))
+
+    viewModel.prepareRenderPipeline(appState)
+
+    assertEquals(RenderPipelineStatus.READY, viewModel.renderPipelineState.value.status)
+    assertEquals(300L, viewModel.renderPipelineState.value.totalFrames)
+  }
+
+  @Test
+  fun prepareRenderPipeline_setsErrorForUnsupportedFormat() = runTest {
+    val project = Project("p1", "Render", 0, 0, timeline = Timeline.defaultTimeline())
+    val appState = AppState(hasCompletedIntro = true, projects = listOf(project), activeProjectId = project.id, defaultExportSettings = ExportSettings(format = "MOV"))
+    val viewModel = MainScreenViewModel(FakeClipyRepository(appState))
+
+    viewModel.prepareRenderPipeline(appState)
+
+    assertEquals(RenderPipelineStatus.ERROR, viewModel.renderPipelineState.value.status)
+  }
 }
 
-private class FakeClipyRepository : DataRepository {
-  override val appState: Flow<AppState> = flowOf(AppState(hasCompletedIntro = true))
+private class FakeClipyRepository(appState: AppState = AppState(hasCompletedIntro = true)) : DataRepository {
+  override val appState: Flow<AppState> = flowOf(appState)
   override fun completeIntro() = Unit
   override fun setLanguage(languageCode: LanguageCode) = Unit
   override fun createProject(ratio: CanvasRatio) = Unit

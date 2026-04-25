@@ -16,16 +16,26 @@ import com.example.clipystudio.data.LanguageCode
 import com.example.clipystudio.data.MediaAsset
 import com.example.clipystudio.data.MediaType
 import com.example.clipystudio.data.CanvasBackground
+import com.example.clipystudio.data.ExportOptions
+import com.example.clipystudio.data.ExportSettingsMapper
+import com.example.clipystudio.data.RenderPipelineEngine
+import com.example.clipystudio.data.RenderPipelineState
+import com.example.clipystudio.data.RenderPipelineStatus
 import com.example.clipystudio.data.StickerAsset
 import com.example.clipystudio.data.TransitionType
 import com.example.clipystudio.data.TrimHandle
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
 class MainScreenViewModel(private val dataRepository: DataRepository = DefaultDataRepository()) : ViewModel() {
+  private val _renderPipelineState = MutableStateFlow(RenderPipelineState())
+  val renderPipelineState: StateFlow<RenderPipelineState> = _renderPipelineState.asStateFlow()
+
   val uiState: StateFlow<MainScreenUiState> =
     dataRepository.appState
       .map<AppState, MainScreenUiState>(MainScreenUiState::Success)
@@ -79,6 +89,21 @@ class MainScreenViewModel(private val dataRepository: DataRepository = DefaultDa
   fun undo() = dataRepository.undo()
   fun redo() = dataRepository.redo()
   fun updateExportSettings(settings: ExportSettings) = dataRepository.updateExportSettings(settings)
+  fun prepareRenderPipeline(appState: AppState, options: ExportOptions? = ExportSettingsMapper.toExportOptions(appState.defaultExportSettings)) {
+    _renderPipelineState.value = RenderPipelineState(RenderPipelineStatus.PREPARING, options)
+    val project = appState.activeProject
+    if (project == null) {
+      _renderPipelineState.value = RenderPipelineState(RenderPipelineStatus.ERROR, options, errorMessage = "No active project is open.")
+      return
+    }
+    if (options == null) {
+      _renderPipelineState.value = RenderPipelineState(RenderPipelineStatus.ERROR, errorMessage = "Only MP4 export is supported in this render pipeline part.")
+      return
+    }
+    RenderPipelineEngine.prepare(project.timeline, project, options)
+      .onSuccess { graph -> _renderPipelineState.value = RenderPipelineState(RenderPipelineStatus.READY, options, graph.encoderConfig, graph, graph.totalFrames) }
+      .onFailure { error -> _renderPipelineState.value = RenderPipelineState(RenderPipelineStatus.ERROR, options, errorMessage = error.message ?: "Render preparation failed.") }
+  }
   fun startExport() = dataRepository.startExport()
   fun completeExport() = dataRepository.completeExport()
   fun cancelExport() = dataRepository.cancelExport()

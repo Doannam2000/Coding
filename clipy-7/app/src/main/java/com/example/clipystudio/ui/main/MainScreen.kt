@@ -99,6 +99,8 @@ import com.example.clipystudio.data.LanguageCode
 import com.example.clipystudio.data.MediaAsset
 import com.example.clipystudio.data.MediaType
 import com.example.clipystudio.data.Project
+import com.example.clipystudio.data.RenderPipelineState
+import com.example.clipystudio.data.RenderPipelineStatus
 import com.example.clipystudio.data.QualityPreset
 import com.example.clipystudio.data.StickerAsset
 import com.example.clipystudio.data.StickerCategory
@@ -501,11 +503,15 @@ private fun EditorTopBar(title: String, version: Long, canUndo: Boolean, canRedo
 @Composable
 private fun ExportScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onDashboard: () -> Unit, viewModel: MainScreenViewModel) {
   val settings = appState.defaultExportSettings
+  val renderState by viewModel.renderPipelineState.collectAsStateWithLifecycle()
   LaunchedEffect(appState.exportJob?.status) {
     if (appState.exportJob?.status == ExportStatus.Running) {
       delay(900)
       viewModel.completeExport()
     }
+  }
+  LaunchedEffect(settings, appState.activeProject?.timeline?.version, appState.activeProjectId) {
+    viewModel.prepareRenderPipeline(appState)
   }
   StudioScreen {
     TopStrip(title = if (appState.languageCode == LanguageCode.Vi) "Xuat video" else "Export Video", onBack = onBack)
@@ -536,8 +542,49 @@ private fun ExportScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onD
     }
     Spacer(Modifier.height(18.dp))
     ExportOptionCard("Estimated output", "${settings.bitrateMbps.toInt()} Mbps", "Snapshot includes timeline clips, overlays, text, stickers, effects, transitions, speed, canvas, and audio state.")
+    Spacer(Modifier.height(12.dp))
+    RenderPipelineSummary(renderState, appState.activeProject?.timeline?.durationMs ?: 0L)
     Spacer(Modifier.weight(1f))
-    Button(onClick = viewModel::startExport, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(999.dp)) { Text(if (appState.languageCode == LanguageCode.Vi) "Bat dau xuat" else "Start Export") }
+    Button(onClick = viewModel::startExport, enabled = renderState.status == RenderPipelineStatus.READY, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(999.dp)) { Text(if (appState.languageCode == LanguageCode.Vi) "Bat dau xuat" else "Start Export") }
+  }
+}
+
+@Composable
+private fun RenderPipelineSummary(renderState: RenderPipelineState, durationMs: Long) {
+  val graph = renderState.graph
+  val encoder = renderState.encoderConfig
+  Card(colors = CardDefaults.cardColors(containerColor = StudioSurfaceHigh), shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Render pipeline readiness summary" }) {
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text("Render readiness", fontWeight = FontWeight.Bold)
+        StatusPill(renderState.status.name.lowercase().replaceFirstChar { it.uppercase() }, if (renderState.status == RenderPipelineStatus.ERROR) StudioDanger else StudioSecondary)
+      }
+      if (renderState.status == RenderPipelineStatus.ERROR) {
+        Text(renderState.errorMessage.orEmpty(), color = StudioDanger, fontSize = 13.sp)
+      } else {
+        Text("${durationMs.asTimecode()} · ${renderState.totalFrames} frames · ${encoder?.fps ?: 0} FPS", color = StudioTextMuted, fontSize = 13.sp)
+        Text("Encoder ${encoder?.width ?: 0}x${encoder?.height ?: 0} · ${encoder?.videoMimeType ?: "pending"} · ${((encoder?.videoBitrate ?: 0) / 1_000_000f).let { "%.1f".format(it) }} Mbps", color = StudioTextMuted, fontSize = 13.sp)
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          StatusPill("Layers ${graph?.layers?.size ?: 0}", StudioPrimary)
+          StatusPill("Audio ${graph?.audio?.size ?: 0}", StudioSecondary)
+          StatusPill("Transitions ${graph?.transitions?.size ?: 0}", StudioAccent)
+        }
+        graph?.layers?.take(5)?.let { nodes ->
+          Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            nodes.forEach { node -> StatusPill("${node.type.name.lowercase()} ${node.startTimeMs.asTimecode()}", StudioSurface) }
+          }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun StatusPill(label: String, color: Color) {
+  Surface(color = color.copy(alpha = 0.18f), shape = RoundedCornerShape(999.dp), modifier = Modifier.height(32.dp)) {
+    Box(Modifier.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
+      Text(label, color = if (color == StudioSurface) StudioTextMuted else color, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+    }
   }
 }
 
