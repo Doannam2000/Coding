@@ -643,5 +643,5 @@ private fun copyFor(languageCode: LanguageCode) = if (languageCode == LanguageCo
 @Preview(showBackground = true)
 @Composable
 fun MainScreenPreview() {
-  MyApplicationTheme { ClipyStudioApp(AppState(hasCompletedIntro = true), MainScreenViewModel()) }
+  MyApplicationTheme { MainScreen(onItemClick = {}) }
 }
