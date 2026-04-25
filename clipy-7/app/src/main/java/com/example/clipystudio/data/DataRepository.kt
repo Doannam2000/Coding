@@ -84,7 +84,7 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
       createdAt = now,
       updatedAt = now,
       canvasRatio = ratio,
-      timeline = Timeline.defaultTimeline(),
+      timeline = Timeline.emptyTimeline(),
     )
     persistUpdate { it.copy(projects = listOf(project) + it.projects, activeProjectId = project.id, selectedImports = emptyList()) }
   }
@@ -112,15 +112,18 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
     app.copy(projects = app.projects.filterNot { it.id == projectId }, activeProjectId = app.activeProjectId.takeUnless { it == projectId })
   }
 
-  override fun openProject(projectId: String) = persistUpdate { it.copy(activeProjectId = projectId) }
+  override fun openProject(projectId: String) = persistUpdate { app ->
+    if (app.projects.any { it.id == projectId }) app.copy(activeProjectId = projectId) else app
+  }
 
   override fun addImportedAsset(type: MediaType, uri: String?, displayName: String?, sizeBytes: Long?) = persistUpdate { app ->
+    val safeUri = uri?.takeIf { it.isNotBlank() } ?: return@persistUpdate app
     val index = app.selectedImports.count { it.type == type } + 1
     val asset = MediaAsset(
       id = UUID.randomUUID().toString(),
-      uri = uri ?: "local://${type.name.lowercase()}/$index",
+      uri = safeUri,
       type = type,
-      displayName = displayName?.ifBlank { null } ?: "${type.label} sample $index",
+      displayName = displayName?.ifBlank { null } ?: "${type.label} import $index",
       durationMs = when (type) {
         MediaType.Image -> 4_000
         MediaType.Video -> 8_000
@@ -176,7 +179,7 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
               audioProperties = AudioProperties(volume = 0.8f),
             )
           })
-          TrackType.Text -> if (textTrack.clips.isEmpty()) track.copy(clips = listOf(TimelineClip.textClip())) else track
+          TrackType.Text -> track
           else -> track
         }
       }
@@ -278,7 +281,6 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
         ClipAction.VolumeUp -> clip.copy(audioProperties = clip.audioProperties.copy(volume = (clip.audioProperties.volume + 0.1f).coerceAtMost(1f)))
         ClipAction.Fade -> clip.copy(audioProperties = clip.audioProperties.copy(fadeInMs = if (clip.audioProperties.fadeInMs == 0L) 600 else 0, fadeOutMs = if (clip.audioProperties.fadeOutMs == 0L) 600 else 0))
         ClipAction.Loop -> clip.copy(audioProperties = clip.audioProperties.copy(loopEnabled = !clip.audioProperties.loopEnabled))
-        ClipAction.Replace -> clip.copy(title = "${clip.title} replaced", assetId = clip.assetId ?: "replacement://${UUID.randomUUID()}")
         ClipAction.Crop -> clip.copy(filterAdjustments = clip.filterAdjustments.copy(vignette = if (clip.filterAdjustments.vignette == 0f) 0.28f else 0f))
       }
     }
@@ -752,7 +754,7 @@ enum class QualityPreset(val label: String) { Balanced("Balanced"), High("High")
 enum class ExportStatus { Idle, Running, Complete, Cancelled, Failed }
 
 enum class ClipAction(val label: String) {
-  Rotate("Rotate"), Flip("Flip"), OpacityDown("Opacity -"), OpacityUp("Opacity +"), SpeedUp("Speed +"), SpeedDown("Speed -"), Mute("Mute"), Filter("Cinematic"), Keyframe("Add keyframe"), VolumeDown("Volume -"), VolumeUp("Volume +"), Fade("Fade"), Loop("Loop"), Replace("Replace"), Crop("Crop")
+  Rotate("Rotate"), Flip("Flip"), OpacityDown("Opacity -"), OpacityUp("Opacity +"), SpeedUp("Speed +"), SpeedDown("Speed -"), Mute("Mute"), Filter("Cinematic"), Keyframe("Add keyframe"), VolumeDown("Volume -"), VolumeUp("Volume +"), Fade("Fade"), Loop("Loop"), Crop("Crop")
 }
 
 data class Project(
@@ -798,6 +800,18 @@ data class Timeline(
   fun recalculateDuration() = copy(durationMs = tracks.flatMap { it.clips }.maxOfOrNull { it.startMs + it.durationMs } ?: 0L)
 
   companion object {
+    fun emptyTimeline(): Timeline = Timeline(
+      durationMs = 0,
+      tracks = listOf(
+        TimelineTrack(UUID.randomUUID().toString(), TrackType.Video, "Video 1", 0, emptyList()),
+        TimelineTrack(UUID.randomUUID().toString(), TrackType.Audio, "Music", 1, emptyList()),
+        TimelineTrack(UUID.randomUUID().toString(), TrackType.Text, "Text", 2, emptyList()),
+        TimelineTrack(UUID.randomUUID().toString(), TrackType.Sticker, "Stickers", 3, emptyList()),
+        TimelineTrack(UUID.randomUUID().toString(), TrackType.Overlay, "Overlay", 4, emptyList()),
+        TimelineTrack(UUID.randomUUID().toString(), TrackType.Effect, "Effects", 5, emptyList()),
+      ),
+    )
+
     fun defaultTimeline(): Timeline {
       val videoClip = TimelineClip(id = UUID.randomUUID().toString(), title = "Starter video", clipType = ClipType.Video, durationMs = 6_000)
       return Timeline(

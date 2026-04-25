@@ -13,12 +13,12 @@ New editor-facing code should prefer stable models under `editor.model` (`Projec
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 10:44 UTC
+- Last updated: 2026-04-25 10:51 UTC
 - App: Clipy Studio
 - Slug: clipy
 - Tagline: A premium offline-friendly Android video editor for fast, polished social videos.
 - Target users: General users
-- Design direction: Preserve the existing compact dark Compose editor while clarifying architectural boundaries through consistent state-driven UI patterns. Visual changes should be minimal and only support the new module split: editor/timeline/media/render states surface as predictable loading, locked, dirty, exporting, and error states without introducing unrelated redesigns.
+- Design direction: Incremental quality pass that preserves the current compact studio interface while making broken flows visibly reliable. Emphasize clear state ownership, deterministic feedback, and non-overlapping controls rather than a redesign. The editor should feel like a stable mobile video workspace: media import, timeline edits, preview playback, autosave, export, save, and share all expose honest loading, disabled, error, recovery, and success states.
 - Core constraints: android only, MVP first, offline-friendly where possible
 Design style must align with: modern minimal premium
 Typography should align with: clean geometric sans
@@ -539,6 +539,7 @@ Function: allow overlay to move partially outside canvas but keep enough selecta
 40. STRICT:
 Function: gestures must be stable across small screens, large screens, landscape/portrait, high refresh rate devices, and low-end Android devices.
 Additional follow-up requirement: PROJECT ARCHITECTURE FINALIZATION: Split app into clear modules: ui, editor, timeline, media, render, data, design-system. Create stable models Project, Track, Clip, Overlay, AudioClip, TextClip, StickerClip, EffectClip, Transition, Keyframe, ExportSettings. Ensure every screen uses ViewModel + StateFlow and no business logic is hidden inside Composable.
+Additional follow-up requirement: QUALITY + BUGFIX PASS: Review the entire app and fix all broken flows: media import, editor open, timeline sync, preview playback, add audio/text/sticker, trim/split/delete, undo/redo, autosave, export, save/share. Remove all placeholder buttons, fake logic, unused code, broken navigation, UI overlap, clipped text, and laggy gestures.
 
 ### Core Features
 - Splash -> onboarding/intro -> main app flow
@@ -564,15 +565,17 @@ Additional follow-up requirement: PROJECT ARCHITECTURE FINALIZATION: Split app i
 - Performance foundations including lazy thumbnail loading, background rendering/export, media proxy strategies for large files, memory-aware preview, and responsive Compose UI
 
 ### Main Screens
+- Project Entry And Editor Open
 - Main Editor Screen
-- Timeline Screen Components
-- Preview Overlay Surface
-- Media And Render Flow
-- Project Data Layer
-- Design System
+- Media Import Flow
+- Timeline Editing Components
+- Preview Playback Surface
+- Add Audio Text And Sticker Panels
+- Undo Redo And Autosave
+- Export Save And Share Flow
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Keep the existing Android app as a buildable Compose project while introducing clear module boundaries as Gradle modules if the current project structure supports it with minimal risk, otherwise use package-level boundaries first under ui, editor, timeline, media, render, data, and design-system. The ui layer contains only Composables, navigation glue, and screen collection of StateFlow. The editor layer owns editor orchestration, ViewModels, intents, reducers, gesture coordination, selection, undo/redo integration, and final edit commit decisions. The timeline layer owns timeline math, clip placement, trim, scroll, snap, touch slop, bounds, and pure interaction helpers. The media layer owns playback state, preview seek dispatch, media metadata, and ExoPlayer-facing abstractions. The render layer owns export settings, render preparation, effect/transition render contracts, and export orchestration. The data layer owns repositories, local persistence, serialization, project loading/saving, autosave, and mapping between persisted data and domain models. The design-system layer owns reusable Compose styling primitives and tokens only. Introduce stable domain models without forcing a storage rewrite unless existing persistence requires mapping updates; preserve behavior through mappers and adapters. Every screen should have a ViewModel exposing StateFlow UI state, and Composables should not contain business rules, repository access, timeline mutation logic, export orchestration, or media playback decisions.
+- storage: Keep the existing single-module Android project and package-level boundaries. Repair flows by wiring UI controls to existing ViewModel, editor, timeline, media, render, and data boundaries rather than introducing broad new modules or rewrites. The UI layer should render immutable StateFlow state and emit callbacks only. The editor/ViewModel layer should own action dispatch, selection, undo/redo, autosave scheduling, playback edit locks, export settings edits, and user-visible error state. The timeline layer should own timeline math, trim, split positioning, scroll/drag/snap helpers, and gesture finalization. The media layer should own picker result interpretation, metadata lookup, preview player coordination, and seek synchronization. The render layer should own export execution and output artifact reporting. The data layer should preserve saved-project compatibility and handle repository writes, autosave, and persistence mapping. Remove placeholder buttons or fake logic by either implementing the real integration path or disabling/removing controls that cannot be honestly supported in this pass.
 <!-- AUTO-GENERATED:CORE_END -->

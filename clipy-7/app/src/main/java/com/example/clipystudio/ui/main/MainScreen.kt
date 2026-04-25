@@ -498,12 +498,16 @@ private fun ImportScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onA
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
       Button(onClick = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }, shape = RoundedCornerShape(999.dp)) { Text(if (appState.languageCode == LanguageCode.Vi) "Them anh/video" else "Import Images/Videos") }
       Button(onClick = { audioPicker.launch(arrayOf("audio/*")) }, shape = RoundedCornerShape(999.dp)) { Text(if (appState.languageCode == LanguageCode.Vi) "Them am thanh" else "Import Audio") }
-      MediaType.entries.forEach { type -> OutlinedButton(onClick = { onAddAsset(type, null, null, null) }, shape = RoundedCornerShape(999.dp)) { Text("Sample ${type.label}") } }
     }
     Spacer(Modifier.height(18.dp))
     Text("Selected (${appState.selectedImports.size})", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     if (appState.selectedImports.isEmpty()) {
-      Text(if (appState.languageCode == LanguageCode.Vi) "Chon it nhat mot tep media de them vao timeline." else "Select at least one media item to add it to the timeline.", color = StudioTextMuted, fontSize = 13.sp)
+      Card(colors = CardDefaults.cardColors(containerColor = StudioSurfaceHigh), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          Text(if (appState.languageCode == LanguageCode.Vi) "Chua co media nao" else "No media selected", fontWeight = FontWeight.Bold)
+          Text(if (appState.languageCode == LanguageCode.Vi) "Chon tep anh, video hoac am thanh tu bo chon he thong de them vao timeline. Ung dung khong them media mau gia." else "Pick images, videos, or audio from Android system pickers to add real local media to the timeline. Sample media shortcuts have been removed.", color = StudioTextMuted, fontSize = 13.sp)
+        }
+      }
     }
     Spacer(Modifier.height(8.dp))
     LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -604,6 +608,7 @@ private fun ExportScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onD
   val settings = appState.defaultExportSettings
   val renderState by viewModel.renderPipelineState.collectAsStateWithLifecycle()
   val exportState by viewModel.renderExportState.collectAsStateWithLifecycle()
+  val hasExportableContent = appState.activeProject?.timeline?.durationMs?.let { it > 0L } == true
   LaunchedEffect(settings, appState.activeProject?.timeline?.version, appState.activeProjectId) {
     viewModel.prepareRenderPipeline(appState)
   }
@@ -619,7 +624,8 @@ private fun ExportScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onD
     }
     ExportOptionCard("Format", settings.format, "MP4 is the MVP target for Android compatibility.")
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-      listOf("MP4", "MOV").forEach { format -> FilterChip(selected = settings.format == format, onClick = { viewModel.updateExportSettings(settings.copy(format = format)) }, label = { Text(format) }) }
+      FilterChip(selected = settings.format == "MP4", onClick = { viewModel.updateExportSettings(settings.copy(format = "MP4")) }, label = { Text("MP4") })
+      FilterChip(selected = false, onClick = {}, enabled = false, label = { Text("MOV later") })
     }
     Spacer(Modifier.height(10.dp))
     ExportOptionCard("Resolution", settings.resolution.label, "720p and 1080p are primary; 2K/4K are device-gated.")
@@ -638,8 +644,11 @@ private fun ExportScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onD
     ExportOptionCard("Estimated output", "${settings.bitrateMbps.toInt()} Mbps", "Snapshot includes timeline clips, overlays, text, stickers, effects, transitions, speed, canvas, and audio state.")
     Spacer(Modifier.height(12.dp))
     RenderPipelineSummary(renderState, exportState, appState.activeProject?.timeline?.durationMs ?: 0L)
+    if (!hasExportableContent) {
+      Text("Import media or add a visible clip before export.", color = StudioDanger, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+    }
     Spacer(Modifier.weight(1f))
-    Button(onClick = viewModel::startExport, enabled = renderState.status == RenderPipelineStatus.READY, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(999.dp)) { Text(if (appState.languageCode == LanguageCode.Vi) "Bat dau xuat" else "Start Export") }
+    Button(onClick = viewModel::startExport, enabled = hasExportableContent && renderState.status == RenderPipelineStatus.READY, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(999.dp)) { Text(if (appState.languageCode == LanguageCode.Vi) "Bat dau xuat" else "Start Export") }
   }
 }
 
@@ -755,7 +764,7 @@ private fun ExportSuccessPanel(exportState: RenderExportState, onBack: () -> Uni
       Text("${output.width}x${output.height} · ${output.fps} FPS · ${output.durationMs.asTimecode()} · ${output.sizeBytes.asSizeLabel()}", color = StudioTextMuted, textAlign = TextAlign.Center)
       exportState.codecStrategy?.let { Text("${it.selected.name.replace('_', ' ')} save path ready for sharing", color = StudioTextMuted, fontSize = 13.sp, textAlign = TextAlign.Center) }
       Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = viewModel::requestShare, modifier = Modifier.height(48.dp)) { Text("Share") }
+        Button(onClick = viewModel::requestShare, enabled = output.uri.isNotBlank(), modifier = Modifier.height(48.dp)) { Text("Share") }
         Button(onClick = viewModel::clearExportResult, modifier = Modifier.height(48.dp)) { Text("New Export") }
         OutlinedButton(onClick = onBack) { Text("Return to editor") }
         OutlinedButton(onClick = onDashboard) { Text("Dashboard") }
@@ -897,12 +906,13 @@ private fun PreviewLayerChip(clip: TimelineClip, selected: Boolean, previewWidth
 
 @Composable
 private fun PlaybackControls(timeline: Timeline, onPlay: () -> Unit, onSeek: (Long) -> Unit) {
+  val hasContent = timeline.durationMs > 0L
   Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
     Text(timeline.playheadMs.asTimecode(), color = StudioSecondary, fontWeight = FontWeight.Bold)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-      OutlinedButton(onClick = { onSeek(-1_000) }) { Text("-1s") }
-      Button(onClick = onPlay, shape = CircleShape, modifier = Modifier.semantics { contentDescription = if (timeline.isPlaying) "Pause playback" else "Play playback" }) { Text(if (timeline.isPlaying) "Pause" else "Play") }
-      OutlinedButton(onClick = { onSeek(1_000) }) { Text("+1s") }
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      OutlinedButton(onClick = { onSeek(-1_000) }, enabled = hasContent) { Text("-1s") }
+      Button(onClick = onPlay, enabled = hasContent, shape = CircleShape, modifier = Modifier.semantics { contentDescription = if (timeline.isPlaying) "Pause playback" else "Play playback" }) { Text(if (timeline.isPlaying) "Pause" else "Play") }
+      OutlinedButton(onClick = { onSeek(1_000) }, enabled = hasContent) { Text("+1s") }
     }
     Text(timeline.durationMs.asTimecode(), color = StudioTextMuted)
   }
@@ -1457,7 +1467,6 @@ private fun ClipEditPanel(selectedClip: TimelineClip, viewModel: MainScreenViewM
         OutlinedButton(onClick = { viewModel.adjustSelectedClip(ClipAction.SpeedUp) }) { Text("Speed +") }
         OutlinedButton(onClick = { viewModel.adjustSelectedClip(ClipAction.VolumeDown) }) { Text("Volume -") }
         OutlinedButton(onClick = { viewModel.adjustSelectedClip(ClipAction.VolumeUp) }) { Text("Volume +") }
-        OutlinedButton(onClick = { viewModel.adjustSelectedClip(ClipAction.Replace) }) { Text("Replace") }
         OutlinedButton(onClick = { viewModel.adjustSelectedClip(ClipAction.Mute) }) { Text("Mute") }
         OutlinedButton(onClick = { viewModel.adjustSelectedClip(ClipAction.Crop) }) { Text("Crop") }
         OutlinedButton(onClick = { viewModel.adjustSelectedClip(ClipAction.Rotate) }) { Text("Rotate") }
@@ -1556,23 +1565,28 @@ private fun TransitionToolPanel(timeline: Timeline, viewModel: MainScreenViewMod
 @Composable
 private fun SpeedToolPanel(selectedClip: TimelineClip?, viewModel: MainScreenViewModel) {
   val speed = selectedClip?.videoProperties?.speed ?: 1f
+  val enabled = selectedClip?.clipType in setOf(ClipType.Video, ClipType.Image, ClipType.Overlay)
   Card(colors = CardDefaults.cardColors(containerColor = StudioSurfaceHigh), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
     Column(Modifier.padding(14.dp)) {
       Text("Speed", fontWeight = FontWeight.Bold)
       Text(selectedClip?.let { "${it.title} · ${it.durationMs.asTimecode()} at ${"%.2f".format(speed)}x" } ?: "Select a compatible clip.", color = StudioTextMuted, fontSize = 13.sp)
-      Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(0.5f, 1f, 1.5f, 2f).forEach { value -> FilterChip(selected = speed == value, onClick = { viewModel.updateSelectedSpeed(value) }, label = { Text("${value}x") }) } }
-      AdjustmentControl("Speed", speed, 0.5f, 2f) { viewModel.updateSelectedSpeed(it) }
+      Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(0.5f, 1f, 1.5f, 2f).forEach { value -> FilterChip(selected = speed == value, enabled = enabled, onClick = { viewModel.updateSelectedSpeed(value) }, label = { Text("${value}x") }) } }
+      if (enabled) AdjustmentControl("Speed", speed, 0.5f, 2f) { viewModel.updateSelectedSpeed(it) }
     }
   }
 }
 
 @Composable
 private fun OverlayToolPanel(importedAssets: List<MediaAsset>, selectedClip: TimelineClip?, viewModel: MainScreenViewModel) {
-  val overlayAssets = importedAssets.filter { it.type != MediaType.Audio }.ifEmpty { listOf(MediaAsset("sample-overlay", "local://overlay/sample", MediaType.Image, "Sample overlay", 4_000, 1_200_000)) }
+  val overlayAssets = importedAssets.filter { it.type != MediaType.Audio }
   Card(colors = CardDefaults.cardColors(containerColor = StudioSurfaceHigh), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
     Column(Modifier.padding(14.dp)) {
       Text("Overlay", fontWeight = FontWeight.Bold)
-      LazyRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(overlayAssets, key = { it.id }) { asset -> MediaMiniCard(asset) { viewModel.addOverlayAtPlayhead(asset) } } }
+      if (overlayAssets.isEmpty()) {
+        Text("Import image or video media before adding overlay layers.", color = StudioTextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+      } else {
+        LazyRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(overlayAssets, key = { it.id }) { asset -> MediaMiniCard(asset) { viewModel.addOverlayAtPlayhead(asset) } } }
+      }
       if (selectedClip?.clipType == ClipType.Overlay) AdjustmentControl("Opacity", selectedClip.transform.opacity, 0f, 1f) { viewModel.updateSelectedOpacity(it) }
       LayerActions(viewModel)
     }
@@ -1590,18 +1604,29 @@ private fun MediaMiniCard(asset: MediaAsset, onClick: () -> Unit) {
 private fun AudioToolPanel(selectedClip: TimelineClip?, viewModel: MainScreenViewModel) {
   var tab by remember { mutableStateOf(AudioSource.BuiltInMusic) }
   val items = when (tab) {
-    AudioSource.DeviceMusic -> listOf("Device track placeholder" to "02:14", "Local song metadata" to "01:08")
+    AudioSource.DeviceMusic -> emptyList()
     AudioSource.BuiltInMusic -> listOf("Neon pulse" to "00:18", "Lo-fi creator bed" to "00:30")
-    AudioSource.ExtractedAudio -> listOf("Extract from selected video" to "linked", "Voice layer sample" to "00:11")
+    AudioSource.ExtractedAudio -> if (selectedClip?.clipType == ClipType.Video) listOf("Extract from ${selectedClip.title}" to "linked") else emptyList()
     AudioSource.SoundEffect -> listOf("Camera click" to "00:01", "Whoosh pop" to "00:02")
   }
   Card(colors = CardDefaults.cardColors(containerColor = StudioSurfaceHigh), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
     Column(Modifier.padding(14.dp)) {
       Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { AudioSource.entries.forEach { source -> FilterChip(selected = tab == source, onClick = { tab = source }, label = { Text(source.label) }) } }
+      if (items.isEmpty()) {
+        Text(
+          when (tab) {
+            AudioSource.DeviceMusic -> "Use Import Audio to choose real device audio from the system picker."
+            AudioSource.ExtractedAudio -> "Select a video clip before extracting source audio."
+            else -> "No audio items are available for this source."
+          },
+          color = StudioTextMuted,
+          fontSize = 13.sp,
+          modifier = Modifier.padding(top = 8.dp),
+        )
+      }
       items.forEach { item ->
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
           Column(Modifier.weight(1f)) { Text(item.first, fontWeight = FontWeight.Bold); Text(item.second, color = StudioTextMuted, fontSize = 12.sp) }
-          TextButton(onClick = { viewModel.updateSelectedAudio(selectedClip?.audioProperties?.volume ?: 0.72f, selectedClip?.audioProperties?.fadeInMs ?: 300, selectedClip?.audioProperties?.fadeOutMs ?: 500, selectedClip?.audioProperties?.loopEnabled?.not() ?: false) }) { Text("Play") }
           Button(onClick = { viewModel.addAudioClipAtPlayhead(item.first, tab) }, shape = RoundedCornerShape(999.dp)) { Text("Add") }
         }
       }
@@ -1672,19 +1697,20 @@ private fun AdjustmentControl(label: String, value: Float, min: Float, max: Floa
 }
 
 @Composable
-private fun LayerActions(viewModel: MainScreenViewModel) {
+private fun LayerActions(viewModel: MainScreenViewModel, enabled: Boolean = true) {
   Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-    OutlinedButton(onClick = viewModel::duplicateSelectedClip) { Text("Duplicate") }
-    OutlinedButton(onClick = viewModel::deleteSelectedClip) { Text("Delete") }
-    OutlinedButton(onClick = { viewModel.trimSelectedClip(-500) }) { Text("Trim -") }
-    OutlinedButton(onClick = { viewModel.trimSelectedClip(500) }) { Text("Trim +") }
-    OutlinedButton(onClick = viewModel::toggleKeyframeAtPlayhead, modifier = Modifier.semantics { contentDescription = "Toggle keyframe at playhead" }) { Text("Keyframe") }
+    OutlinedButton(onClick = viewModel::duplicateSelectedClip, enabled = enabled) { Text("Duplicate") }
+    OutlinedButton(onClick = viewModel::deleteSelectedClip, enabled = enabled) { Text("Delete") }
+    OutlinedButton(onClick = { viewModel.trimSelectedClip(-500) }, enabled = enabled) { Text("Trim -") }
+    OutlinedButton(onClick = { viewModel.trimSelectedClip(500) }, enabled = enabled) { Text("Trim +") }
+    OutlinedButton(onClick = viewModel::toggleKeyframeAtPlayhead, enabled = enabled, modifier = Modifier.semantics { contentDescription = "Toggle keyframe at playhead" }) { Text("Keyframe") }
   }
 }
 
 @Composable
 private fun ToolPanel(timeline: Timeline, viewModel: MainScreenViewModel) {
   val selectedClip = timeline.tracks.flatMap { it.clips }.firstOrNull { it.id == timeline.selectedClipId }
+  val hasSelection = selectedClip != null
   Card(colors = CardDefaults.cardColors(containerColor = StudioSurfaceHigh), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth().pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consumePositionChange() } } }) {
     Column(Modifier.padding(14.dp)) {
       Text("${timeline.selectedTool.label} tools", fontWeight = FontWeight.Bold)
@@ -1696,15 +1722,15 @@ private fun ToolPanel(timeline: Timeline, viewModel: MainScreenViewModel) {
           EditorTool.Filter, EditorTool.Effect -> listOf(ClipAction.Filter, ClipAction.OpacityDown, ClipAction.OpacityUp)
           EditorTool.Speed -> listOf(ClipAction.SpeedDown, ClipAction.SpeedUp)
           else -> listOf(ClipAction.OpacityDown, ClipAction.OpacityUp, ClipAction.Keyframe)
-        }.forEach { action -> OutlinedButton(onClick = { viewModel.adjustSelectedClip(action) }) { Text(action.label) } }
+        }.forEach { action -> OutlinedButton(onClick = { viewModel.adjustSelectedClip(action) }, enabled = hasSelection) { Text(action.label) } }
       }
       Spacer(Modifier.height(8.dp))
-      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = viewModel::splitSelectedClip) { Text("Split") }
-        OutlinedButton(onClick = viewModel::deleteSelectedClip) { Text("Delete") }
-        OutlinedButton(onClick = viewModel::duplicateSelectedClip) { Text("Duplicate") }
-        OutlinedButton(onClick = { viewModel.trimSelectedClip(-500) }) { Text("Trim -") }
-        OutlinedButton(onClick = { viewModel.trimSelectedClip(500) }) { Text("Trim +") }
+      Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = viewModel::splitSelectedClip, enabled = hasSelection) { Text("Split") }
+        OutlinedButton(onClick = viewModel::deleteSelectedClip, enabled = hasSelection) { Text("Delete") }
+        OutlinedButton(onClick = viewModel::duplicateSelectedClip, enabled = hasSelection) { Text("Duplicate") }
+        OutlinedButton(onClick = { viewModel.trimSelectedClip(-500) }, enabled = hasSelection) { Text("Trim -") }
+        OutlinedButton(onClick = { viewModel.trimSelectedClip(500) }, enabled = hasSelection) { Text("Trim +") }
       }
     }
   }
