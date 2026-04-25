@@ -37,6 +37,19 @@ interface DataRepository {
   fun transformSelectedClip(deltaX: Float, deltaY: Float, scaleChange: Float, rotationChange: Float)
   fun addAudioClipAtPlayhead(title: String, source: AudioSource)
   fun addTextClipAtPlayhead(content: String, fontSizeSp: Float, color: String, backgroundColor: String?, strokeEnabled: Boolean, shadowEnabled: Boolean, alignment: String, animation: String)
+  fun addStickerAtPlayhead(asset: StickerAsset)
+  fun updateSelectedFilter(filterId: String?)
+  fun updateSelectedAdjustments(adjustments: FilterAdjustmentSet)
+  fun addEffectAtPlayhead(effect: EffectPreset)
+  fun applyTransition(type: TransitionType, durationMs: Long)
+  fun removeTransition()
+  fun updateCanvasBackground(background: CanvasBackground)
+  fun updateSelectedSpeed(speed: Float)
+  fun updateSelectedAudio(volume: Float, fadeInMs: Long, fadeOutMs: Long, loopEnabled: Boolean)
+  fun updateSelectedText(content: String, fontSizeSp: Float, color: String, backgroundColor: String?, strokeEnabled: Boolean, shadowEnabled: Boolean, alignment: String, animation: String)
+  fun addOverlayAtPlayhead(asset: MediaAsset)
+  fun updateSelectedOpacity(opacity: Float)
+  fun toggleKeyframeAtPlayhead()
   fun undo()
   fun redo()
   fun updateExportSettings(settings: ExportSettings)
@@ -287,6 +300,123 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
     ).recalculateDuration())
   }
 
+  override fun addStickerAtPlayhead(asset: StickerAsset) = withUndo("Add sticker") { project ->
+    val clip = TimelineClip(
+      id = UUID.randomUUID().toString(),
+      clipType = ClipType.Sticker,
+      title = asset.symbol,
+      startMs = project.timeline.playheadMs,
+      durationMs = 3_000,
+      zIndex = 20 + project.timeline.tracks.flatMap { it.clips }.count { it.clipType == ClipType.Sticker },
+      transform = TransformState(positionX = 0.5f, positionY = 0.48f, scale = 1.1f),
+      textProperties = TextProperties(content = asset.symbol, fontSizeSp = 34f, backgroundColor = null, shadowEnabled = true),
+    )
+    val recent = (project.timeline.recentStickers.filterNot { it.id == asset.id } + asset.copy(lastUsedAt = System.currentTimeMillis())).takeLast(10)
+    project.copy(timeline = project.timeline.copy(
+      selectedClipId = clip.id,
+      selectedTool = EditorTool.Sticker,
+      recentStickers = recent,
+      tracks = project.timeline.tracks.map { if (it.type == TrackType.Sticker) it.copy(clips = it.clips + clip) else it },
+    ).recalculateDuration())
+  }
+
+  override fun updateSelectedFilter(filterId: String?) = withUndo("Update filter") { project ->
+    mapSelectedClip(project) { clip -> clip.copy(filterAdjustments = clip.filterAdjustments.copy(filterId = filterId)) }
+  }
+
+  override fun updateSelectedAdjustments(adjustments: FilterAdjustmentSet) = withUndo("Update adjustments") { project ->
+    mapSelectedClip(project) { clip -> clip.copy(filterAdjustments = adjustments) }
+  }
+
+  override fun addEffectAtPlayhead(effect: EffectPreset) = withUndo("Add effect") { project ->
+    val clip = TimelineClip(
+      id = UUID.randomUUID().toString(),
+      clipType = ClipType.Effect,
+      title = effect.label,
+      startMs = project.timeline.playheadMs,
+      durationMs = 2_500,
+      filterAdjustments = FilterAdjustmentSet(filterId = effect.id, brightness = 1f, contrast = 1f + effect.intensity * 0.08f, saturation = 1f + effect.intensity * 0.04f, sharpness = effect.intensity * 0.2f),
+    )
+    project.copy(timeline = project.timeline.copy(
+      selectedClipId = clip.id,
+      selectedTool = EditorTool.Effect,
+      tracks = project.timeline.tracks.map { if (it.type == TrackType.Effect) it.copy(clips = it.clips + clip) else it },
+    ).recalculateDuration())
+  }
+
+  override fun applyTransition(type: TransitionType, durationMs: Long) = withUndo("Apply transition") { project ->
+    val clips = project.timeline.tracks.firstOrNull { it.type == TrackType.Video }?.clips?.sortedBy { it.startMs }.orEmpty()
+    val playhead = project.timeline.playheadMs
+    val index = clips.indexOfLast { playhead >= it.startMs + it.durationMs - 1_000 }
+    val from = clips.getOrNull(index) ?: clips.getOrNull(0) ?: return@withUndo project
+    val to = clips.getOrNull(index + 1) ?: return@withUndo project
+    val transition = Transition(UUID.randomUUID().toString(), type, from.id, to.id, durationMs.coerceIn(300, 2_000), from.startMs + from.durationMs)
+    project.copy(timeline = project.timeline.copy(selectedTool = EditorTool.Transition, transitions = project.timeline.transitions.filterNot { it.fromClipId == from.id && it.toClipId == to.id } + transition))
+  }
+
+  override fun removeTransition() = withUndo("Remove transition") { project ->
+    val selectedId = project.timeline.selectedClipId
+    project.copy(timeline = project.timeline.copy(transitions = project.timeline.transitions.filterNot { it.fromClipId == selectedId || it.toClipId == selectedId }))
+  }
+
+  override fun updateCanvasBackground(background: CanvasBackground) = withUndo("Canvas background") { project ->
+    project.copy(timeline = project.timeline.copy(canvasBackground = background))
+  }
+
+  override fun updateSelectedSpeed(speed: Float) = withUndo("Update speed") { project ->
+    mapSelectedClip(project) { clip ->
+      val oldSpeed = clip.videoProperties.speed.coerceAtLeast(0.1f)
+      val nextSpeed = speed.coerceIn(0.5f, 2f)
+      val sourceDuration = (clip.durationMs * oldSpeed).toLong().coerceAtLeast(1_000L)
+      clip.copy(durationMs = (sourceDuration / nextSpeed).toLong().coerceAtLeast(1_000L), videoProperties = clip.videoProperties.copy(speed = nextSpeed))
+    }.copyTimelineDuration()
+  }
+
+  override fun updateSelectedAudio(volume: Float, fadeInMs: Long, fadeOutMs: Long, loopEnabled: Boolean) = withUndo("Update audio") { project ->
+    mapSelectedClip(project) { clip -> clip.copy(audioProperties = AudioProperties(volume.coerceIn(0f, 1f), fadeInMs.coerceAtLeast(0), fadeOutMs.coerceAtLeast(0), loopEnabled)) }
+  }
+
+  override fun updateSelectedText(content: String, fontSizeSp: Float, color: String, backgroundColor: String?, strokeEnabled: Boolean, shadowEnabled: Boolean, alignment: String, animation: String) = withUndo("Update text") { project ->
+    mapSelectedClip(project) { clip -> clip.copy(title = content.ifBlank { clip.title }.take(18), textProperties = TextProperties(content.ifBlank { clip.textProperties.content }, fontSizeSp, color, backgroundColor, strokeEnabled, shadowEnabled, alignment, animation)) }
+  }
+
+  override fun addOverlayAtPlayhead(asset: MediaAsset) = withUndo("Add overlay") { project ->
+    val clip = TimelineClip(
+      id = UUID.randomUUID().toString(),
+      assetId = asset.id,
+      clipType = ClipType.Overlay,
+      title = asset.displayName,
+      startMs = project.timeline.playheadMs,
+      durationMs = asset.durationMs.coerceIn(2_000, 8_000),
+      zIndex = 30 + project.timeline.tracks.flatMap { it.clips }.count { it.clipType == ClipType.Overlay },
+      transform = TransformState(positionX = 0.52f, positionY = 0.48f, scale = 0.72f),
+    )
+    project.copy(timeline = project.timeline.copy(
+      selectedClipId = clip.id,
+      selectedTool = EditorTool.Overlay,
+      tracks = project.timeline.tracks.map { if (it.type == TrackType.Overlay) it.copy(clips = it.clips + clip) else it },
+    ).recalculateDuration())
+  }
+
+  override fun updateSelectedOpacity(opacity: Float) = withUndo("Update opacity") { project ->
+    mapSelectedClip(project) { clip -> clip.copy(transform = clip.transform.copy(opacity = opacity.coerceIn(0f, 1f))) }
+  }
+
+  override fun toggleKeyframeAtPlayhead() = withUndo("Toggle keyframe") { project ->
+    val playhead = project.timeline.playheadMs
+    mapSelectedClip(project) { clip ->
+      val existingAtPlayhead = clip.keyframes.any { kotlin.math.abs(it.timeMs - playhead) < 80 }
+      val next = if (existingAtPlayhead) clip.keyframes.filterNot { kotlin.math.abs(it.timeMs - playhead) < 80 } else clip.keyframes + listOf(
+        Keyframe(timeMs = playhead, property = KeyframeProperty.PositionX, value = clip.transform.positionX),
+        Keyframe(timeMs = playhead, property = KeyframeProperty.PositionY, value = clip.transform.positionY),
+        Keyframe(timeMs = playhead, property = KeyframeProperty.Scale, value = clip.transform.scale),
+        Keyframe(timeMs = playhead, property = KeyframeProperty.Rotation, value = clip.transform.rotationDegrees),
+        Keyframe(timeMs = playhead, property = KeyframeProperty.Opacity, value = clip.transform.opacity),
+      )
+      clip.copy(keyframes = next)
+    }
+  }
+
   override fun undo() = persistUpdate { app ->
     val activeId = app.activeProjectId
     val command = app.undoStack.lastOrNull()
@@ -310,15 +440,15 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
   override fun updateExportSettings(settings: ExportSettings) = persistUpdate { it.copy(defaultExportSettings = settings) }
 
   override fun startExport() = persistUpdate { app ->
-    app.copy(exportJob = ExportJob(projectId = app.activeProjectId.orEmpty(), settings = app.defaultExportSettings, status = ExportStatus.Running, progressPercent = 42))
+    if (app.exportJob?.status == ExportStatus.Running || app.activeProject == null) app else app.copy(exportJob = ExportJob(projectId = app.activeProjectId.orEmpty(), settings = app.defaultExportSettings, status = ExportStatus.Running, progressPercent = 8, stageLabel = "Preparing project snapshot"))
   }
 
   override fun completeExport() = persistUpdate { app ->
     val job = app.exportJob ?: return@persistUpdate app
-    app.copy(exportJob = job.copy(status = ExportStatus.Complete, progressPercent = 100, outputUri = "gallery://ClipyStudio/export-${System.currentTimeMillis()}.mp4"))
+    if (job.status != ExportStatus.Running) app else app.copy(exportJob = job.copy(status = ExportStatus.Complete, progressPercent = 100, stageLabel = "Saved render output", outputUri = "gallery://ClipyStudio/export-${System.currentTimeMillis()}.${job.settings.format.lowercase()}"))
   }
 
-  override fun cancelExport() = persistUpdate { it.copy(exportJob = it.exportJob?.copy(status = ExportStatus.Cancelled, progressPercent = 0)) }
+  override fun cancelExport() = persistUpdate { it.copy(exportJob = it.exportJob?.copy(status = ExportStatus.Cancelled, progressPercent = 0, stageLabel = "Cancelled by user")) }
 
   override fun clearExportResult() = persistUpdate { it.copy(exportJob = null) }
 
@@ -441,6 +571,9 @@ private fun Timeline.toJson() = JSONObject()
   .put("selectedClipId", selectedClipId)
   .put("selectedTool", selectedTool.name)
   .put("isPlaying", isPlaying)
+  .put("canvasBackground", canvasBackground.toJson())
+  .put("transitions", JSONArray(transitions.map { it.toJson() }))
+  .put("recentStickers", JSONArray(recentStickers.map { it.toJson() }))
 
 private fun JSONObject.toTimeline() = Timeline(
   durationMs = optLong("durationMs"),
@@ -450,6 +583,9 @@ private fun JSONObject.toTimeline() = Timeline(
   selectedClipId = optNullableString("selectedClipId"),
   selectedTool = enumValueOf(optString("selectedTool", EditorTool.Edit.name)),
   isPlaying = optBoolean("isPlaying"),
+  canvasBackground = optJSONObject("canvasBackground")?.toCanvasBackground() ?: CanvasBackground(),
+  transitions = optJSONArray("transitions").toList { it.toTransition() },
+  recentStickers = optJSONArray("recentStickers").toList { it.toStickerAsset() },
 )
 
 private fun TimelineTrack.toJson() = JSONObject()
@@ -516,6 +652,12 @@ private fun FilterAdjustmentSet.toJson() = JSONObject().put("filterId", filterId
 private fun JSONObject.toFilterAdjustmentSet() = FilterAdjustmentSet(optNullableString("filterId"), optDouble("brightness", 1.0).toFloat(), optDouble("contrast", 1.0).toFloat(), optDouble("saturation", 1.0).toFloat(), optDouble("exposure").toFloat(), optDouble("temperature").toFloat(), optDouble("sharpness").toFloat(), optDouble("vignette").toFloat())
 private fun Keyframe.toJson() = JSONObject().put("id", id).put("timeMs", timeMs).put("property", property.name).put("value", value.toDouble())
 private fun JSONObject.toKeyframe() = Keyframe(optString("id", UUID.randomUUID().toString()), optLong("timeMs"), enumValueOf(optString("property", KeyframeProperty.Opacity.name)), optDouble("value").toFloat())
+private fun CanvasBackground.toJson() = JSONObject().put("color", color).put("blurEnabled", blurEnabled).put("blurStrength", blurStrength.toDouble())
+private fun JSONObject.toCanvasBackground() = CanvasBackground(optString("color", "#09090B"), optBoolean("blurEnabled"), optDouble("blurStrength", 0.0).toFloat())
+private fun Transition.toJson() = JSONObject().put("id", id).put("type", type.name).put("fromClipId", fromClipId).put("toClipId", toClipId).put("durationMs", durationMs).put("boundaryMs", boundaryMs)
+private fun JSONObject.toTransition() = Transition(optString("id", UUID.randomUUID().toString()), enumValueOf(optString("type", TransitionType.Fade.name)), optString("fromClipId"), optString("toClipId"), optLong("durationMs", 800), optLong("boundaryMs"))
+private fun StickerAsset.toJson() = JSONObject().put("id", id).put("category", category.name).put("label", label).put("symbol", symbol).put("lastUsedAt", lastUsedAt)
+private fun JSONObject.toStickerAsset() = StickerAsset(optString("id", UUID.randomUUID().toString()), enumValueOf(optString("category", StickerCategory.Emoji.name)), optString("label"), optString("symbol"), optLong("lastUsedAt").takeIf { it > 0 })
 private fun ExportSettings.toJson() = JSONObject().put("format", format).put("resolution", resolution.name).put("fps", fps).put("bitrateMbps", bitrateMbps.toDouble()).put("qualityPreset", qualityPreset.name).put("saveToGallery", saveToGallery)
 private fun JSONObject.toExportSettings() = ExportSettings(optString("format", "MP4"), enumValueOf(optString("resolution", ExportResolution.P1080.name)), optInt("fps", 30), optDouble("bitrateMbps", 12.0).toFloat(), enumValueOf(optString("qualityPreset", QualityPreset.Balanced.name)), optBoolean("saveToGallery", true))
 private fun JSONObject.optNullableString(name: String): String? = if (isNull(name)) null else optString(name)
@@ -543,6 +685,9 @@ enum class TrackType(val label: String) { Video("Video"), Audio("Audio"), Text("
 enum class ClipType { Video, Image, Audio, Text, Sticker, Effect, Overlay }
 enum class EditorTool(val label: String) { Edit("Edit"), Audio("Audio"), Text("Text"), Sticker("Sticker"), Overlay("Overlay"), Filter("Filter"), Effect("Effect"), Transition("Transition"), Canvas("Canvas"), Speed("Speed"), Export("Export") }
 enum class AudioSource(val label: String) { DeviceMusic("Device Music"), BuiltInMusic("Built-in Music"), ExtractedAudio("Extracted Audio"), SoundEffect("Sound Effects") }
+enum class StickerCategory(val label: String) { Emoji("Emoji"), Heart("Heart"), Fire("Fire"), Arrow("Arrow"), Shape("Shape"), Reaction("Reaction"), Trending("Trending"), Recent("Recent") }
+enum class EffectCategory(val label: String) { Basic("Basic"), Motion("Motion"), Blur("Blur"), Glitch("Glitch"), Retro("Retro") }
+enum class TransitionType(val label: String) { Fade("Fade"), Slide("Slide"), Zoom("Zoom"), Blur("Blur") }
 enum class KeyframeProperty { PositionX, PositionY, Scale, Rotation, Opacity }
 enum class ExportResolution(val label: String) { P720("720p"), P1080("1080p"), P2K("2K"), P4K("4K") }
 enum class QualityPreset(val label: String) { Balanced("Balanced"), High("High"), Studio("Studio") }
@@ -583,6 +728,9 @@ data class Timeline(
   val selectedClipId: String? = null,
   val selectedTool: EditorTool = EditorTool.Edit,
   val isPlaying: Boolean = false,
+  val canvasBackground: CanvasBackground = CanvasBackground(),
+  val transitions: List<Transition> = emptyList(),
+  val recentStickers: List<StickerAsset> = emptyList(),
 ) {
   fun recalculateDuration() = copy(durationMs = tracks.flatMap { it.clips }.maxOfOrNull { it.startMs + it.durationMs } ?: 0L)
 
@@ -636,9 +784,22 @@ data class AudioProperties(val volume: Float = 1f, val fadeInMs: Long = 0, val f
 data class TextProperties(val content: String = "Clipy Studio", val fontSizeSp: Float = 28f, val color: String = "#F4F6FF", val backgroundColor: String? = "#7C5CFF", val strokeEnabled: Boolean = false, val shadowEnabled: Boolean = true, val alignment: String = "Center", val animation: String = "Fade")
 data class FilterAdjustmentSet(val filterId: String? = null, val brightness: Float = 1f, val contrast: Float = 1f, val saturation: Float = 1f, val exposure: Float = 0f, val temperature: Float = 0f, val sharpness: Float = 0f, val vignette: Float = 0f)
 data class Keyframe(val id: String = UUID.randomUUID().toString(), val timeMs: Long, val property: KeyframeProperty, val value: Float)
+data class CanvasBackground(val color: String = "#09090B", val blurEnabled: Boolean = false, val blurStrength: Float = 0f)
+data class Transition(val id: String = UUID.randomUUID().toString(), val type: TransitionType, val fromClipId: String, val toClipId: String, val durationMs: Long, val boundaryMs: Long)
+data class StickerAsset(val id: String, val category: StickerCategory, val label: String, val symbol: String, val lastUsedAt: Long? = null)
+data class EffectPreset(val id: String, val category: EffectCategory, val label: String, val intensity: Float = 1f)
 data class UndoRedoCommand(val description: String, val before: Project, val after: Project)
 data class ExportSettings(val format: String = "MP4", val resolution: ExportResolution = ExportResolution.P1080, val fps: Int = 30, val bitrateMbps: Float = 12f, val qualityPreset: QualityPreset = QualityPreset.Balanced, val saveToGallery: Boolean = true)
-data class ExportJob(val id: String = UUID.randomUUID().toString(), val projectId: String, val settings: ExportSettings, val status: ExportStatus = ExportStatus.Idle, val progressPercent: Int = 0, val outputUri: String? = null, val errorMessage: String? = null)
+data class ExportJob(val id: String = UUID.randomUUID().toString(), val projectId: String, val settings: ExportSettings, val status: ExportStatus = ExportStatus.Idle, val progressPercent: Int = 0, val stageLabel: String = "Idle", val outputUri: String? = null, val errorMessage: String? = null)
+
+val StickerLibrary = listOf(
+  StickerAsset("emoji-star", StickerCategory.Emoji, "Star", "*"), StickerAsset("emoji-smile", StickerCategory.Emoji, "Smile", ":)"), StickerAsset("heart-pink", StickerCategory.Heart, "Pink heart", "<3"), StickerAsset("fire-hot", StickerCategory.Fire, "Fire", "HOT"),
+  StickerAsset("arrow-up", StickerCategory.Arrow, "Arrow up", "^"), StickerAsset("shape-circle", StickerCategory.Shape, "Circle", "O"), StickerAsset("react-wow", StickerCategory.Reaction, "Wow", "WOW"), StickerAsset("trend-new", StickerCategory.Trending, "New", "NEW"),
+)
+
+val EffectLibrary = listOf(
+  EffectPreset("blur", EffectCategory.Blur, "Blur", 0.8f), EffectPreset("glow", EffectCategory.Basic, "Glow", 1f), EffectPreset("shake", EffectCategory.Motion, "Shake", 1f), EffectPreset("zoom", EffectCategory.Motion, "Zoom", 0.7f), EffectPreset("glitch", EffectCategory.Glitch, "Glitch", 1f), EffectPreset("vhs", EffectCategory.Retro, "VHS", 0.9f),
+)
 
 fun Long.asTimecode(): String {
   val totalSeconds = this / 1_000

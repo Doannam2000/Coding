@@ -10,8 +10,14 @@ import com.example.clipystudio.data.DataRepository
 import com.example.clipystudio.data.DefaultDataRepository
 import com.example.clipystudio.data.EditorTool
 import com.example.clipystudio.data.ExportSettings
+import com.example.clipystudio.data.EffectPreset
+import com.example.clipystudio.data.FilterAdjustmentSet
 import com.example.clipystudio.data.LanguageCode
+import com.example.clipystudio.data.MediaAsset
 import com.example.clipystudio.data.MediaType
+import com.example.clipystudio.data.CanvasBackground
+import com.example.clipystudio.data.StickerAsset
+import com.example.clipystudio.data.TransitionType
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
@@ -51,6 +57,19 @@ class MainScreenViewModel(private val dataRepository: DataRepository = DefaultDa
   fun transformSelectedClip(deltaX: Float, deltaY: Float, scaleChange: Float, rotationChange: Float) = dataRepository.transformSelectedClip(deltaX, deltaY, scaleChange, rotationChange)
   fun addAudioClipAtPlayhead(title: String, source: AudioSource) = dataRepository.addAudioClipAtPlayhead(title, source)
   fun addTextClipAtPlayhead(content: String, fontSizeSp: Float, color: String, backgroundColor: String?, strokeEnabled: Boolean, shadowEnabled: Boolean, alignment: String, animation: String) = dataRepository.addTextClipAtPlayhead(content, fontSizeSp, color, backgroundColor, strokeEnabled, shadowEnabled, alignment, animation)
+  fun addStickerAtPlayhead(asset: StickerAsset) = dataRepository.addStickerAtPlayhead(asset)
+  fun updateSelectedFilter(filterId: String?) = dataRepository.updateSelectedFilter(filterId)
+  fun updateSelectedAdjustments(adjustments: FilterAdjustmentSet) = dataRepository.updateSelectedAdjustments(adjustments)
+  fun addEffectAtPlayhead(effect: EffectPreset) = dataRepository.addEffectAtPlayhead(effect)
+  fun applyTransition(type: TransitionType, durationMs: Long) = dataRepository.applyTransition(type, durationMs)
+  fun removeTransition() = dataRepository.removeTransition()
+  fun updateCanvasBackground(background: CanvasBackground) = dataRepository.updateCanvasBackground(background)
+  fun updateSelectedSpeed(speed: Float) = dataRepository.updateSelectedSpeed(speed)
+  fun updateSelectedAudio(volume: Float, fadeInMs: Long, fadeOutMs: Long, loopEnabled: Boolean) = dataRepository.updateSelectedAudio(volume, fadeInMs, fadeOutMs, loopEnabled)
+  fun updateSelectedText(content: String, fontSizeSp: Float, color: String, backgroundColor: String?, strokeEnabled: Boolean, shadowEnabled: Boolean, alignment: String, animation: String) = dataRepository.updateSelectedText(content, fontSizeSp, color, backgroundColor, strokeEnabled, shadowEnabled, alignment, animation)
+  fun addOverlayAtPlayhead(asset: MediaAsset) = dataRepository.addOverlayAtPlayhead(asset)
+  fun updateSelectedOpacity(opacity: Float) = dataRepository.updateSelectedOpacity(opacity)
+  fun toggleKeyframeAtPlayhead() = dataRepository.toggleKeyframeAtPlayhead()
   fun undo() = dataRepository.undo()
   fun redo() = dataRepository.redo()
   fun updateExportSettings(settings: ExportSettings) = dataRepository.updateExportSettings(settings)

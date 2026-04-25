@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 07:10 UTC
+- Last updated: 2026-04-25 07:16 UTC
 - App: Clipy Studio
 - Slug: clipy
 - Tagline: A premium offline-friendly Android video editor for fast, polished social videos.
 - Target users: General users
-- Design direction: Incremental Editor Screen update only: preserve the existing dark premium Material 3 studio language, but make the editor feel closer to a professional mobile video timeline workspace with a fixed-center playhead, dense tool access, high-contrast clip selection, and contextual bottom panels. The screen should prioritize edit precision, thumb-friendly controls, immediate preview feedback, and non-overlapping safe-area behavior across phones and tablets.
+- Design direction: Incremental expansion of the existing dark vertical Clipy Studio workspace into a CapCut-level advanced editor while preserving the current professional, dense, timeline-first visual language. New panels should feel like contextual drawers layered above the existing bottom tool rail, with high-contrast controls, compact preview cards, real state feedback, and no unrelated screen redesigns.
 - Core constraints: android only, MVP first, offline-friendly where possible
 Design style must align with: modern minimal premium
 Typography should align with: clean geometric sans
@@ -213,6 +213,57 @@ UI: tabs Device Music, Built-in Music, Extracted Audio, Sound Effects with list 
 
 14. TEXT TOOL PANEL:
 UI: Add Text button, text input, font size, color, background, stroke, shadow, alignment, animation options; Function: creates editable text overlay at playhead, adds text clip to timeline, supports drag/scale/rotate on preview and duration editing.
+Additional follow-up requirement: EDITOR SCREEN ADVANCED TOOLS:
+
+Continue building Editor Screen tools starting from Sticker Panel to full advanced editing system, keeping CapCut-level behavior.
+
+15. STICKER TOOL PANEL:
+UI: sticker categories Emoji, Heart, Fire, Arrow, Shape, Reaction, Trending, Recent with grid layout; Function: tapping a sticker instantly adds it to preview and creates a sticker clip at playhead, then allows drag, scale, rotate, duplicate, delete, and adjust duration directly on timeline.
+
+16. FILTER AND ADJUST PANEL:
+UI: horizontal filter list with preview thumbnails and sliders below; Function: apply filters (warm, cool, vintage, cinematic, B&W) and adjust brightness, contrast, saturation, exposure, temperature, sharpness with real-time preview update.
+
+17. EFFECT PANEL:
+UI: grid of effects grouped by category (Basic, Motion, Blur, Glitch, Retro); Function: apply visual effects like blur, glow, shake, zoom, glitch as timeline-based effect clips that can be moved, trimmed, and removed.
+
+18. TRANSITION PANEL:
+UI: small button between video clips with panel showing transitions (fade, slide, zoom, blur) and duration slider; Function: apply transition between clips, update preview immediately, and allow removal or duration adjustment.
+
+19. CANVAS PANEL:
+UI: ratio selector (9:16, 1:1, 16:9, 4:5, original), background color and blur options; Function: update canvas size, maintain media transform, and apply background for non-fullscreen media.
+
+20. SPEED TOOL:
+UI: speed slider and presets (0.5x, 1x, 1.5x, 2x); Function: change playback speed of selected clip, update timeline duration accordingly, and sync preview instantly.
+
+21. AUDIO PANEL:
+UI: tabs (Device, Built-in, Extracted, Effects) with list items containing play and add buttons; Function: preview audio, add to audio track at playhead, then allow trim, move, volume, fade in/out, and loop.
+
+22. TEXT PANEL:
+UI: text input field with style controls (font size, color, background, stroke, shadow, animation); Function: add text overlay, update content, style, animation, and control timeline duration.
+
+23. OVERLAY PANEL:
+UI: media picker for overlay video/image; Function: add overlay layer above main video, support position, scale, rotation, opacity, and timeline duration.
+
+24. KEYFRAME SYSTEM:
+UI: keyframe toggle button and markers on timeline; Function: add keyframes for position, scale, rotation, opacity and interpolate between them for animation.
+
+25. UNDO REDO SYSTEM:
+UI: Undo/Redo buttons reflect state; Function: track all actions (clip edit, text, audio, effect) and allow instant revert/reapply.
+
+26. EXPORT SCREEN:
+UI: format (MP4/MOV), resolution (720p–4K), FPS (24/30/60), quality selector, export button; Function: render final video combining all tracks and show progress.
+
+27. EXPORT PROGRESS:
+UI: progress bar, percentage, cancel button; Function: background rendering, allow cancel, handle failure and success.
+
+28. EXPORT SUCCESS:
+UI: preview final video with Share and Save buttons; Function: save to gallery and share via system intent.
+
+29. PERFORMANCE:
+UI must remain smooth; Function: lazy load thumbnails, optimize memory, run heavy tasks in background, avoid UI blocking.
+
+30. STRICT RULES:
+All tools must work with real logic; Function: no placeholder UI, no fake interactions, preview must match timeline exactly, production-ready only.
 
 ### Core Features
 - Splash -> onboarding/intro -> main app flow
@@ -238,17 +289,23 @@ UI: Add Text button, text input, font size, color, background, stroke, shadow, a
 - Performance foundations including lazy thumbnail loading, background rendering/export, media proxy strategies for large files, memory-aware preview, and responsive Compose UI
 
 ### Main Screens
-- Editor Workspace
-- Preview Canvas
-- Timeline Area
-- Clip Edit Panel
-- Bottom Tool Menu
+- Sticker Tool Panel
+- Filter And Adjust Panel
+- Effect Panel
+- Transition Panel
+- Canvas Panel
+- Speed Tool Panel
 - Audio Tool Panel
 - Text Tool Panel
-- Export Handoff
+- Overlay Tool Panel
+- Keyframe System
+- Undo Redo System
+- Export Settings Screen
+- Export Progress Screen
+- Export Success Screen
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Continue using the existing SharedPreferences-backed repository and in-memory project state for the MVP. Extend current ViewModel state and timeline models only where needed for editor interactions, autosave snapshots, undo/redo command history, selected tool/panel state, overlay transforms, audio/text insertion, timeline zoom, and export handoff. Do not introduce Room, Media3, or native rendering in this follow-up unless already present in the codebase; represent preview frames, thumbnails, and waveforms with buildable MVP placeholders tied to real project/timeline state.
+- storage: Continue using the existing SharedPreferences-backed repository and in-memory project state for the MVP. Extend current project/timeline models, EditorUiState, repository contract, and ViewModel operations to persist advanced editor state: sticker clips, filter/adjust values, effect clips, transitions, canvas background, speed duration changes, audio edit properties, text style updates, overlay clips, keyframes, export settings, and export job state. Keep preview and timeline driven by the same project state so visible preview layers always match the playhead. Do not introduce Room or a native media rendering stack unless already present; if no native renderer exists, implement a real background export state machine and project composition pipeline contract with deterministic progress/cancel/success/failure behavior, while clearly isolating renderer implementation behind repository/service interfaces.
 <!-- AUTO-GENERATED:CORE_END -->
