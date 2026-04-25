@@ -22,6 +22,7 @@ interface DataRepository {
   fun removeImportedAsset(assetId: String)
   fun addImportsToProject()
   fun selectClip(clipId: String)
+  fun clearSelection()
   fun togglePlayback()
   fun seekTo(positionMs: Long)
   fun seekBy(deltaMs: Long)
@@ -40,6 +41,7 @@ interface DataRepository {
   fun updateSelectedTool(tool: EditorTool)
   fun adjustSelectedClip(action: ClipAction)
   fun transformSelectedClip(deltaX: Float, deltaY: Float, scaleChange: Float, rotationChange: Float)
+  fun transformSelectedClipAbsolute(positionX: Float, positionY: Float, scale: Float, rotationDegrees: Float)
   fun addAudioClipAtPlayhead(title: String, source: AudioSource)
   fun addTextClipAtPlayhead(content: String, fontSizeSp: Float, color: String, backgroundColor: String?, strokeEnabled: Boolean, shadowEnabled: Boolean, alignment: String, animation: String)
   fun addStickerAtPlayhead(asset: StickerAsset)
@@ -184,6 +186,7 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
   }
 
   override fun selectClip(clipId: String) = updateTimeline { it.copy(selectedClipId = clipId) }
+  override fun clearSelection() = updateTimeline { it.copy(selectedClipId = null) }
 
   override fun togglePlayback() = updateTimeline { it.copy(isPlaying = !it.isPlaying, playheadMs = if (it.playheadMs >= it.durationMs) 0L else it.playheadMs).nextVersion() }
 
@@ -290,6 +293,22 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
         rotationDegrees = (clip.transform.rotationDegrees + rotationChange) % 360f,
       ))
     }
+  }
+
+  override fun transformSelectedClipAbsolute(positionX: Float, positionY: Float, scale: Float, rotationDegrees: Float) = updateTimeline { timeline ->
+    val selectedId = timeline.selectedClipId ?: return@updateTimeline timeline
+    timeline.copy(
+      tracks = timeline.tracks.map { track ->
+        track.copy(clips = track.clips.map { clip ->
+          if (clip.id == selectedId) clip.copy(transform = clip.transform.copy(
+            positionX = positionX.coerceIn(0.05f, 0.95f),
+            positionY = positionY.coerceIn(0.05f, 0.95f),
+            scale = scale.coerceIn(0.35f, 3f),
+            rotationDegrees = ((rotationDegrees % 360f) + 360f) % 360f,
+          )) else clip
+        })
+      },
+    )
   }
 
   override fun addAudioClipAtPlayhead(title: String, source: AudioSource) = withUndo("Add audio") { project ->

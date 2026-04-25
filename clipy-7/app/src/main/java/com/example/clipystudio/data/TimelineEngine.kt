@@ -2,9 +2,12 @@ package com.example.clipystudio.data
 
 import java.util.UUID
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.exp
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToLong
+import kotlin.math.sin
 
 data class ProjectTimeline(
   val id: String = UUID.randomUUID().toString(),
@@ -182,6 +185,92 @@ data class TimelineSettleFrame(
   val resistanceFraction: Float,
 )
 
+enum class GestureOwner { NONE, PREVIEW_TAP, OVERLAY_DRAG, OVERLAY_TRANSFORM, TIMELINE_SCROLL, TIMELINE_PINCH_ZOOM, CLIP_TAP, CLIP_REORDER, TRIM_HANDLE, TEXT_DOUBLE_TAP }
+enum class HapticEvent { SNAP, SPLIT, DELETE, SUCCESSFUL_DROP, INVALID_ACTION }
+
+data class OverlayTransformConfig(
+  val minScale: Float = 0.35f,
+  val maxScale: Float = 3f,
+  val centerSnapThresholdPx: Float = 18f,
+  val angleSnapThresholdDegrees: Float = 4f,
+  val snapAnglesDegrees: List<Float> = listOf(0f, 45f, 90f),
+)
+
+data class OverlaySnapResolution(
+  val snappedCenterX: Float? = null,
+  val snappedCenterY: Float? = null,
+  val snappedRotationDegrees: Float? = null,
+  val showVerticalCenterGuide: Boolean = false,
+  val showHorizontalCenterGuide: Boolean = false,
+  val feedbackIntensity: Float = 0f,
+)
+
+data class OverlayBoundingBox(
+  val left: Float,
+  val top: Float,
+  val right: Float,
+  val bottom: Float,
+  val centerX: Float,
+  val centerY: Float,
+  val rotationDegrees: Float,
+)
+
+data class OverlayDragSnapshot(
+  val overlayId: String,
+  val startCenterX: Float,
+  val startCenterY: Float,
+  val pointerStartX: Float,
+  val pointerStartY: Float,
+  val resolvedCenterX: Float,
+  val resolvedCenterY: Float,
+  val snapResolution: OverlaySnapResolution? = null,
+)
+
+data class OverlayTransformSnapshot(
+  val overlayId: String,
+  val gestureMidpointX: Float,
+  val gestureMidpointY: Float,
+  val startScale: Float,
+  val resolvedScale: Float,
+  val startRotationDegrees: Float,
+  val resolvedRotationDegrees: Float,
+  val boundingBox: OverlayBoundingBox,
+  val snapResolution: OverlaySnapResolution? = null,
+)
+
+data class GesturePriorityState(
+  val activeOwner: GestureOwner = GestureOwner.NONE,
+  val activePointerCount: Int = 0,
+  val selectedOverlayId: String? = null,
+  val selectedClipId: String? = null,
+  val isTapCandidate: Boolean = false,
+  val isDoubleTapCandidate: Boolean = false,
+  val isLongPressCandidate: Boolean = false,
+  val startedAtMs: Long = 0,
+)
+
+data class ClipReorderInteractionState(
+  val clipId: String,
+  val isLongPressed: Boolean,
+  val isReordering: Boolean,
+  val liftedFraction: Float,
+  val shadowAlpha: Float,
+  val proposedIndex: Int,
+  val resolvedIndex: Int? = null,
+  val isValidDrop: Boolean,
+)
+
+data class EditorFeedbackState(
+  val showOverlayCenterXGuide: Boolean = false,
+  val showOverlayCenterYGuide: Boolean = false,
+  val highlightedTrimHandleId: String? = null,
+  val highlightedTool: String? = null,
+  val liftedClipId: String? = null,
+  val selectedOverlayId: String? = null,
+  val selectedClipId: String? = null,
+  val pendingHaptic: HapticEvent? = null,
+)
+
 class TimelineThumbnailCache(private val maxEntries: Int = 96) {
   private val entries = linkedMapOf<String, TimelineThumbnailState>()
   fun get(cacheKey: String): TimelineThumbnailState? = entries[cacheKey]?.also { entries[cacheKey] = it.copy(lastAccessedAtMs = System.currentTimeMillis()) }
@@ -202,6 +291,119 @@ object TimelineEngine {
   private const val SnapThresholdPx: Float = 14f
   val DefaultPhysics = TimelinePhysicsConfig()
   val DefaultSnapConfig = TimelineSnapConfig()
+  val DefaultOverlayTransformConfig = OverlayTransformConfig()
+
+  fun resolveGestureOwner(current: GesturePriorityState, requested: GestureOwner, pointerCount: Int): GesturePriorityState {
+    if (current.activeOwner != GestureOwner.NONE && current.activeOwner != requested) return current.copy(activePointerCount = pointerCount)
+    return current.copy(activeOwner = requested, activePointerCount = pointerCount, startedAtMs = current.startedAtMs.takeIf { it > 0 } ?: System.currentTimeMillis())
+  }
+
+  fun resolveOverlayDrag(
+    overlayId: String,
+    startCenterX: Float,
+    startCenterY: Float,
+    pointerStartX: Float,
+    pointerStartY: Float,
+    pointerX: Float,
+    pointerY: Float,
+    previewWidthPx: Float,
+    previewHeightPx: Float,
+    config: OverlayTransformConfig = DefaultOverlayTransformConfig,
+  ): OverlayDragSnapshot {
+    val rawX = startCenterX + (pointerX - pointerStartX)
+    val rawY = startCenterY + (pointerY - pointerStartY)
+    val snap = resolveOverlayCenterSnap(rawX, rawY, previewWidthPx, previewHeightPx, config)
+    return OverlayDragSnapshot(
+      overlayId = overlayId,
+      startCenterX = startCenterX,
+      startCenterY = startCenterY,
+      pointerStartX = pointerStartX,
+      pointerStartY = pointerStartY,
+      resolvedCenterX = (snap.snappedCenterX ?: rawX).coerceIn(0f, previewWidthPx.coerceAtLeast(1f)),
+      resolvedCenterY = (snap.snappedCenterY ?: rawY).coerceIn(0f, previewHeightPx.coerceAtLeast(1f)),
+      snapResolution = snap,
+    )
+  }
+
+  fun resolveOverlayTransform(
+    overlayId: String,
+    centerX: Float,
+    centerY: Float,
+    baseWidthPx: Float,
+    baseHeightPx: Float,
+    gestureMidpointX: Float,
+    gestureMidpointY: Float,
+    startScale: Float,
+    zoomChange: Float,
+    startRotationDegrees: Float,
+    rotationChangeDegrees: Float,
+    config: OverlayTransformConfig = DefaultOverlayTransformConfig,
+  ): OverlayTransformSnapshot {
+    val scale = (startScale * zoomChange.coerceAtLeast(0.01f)).coerceIn(config.minScale, config.maxScale)
+    val rawRotation = normalizeDegrees(startRotationDegrees + rotationChangeDegrees)
+    val snap = resolveOverlayAngleSnap(rawRotation, config)
+    val rotation = snap.snappedRotationDegrees ?: rawRotation
+    return OverlayTransformSnapshot(
+      overlayId = overlayId,
+      gestureMidpointX = gestureMidpointX,
+      gestureMidpointY = gestureMidpointY,
+      startScale = startScale,
+      resolvedScale = scale,
+      startRotationDegrees = startRotationDegrees,
+      resolvedRotationDegrees = rotation,
+      boundingBox = overlayBoundingBox(centerX, centerY, baseWidthPx, baseHeightPx, scale, rotation),
+      snapResolution = snap,
+    )
+  }
+
+  fun overlayBoundingBox(centerX: Float, centerY: Float, widthPx: Float, heightPx: Float, scale: Float, rotationDegrees: Float): OverlayBoundingBox {
+    val halfW = widthPx.coerceAtLeast(1f) * scale.coerceAtLeast(0.01f) / 2f
+    val halfH = heightPx.coerceAtLeast(1f) * scale.coerceAtLeast(0.01f) / 2f
+    val radians = Math.toRadians(rotationDegrees.toDouble())
+    val cos = abs(cos(radians)).toFloat()
+    val sin = abs(sin(radians)).toFloat()
+    val rotatedHalfW = halfW * cos + halfH * sin
+    val rotatedHalfH = halfW * sin + halfH * cos
+    return OverlayBoundingBox(centerX - rotatedHalfW, centerY - rotatedHalfH, centerX + rotatedHalfW, centerY + rotatedHalfH, centerX, centerY, normalizeDegrees(rotationDegrees))
+  }
+
+  fun resolveOverlayCenterSnap(centerX: Float, centerY: Float, previewWidthPx: Float, previewHeightPx: Float, config: OverlayTransformConfig = DefaultOverlayTransformConfig): OverlaySnapResolution {
+    val targetX = previewWidthPx / 2f
+    val targetY = previewHeightPx / 2f
+    val snapX = abs(centerX - targetX) <= config.centerSnapThresholdPx
+    val snapY = abs(centerY - targetY) <= config.centerSnapThresholdPx
+    val intensity = max(
+      if (snapX) 1f - (abs(centerX - targetX) / config.centerSnapThresholdPx) else 0f,
+      if (snapY) 1f - (abs(centerY - targetY) / config.centerSnapThresholdPx) else 0f,
+    )
+    return OverlaySnapResolution(
+      snappedCenterX = targetX.takeIf { snapX },
+      snappedCenterY = targetY.takeIf { snapY },
+      showVerticalCenterGuide = snapX,
+      showHorizontalCenterGuide = snapY,
+      feedbackIntensity = intensity.coerceIn(0f, 1f),
+    )
+  }
+
+  fun resolveOverlayAngleSnap(rotationDegrees: Float, config: OverlayTransformConfig = DefaultOverlayTransformConfig): OverlaySnapResolution {
+    val normalized = normalizeDegrees(rotationDegrees)
+    val candidates = (-4..8).flatMap { turn -> config.snapAnglesDegrees.map { it + turn * 90f } }
+    val best = candidates.minByOrNull { angularDistance(normalized, normalizeDegrees(it)) } ?: return OverlaySnapResolution()
+    val distance = angularDistance(normalized, normalizeDegrees(best))
+    return if (distance <= config.angleSnapThresholdDegrees) {
+      OverlaySnapResolution(
+        snappedRotationDegrees = normalizeDegrees(best),
+        feedbackIntensity = (1f - distance / config.angleSnapThresholdDegrees).coerceIn(0f, 1f),
+      )
+    } else OverlaySnapResolution()
+  }
+
+  fun normalizeDegrees(value: Float): Float = ((value % 360f) + 360f) % 360f
+
+  private fun angularDistance(a: Float, b: Float): Float {
+    val diff = abs(normalizeDegrees(a) - normalizeDegrees(b)) % 360f
+    return min(diff, 360f - diff)
+  }
 
   fun toProjectTimeline(timeline: Timeline): ProjectTimeline = ProjectTimeline(
     id = timeline.id,

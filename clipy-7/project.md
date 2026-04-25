@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 08:44 UTC
+- Last updated: 2026-04-25 10:24 UTC
 - App: Clipy Studio
 - Slug: clipy
 - Tagline: A premium offline-friendly Android video editor for fast, polished social videos.
 - Target users: General users
-- Design direction: Incremental interaction update for the existing dark export/editor experience: preserve the current MVVM-driven layout and compact panel styling, while making timeline manipulation feel physically grounded, center-anchored, and confidence-building. Motion should read as elastic and precise rather than playful, with restrained visual cues that reinforce velocity, snapping, and zoom focus without introducing a new visual system.
+- Design direction: Incremental interaction polish for the existing compact Compose editor: keep the current visual language stable while making preview overlays and timeline gestures feel direct, physical, and production-ready. Emphasize precise finger tracking, transient feedback, visible snap affordances, and low-latency state changes without introducing permanent new controls or redesigning unrelated screens.
 - Core constraints: android only, MVP first, offline-friendly where possible
 Design style must align with: modern minimal premium
 Typography should align with: clean geometric sans
@@ -434,6 +434,37 @@ Function: selected clip should lift slightly, follow finger exactly, snap to val
 
 10. TRIM HANDLE PHYSICS:
 Function: trim handles must be easy to grab, follow finger precisely, respect minimum duration, and snap to nearby edges/playhead.
+Additional follow-up requirement: GESTURE PHYSICS + SCROLL INERTIA PART 2:
+
+11. OVERLAY DRAG:
+Function: text/sticker/overlay drag on preview must be 60fps, follow finger precisely, support center snap guides, and never jitter.
+
+12. OVERLAY PINCH SCALE:
+Function: pinch scaling overlay must be centered around gesture midpoint, clamp min/max scale, and update bounding box instantly.
+
+13. OVERLAY ROTATE:
+Function: two-finger rotate must rotate smoothly, support angle snapping at 0/45/90 degrees if close, and avoid sudden jumps.
+
+14. MULTI-TOUCH PRIORITY:
+Function: distinguish tap, drag, pinch, rotate, trim, and timeline scroll correctly to prevent gesture conflict.
+
+15. TAP SELECTION:
+Function: tap selects clip/overlay instantly; tap empty area clears selection; double tap text opens text editor.
+
+16. LONG PRESS:
+Function: long press on timeline clip enables drag/reorder mode with small scale-up/shadow feedback.
+
+17. VISUAL FEEDBACK:
+Function: show snap guide lines, selected borders, lifted clip shadow, trim handle highlight, and tool highlight during gestures.
+
+18. HAPTIC FEEDBACK:
+Function: add light haptic feedback for snap, split, delete, successful drop, and invalid action when available.
+
+19. PERFORMANCE:
+Function: gestures must not trigger heavy recomposition; use lightweight state updates, derived state, pointerInput, Animatable/Decay animation, and background thumbnail loading.
+
+20. STRICT:
+Function: no laggy gesture, no accidental clip jump, no broken pinch zoom, no preview desync, no fake physics, production-ready only.
 
 ### Core Features
 - Splash -> onboarding/intro -> main app flow
@@ -459,12 +490,13 @@ Function: trim handles must be easy to grab, follow finger precisely, respect mi
 - Performance foundations including lazy thumbnail loading, background rendering/export, media proxy strategies for large files, memory-aware preview, and responsive Compose UI
 
 ### Main Screens
-- Main Editor Timeline Surface
-- Timeline Zoom Interaction Surface
-- Clip Manipulation Surface
+- Preview Overlay Interaction Surface
+- Main Editor Gesture Arbitration Layer
+- Timeline Clip Manipulation Surface
+- Gesture Feedback Overlay
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Keep existing timeline persistence unchanged and add gesture physics as an in-memory interaction layer owned by MainScreenViewModel or dedicated timeline interaction state holders. Compose should collect timeline gesture state, pointer input, and animation state, while pure mapping and physics logic for scroll offset, center-playhead time conversion, fling decay, edge resistance, zoom anchoring, and snap resolution live in testable Kotlin components isolated from repository persistence. Any haptic feedback should be optional and triggered through UI-facing hooks without coupling physics math to platform services.
+- storage: Keep existing timeline and project persistence unchanged. Add overlay transform, gesture arbitration, feedback, and haptic event state as in-memory editor interaction state owned by MainScreenViewModel or a dedicated interaction state holder. Compose should collect stable editor state, use pointerInput for low-latency gesture capture, update transform values through lightweight mutable interaction state, and render transient feedback overlays without forcing expensive recomposition of thumbnails, playback, export diagnostics, or unrelated editor panels. Pure overlay transform math, angle snapping, center snapping, bounding box calculation, and gesture priority resolution should live in testable Kotlin components isolated from platform services. Haptic feedback should be emitted as one-shot UI events and performed only when a safe Compose haptic hook is available.
 <!-- AUTO-GENERATED:CORE_END -->

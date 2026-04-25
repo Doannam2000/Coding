@@ -18,6 +18,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -74,10 +75,13 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.consumePositionChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -100,6 +104,8 @@ import com.example.clipystudio.data.EditorTool
 import com.example.clipystudio.data.EffectCategory
 import com.example.clipystudio.data.EffectLibrary
 import com.example.clipystudio.data.EffectPreset
+import com.example.clipystudio.data.GestureOwner
+import com.example.clipystudio.data.HapticEvent
 import com.example.clipystudio.data.ExportResolution
 import com.example.clipystudio.data.FilterAdjustmentSet
 import com.example.clipystudio.data.LanguageCode
@@ -139,6 +145,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
@@ -159,6 +166,14 @@ private data class TimelineGestureOverlayState(
   val snapLabel: String? = null,
   val snapTimeMs: Long? = null,
   val resistanceFraction: Float = 0f,
+)
+
+private data class PreviewGestureFeedback(
+  val owner: GestureOwner = GestureOwner.NONE,
+  val showCenterXGuide: Boolean = false,
+  val showCenterYGuide: Boolean = false,
+  val angleLabel: String? = null,
+  val pendingHaptic: HapticEvent? = null,
 )
 
 private suspend fun animateTimelineSettle(
@@ -505,7 +520,7 @@ private fun EditorScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onI
       onRedo = viewModel::redo,
       onExport = onExport,
     )
-    PreviewCanvas(project.canvasRatio, timeline, viewModel::selectClip, viewModel::deleteSelectedClip, viewModel::transformSelectedClip, viewModel::updateCanvasRatio)
+    PreviewCanvas(project.canvasRatio, timeline, viewModel::selectClip, viewModel::clearSelection, viewModel::deleteSelectedClip, viewModel::transformSelectedClipAbsolute, viewModel::updateSelectedTool, viewModel::updateCanvasRatio)
     PlaybackControls(timeline, viewModel::togglePlayback, viewModel::seekBy)
     LaunchedEffect(timeline.isPlaying) {
       while (timeline.isPlaying) {
@@ -740,29 +755,79 @@ private fun SettingsScreen(appState: AppState, copy: Copy, onBack: () -> Unit, o
 }
 
 @Composable
-private fun PreviewCanvas(ratio: CanvasRatio, timeline: Timeline, onSelect: (String) -> Unit, onDelete: () -> Unit, onTransform: (Float, Float, Float, Float) -> Unit, onRatio: (CanvasRatio) -> Unit) {
+private fun PreviewCanvas(ratio: CanvasRatio, timeline: Timeline, onSelect: (String) -> Unit, onClearSelection: () -> Unit, onDelete: () -> Unit, onTransform: (Float, Float, Float, Float) -> Unit, onEditText: (EditorTool) -> Unit, onRatio: (CanvasRatio) -> Unit) {
   val ratioValue = when (ratio) { CanvasRatio.Portrait -> 9f / 16f; CanvasRatio.Square -> 1f; CanvasRatio.Landscape -> 16f / 9f; CanvasRatio.FourFive -> 4f / 5f; CanvasRatio.Original -> 3f / 4f }
   val glow by animateFloatAsState(if (timeline.isPlaying) 1f else 0.35f, label = "previewGlow")
   val composition = remember(timeline) { TimelineEngine.resolveActiveComposition(timeline) }
   val activeIds = buildSet { composition.video?.let { add(it.clipId) }; addAll(composition.audio.map { it.clipId }); addAll(composition.text.map { it.clipId }); addAll(composition.stickers.map { it.clipId }); addAll(composition.overlays.map { it.clipId }); addAll(composition.effects.map { it.clipId }) }
   val activeClips = timeline.tracks.flatMap { it.clips }.filter { it.id in activeIds }.sortedBy { it.zIndex }
   val selectedClip = activeClips.firstOrNull { it.id == timeline.selectedClipId }
+  var feedback by remember { mutableStateOf(PreviewGestureFeedback()) }
+  val haptic = LocalHapticFeedback.current
+  LaunchedEffect(feedback.pendingHaptic) {
+    val event = feedback.pendingHaptic ?: return@LaunchedEffect
+    haptic.performHapticFeedback(if (event == HapticEvent.INVALID_ACTION) HapticFeedbackType.LongPress else HapticFeedbackType.TextHandleMove)
+    feedback = feedback.copy(pendingHaptic = null)
+  }
   Column(Modifier.fillMaxWidth()) {
     Box(Modifier.fillMaxWidth().height(282.dp).clip(RoundedCornerShape(24.dp)).background(StudioSurfaceHigh), contentAlignment = Alignment.Center) {
       val backgroundColor = runCatching { Color(android.graphics.Color.parseColor(timeline.canvasBackground.color)) }.getOrDefault(StudioBackground)
-      Box(Modifier.fillMaxHeight(0.88f).aspectRatio(ratioValue).clip(RoundedCornerShape(18.dp)).background(if (timeline.canvasBackground.blurEnabled) Brush.radialGradient(listOf(StudioPrimary.copy(alpha = 0.28f + timeline.canvasBackground.blurStrength * 0.24f), backgroundColor)) else Brush.radialGradient(listOf(StudioPrimary.copy(alpha = 0.55f * glow), backgroundColor)))) {
-        Box(Modifier.fillMaxSize().pointerInput(timeline.selectedClipId) { detectTransformGestures { _, pan, zoom, rotation -> if (timeline.selectedClipId != null) onTransform(pan.x / 600f, pan.y / 900f, zoom, rotation) } })
+      var previewWidthPx by remember { mutableStateOf(1f) }
+      var previewHeightPx by remember { mutableStateOf(1f) }
+      Box(Modifier.fillMaxHeight(0.88f).aspectRatio(ratioValue).clip(RoundedCornerShape(18.dp)).background(if (timeline.canvasBackground.blurEnabled) Brush.radialGradient(listOf(StudioPrimary.copy(alpha = 0.28f + timeline.canvasBackground.blurStrength * 0.24f), backgroundColor)) else Brush.radialGradient(listOf(StudioPrimary.copy(alpha = 0.55f * glow), backgroundColor))).onSizeChanged { previewWidthPx = it.width.toFloat().coerceAtLeast(1f); previewHeightPx = it.height.toFloat().coerceAtLeast(1f) }.pointerInput(activeClips.map { it.id to it.transform }, timeline.selectedClipId, previewWidthPx, previewHeightPx) {
+        detectTapGestures(onTap = { tap ->
+          val hit = activeClips.asReversed().firstOrNull { clip ->
+            val box = TimelineEngine.overlayBoundingBox(clip.transform.positionX * previewWidthPx, clip.transform.positionY * previewHeightPx, 112f, 48f, clip.transform.scale, clip.transform.rotationDegrees)
+            tap.x in box.left..box.right && tap.y in box.top..box.bottom
+          }
+          if (hit == null) onClearSelection() else onSelect(hit.id)
+          feedback = feedback.copy(owner = GestureOwner.PREVIEW_TAP)
+        }, onDoubleTap = { tap ->
+          val hit = activeClips.asReversed().firstOrNull { clip ->
+            clip.clipType == ClipType.Text && tap.x in (clip.transform.positionX * previewWidthPx - 72f)..(clip.transform.positionX * previewWidthPx + 72f) && tap.y in (clip.transform.positionY * previewHeightPx - 44f)..(clip.transform.positionY * previewHeightPx + 44f)
+          }
+          if (hit != null) {
+            onSelect(hit.id)
+            onEditText(EditorTool.Text)
+            feedback = feedback.copy(owner = GestureOwner.TEXT_DOUBLE_TAP, pendingHaptic = HapticEvent.SNAP)
+          }
+        })
+      }.pointerInput(selectedClip?.id, selectedClip?.transform, previewWidthPx, previewHeightPx) {
+        val clip = selectedClip ?: return@pointerInput
+        detectTransformGestures { centroid, pan, zoom, rotation ->
+          val owner = if (abs(zoom - 1f) > 0.01f || abs(rotation) > 0.25f) GestureOwner.OVERLAY_TRANSFORM else GestureOwner.OVERLAY_DRAG
+          val startCenterX = clip.transform.positionX * previewWidthPx
+          val startCenterY = clip.transform.positionY * previewHeightPx
+          val rawCenterX = (startCenterX + pan.x).coerceIn(0f, previewWidthPx)
+          val rawCenterY = (startCenterY + pan.y).coerceIn(0f, previewHeightPx)
+          val drag = TimelineEngine.resolveOverlayDrag(clip.id, startCenterX, startCenterY, startCenterX, startCenterY, rawCenterX, rawCenterY, previewWidthPx, previewHeightPx)
+          val transformed = TimelineEngine.resolveOverlayTransform(clip.id, drag.resolvedCenterX, drag.resolvedCenterY, 112f, 48f, centroid.x, centroid.y, clip.transform.scale, zoom, clip.transform.rotationDegrees, rotation)
+          onTransform(drag.resolvedCenterX / previewWidthPx, drag.resolvedCenterY / previewHeightPx, transformed.resolvedScale, transformed.resolvedRotationDegrees)
+          val snap = transformed.snapResolution
+          val guide = drag.snapResolution
+          feedback = feedback.copy(
+            owner = owner,
+            showCenterXGuide = guide?.showVerticalCenterGuide == true,
+            showCenterYGuide = guide?.showHorizontalCenterGuide == true,
+            angleLabel = snap?.snappedRotationDegrees?.let { "${it.roundToInt()} deg" },
+            pendingHaptic = if ((guide?.feedbackIntensity ?: 0f) > 0.85f || (snap?.feedbackIntensity ?: 0f) > 0.85f) HapticEvent.SNAP else feedback.pendingHaptic,
+          )
+        }
+      }) {
         Canvas(Modifier.fillMaxSize()) {
           drawRect(Color.White.copy(alpha = 0.06f), style = Stroke(width = 2.dp.toPx()))
           drawCircle(StudioSecondary.copy(alpha = glow), radius = 18.dp.toPx(), center = center)
-          if (selectedClip != null) {
+          if (feedback.showCenterXGuide || selectedClip != null && feedback.owner == GestureOwner.OVERLAY_DRAG) {
             drawLine(StudioSecondary.copy(alpha = 0.35f), Offset(size.width / 2, 0f), Offset(size.width / 2, size.height), strokeWidth = 1.dp.toPx())
+          }
+          if (feedback.showCenterYGuide || selectedClip != null && feedback.owner == GestureOwner.OVERLAY_DRAG) {
             drawLine(StudioSecondary.copy(alpha = 0.35f), Offset(0f, size.height / 2), Offset(size.width, size.height / 2), strokeWidth = 1.dp.toPx())
           }
         }
         activeClips.filter { it.clipType == ClipType.Text || it.clipType == ClipType.Sticker || it.clipType == ClipType.Overlay }.forEach { clip ->
-          PreviewLayerChip(clip, selected = clip.id == timeline.selectedClipId, onSelect = { onSelect(clip.id) }, onDelete = onDelete)
+          PreviewLayerChip(clip, selected = clip.id == timeline.selectedClipId, previewWidthPx = previewWidthPx, previewHeightPx = previewHeightPx, onSelect = { onSelect(clip.id) }, onDelete = onDelete)
         }
+        feedback.angleLabel?.let { Text(it, modifier = Modifier.align(Alignment.TopEnd).padding(10.dp).clip(RoundedCornerShape(999.dp)).background(StudioBackground.copy(alpha = 0.78f)).padding(horizontal = 8.dp, vertical = 4.dp), color = StudioAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
         composition.transition?.let { transition ->
           Text("${transition.type.label} transition", modifier = Modifier.align(Alignment.Center).clip(RoundedCornerShape(999.dp)).background(StudioBackground.copy(alpha = 0.72f)).padding(horizontal = 12.dp, vertical = 8.dp), color = StudioSecondary, fontWeight = FontWeight.Bold)
         }
@@ -777,11 +842,11 @@ private fun PreviewCanvas(ratio: CanvasRatio, timeline: Timeline, onSelect: (Str
 }
 
 @Composable
-private fun PreviewLayerChip(clip: TimelineClip, selected: Boolean, onSelect: () -> Unit, onDelete: () -> Unit) {
-  val startPadding = ((clip.transform.positionX * 240).coerceIn(12f, 220f)).dp
-  val topPadding = ((clip.transform.positionY * 180).coerceIn(18f, 170f)).dp
+private fun PreviewLayerChip(clip: TimelineClip, selected: Boolean, previewWidthPx: Float, previewHeightPx: Float, onSelect: () -> Unit, onDelete: () -> Unit) {
+  val x = (clip.transform.positionX * previewWidthPx).roundToInt()
+  val y = (clip.transform.positionY * previewHeightPx).roundToInt()
   Box(Modifier.fillMaxSize()) {
-    Box(Modifier.align(Alignment.TopStart).padding(start = startPadding, top = topPadding).clip(RoundedCornerShape(14.dp)).background(StudioBackground.copy(alpha = 0.72f)).border(if (selected) 2.dp else 1.dp, if (selected) StudioPrimary else Color.White.copy(alpha = 0.35f), RoundedCornerShape(14.dp)).clickable(onClick = onSelect).pointerInput(clip.id) { detectTapGestures(onDoubleTap = { onSelect() }, onTap = { onSelect() }) }.padding(horizontal = 12.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.align(Alignment.TopStart).offset { IntOffset(x - 56, y - 24) }.graphicsLayer { scaleX = clip.transform.scale; scaleY = clip.transform.scale; rotationZ = clip.transform.rotationDegrees }.size(width = 112.dp, height = 48.dp).clip(RoundedCornerShape(14.dp)).background(StudioBackground.copy(alpha = 0.72f)).border(if (selected) 2.dp else 1.dp, if (selected) StudioPrimary else Color.White.copy(alpha = 0.35f), RoundedCornerShape(14.dp)).clickable(onClick = onSelect).pointerInput(clip.id) { detectTapGestures(onDoubleTap = { onSelect() }, onTap = { onSelect() }) }.padding(horizontal = 12.dp, vertical = 8.dp).semantics { contentDescription = if (selected) "Selected overlay ${clip.title}" else "Overlay ${clip.title}" }, contentAlignment = Alignment.Center) {
       Text(if (clip.clipType == ClipType.Text) clip.textProperties.content else clip.title, fontSize = clip.textProperties.fontSizeSp.coerceIn(14f, 34f).sp, maxLines = 2, textAlign = TextAlign.Center)
     }
     if (selected) {
@@ -1084,6 +1149,9 @@ private fun EngineClipBlock(trackType: TrackType, clip: TimelineClip, index: Int
   val color = when (trackType) { TrackType.Video -> StudioPrimary; TrackType.Audio -> StudioSecondary; TrackType.Text -> StudioAccent; TrackType.Sticker -> Color(0xFFFF65B3); TrackType.Effect -> Color(0xFF55A7FF); TrackType.Overlay -> Color(0xFF56E58A) }
   val selectedOutline by animateFloatAsState(if (selected) 1f else 0f, tween(140), label = "selectedOutline")
   val liftFraction by animateFloatAsState(if (preview != null) 1f else 0f, tween(120), label = "clipLift")
+  var longPressReordering by remember { mutableStateOf(false) }
+  val reorderLift by animateFloatAsState(if (longPressReordering) 1f else 0f, tween(110), label = "reorderLift")
+  val visualLift = max(liftFraction, reorderLift)
   val displayStartMs = preview?.startTimeMs ?: clip.startMs
   val displayDurationMs = preview?.durationMs ?: clip.durationMs
   val left = ((displayStartMs / 1_000f) * pixelsPerSecond * zoom - scrollOffsetPx).roundToInt()
@@ -1091,13 +1159,31 @@ private fun EngineClipBlock(trackType: TrackType, clip: TimelineClip, index: Int
   val pxPerMs = TimelineEngine.pixelsPerMs(zoom, pixelsPerSecond)
   val isPreviewing = preview != null
   Box(
-    Modifier.offset { IntOffset(left, (-2 * liftFraction).roundToInt()) }.width(width.dp).fillMaxHeight().padding(vertical = 2.dp).clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = if (isPreviewing) 0.98f else if (selected) 0.96f else if (active) 0.76f else 0.58f)).border(if (selected || isPreviewing) 2.dp else 1.dp, when {
+    Modifier.offset { IntOffset(left, (-3 * visualLift).roundToInt()) }.graphicsLayer { scaleX = 1f + visualLift * 0.025f; scaleY = 1f + visualLift * 0.055f; shadowElevation = visualLift * 14f }.width(width.dp).fillMaxHeight().padding(vertical = 2.dp).clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = if (isPreviewing || longPressReordering) 0.98f else if (selected) 0.96f else if (active) 0.76f else 0.58f)).border(if (selected || isPreviewing || longPressReordering) 2.dp else 1.dp, when {
       preview?.isValid == false -> StudioDanger
       selected -> Color.White.copy(alpha = 0.9f * selectedOutline)
       active -> StudioSecondary
       else -> Color.White.copy(alpha = 0.18f)
     }, RoundedCornerShape(12.dp)).clickable { onSelect(clip.id) }.pointerInput(clip.id, selected) {
-      detectTapGestures(onDoubleTap = { onSelect(clip.id); onSplit() }, onLongPress = { onSelect(clip.id); if (trackType == TrackType.Video) onReorder(index + 1) else onMove(250) })
+      detectTapGestures(onDoubleTap = { onSelect(clip.id); onSplit() }, onLongPress = { onSelect(clip.id); longPressReordering = true; if (trackType == TrackType.Video) onReorder(index + 1) else onMove(250); longPressReordering = false })
+    }.pointerInput(clip.id, trackType, timeline.version) {
+      var dragPx = 0f
+      detectDragGesturesAfterLongPress(
+        onDragStart = { dragPx = 0f; longPressReordering = true; onSelect(clip.id); onPreview(TimelineClipPreviewState(clip.id, clip.startMs, clip.durationMs)) },
+        onDrag = { change, dragAmount ->
+          dragPx += dragAmount.x
+          val targetIndex = (index + (dragPx / width.coerceAtLeast(1)).roundToInt()).coerceAtLeast(0)
+          if (trackType == TrackType.Video) onPreview(TimelineClipPreviewState(clip.id, clip.startMs, clip.durationMs, snapLabel = "Reorder ${targetIndex + 1}"))
+          change.consumePositionChange()
+        },
+        onDragEnd = {
+          val targetIndex = (index + (dragPx / width.coerceAtLeast(1)).roundToInt()).coerceAtLeast(0)
+          if (trackType == TrackType.Video) onReorder(targetIndex)
+          longPressReordering = false
+          onPreviewEnd()
+        },
+        onDragCancel = { longPressReordering = false; onPreviewEnd() },
+      )
     }.pointerInput(clip.id, timeline.version, zoom, scrollOffsetPx) {
       var accumulatedDragPx = 0f
       var previewState: TimelineClipPreviewState? = null
