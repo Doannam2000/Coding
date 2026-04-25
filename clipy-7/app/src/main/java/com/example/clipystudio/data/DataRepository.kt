@@ -1,12 +1,387 @@
 package com.example.clipystudio.data
 
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
+import java.util.UUID
 
 interface DataRepository {
-  val data: Flow<List<String>>
+  val appState: Flow<AppState>
+
+  fun completeIntro()
+  fun setLanguage(languageCode: LanguageCode)
+  fun createProject(ratio: CanvasRatio = CanvasRatio.Portrait)
+  fun renameProject(projectId: String, name: String)
+  fun duplicateProject(projectId: String)
+  fun deleteProject(projectId: String)
+  fun openProject(projectId: String)
+  fun addImportedAsset(type: MediaType)
+  fun removeImportedAsset(assetId: String)
+  fun addImportsToProject()
+  fun selectClip(clipId: String)
+  fun togglePlayback()
+  fun seekBy(deltaMs: Long)
+  fun splitSelectedClip()
+  fun duplicateSelectedClip()
+  fun trimSelectedClip(deltaMs: Long)
+  fun updateSelectedTool(tool: EditorTool)
+  fun adjustSelectedClip(action: ClipAction)
+  fun undo()
+  fun redo()
+  fun updateExportSettings(settings: ExportSettings)
+  fun startExport()
+  fun cancelExport()
+  fun clearExportResult()
+  fun clearCache()
 }
 
 class DefaultDataRepository : DataRepository {
-  override val data: Flow<List<String>> = flow { emit(listOf("Android")) }
+  private val state = MutableStateFlow(AppState())
+  override val appState: Flow<AppState> = state
+
+  override fun completeIntro() = state.update { it.copy(hasCompletedIntro = true) }
+
+  override fun setLanguage(languageCode: LanguageCode) = state.update { it.copy(languageCode = languageCode, hasCompletedIntro = true) }
+
+  override fun createProject(ratio: CanvasRatio) {
+    val now = System.currentTimeMillis()
+    val project = Project(
+      id = UUID.randomUUID().toString(),
+      name = "Social cut ${state.value.projects.size + 1}",
+      createdAt = now,
+      updatedAt = now,
+      canvasRatio = ratio,
+      timeline = Timeline.defaultTimeline(),
+    )
+    state.update { it.copy(projects = listOf(project) + it.projects, activeProjectId = project.id, selectedImports = emptyList()) }
+  }
+
+  override fun renameProject(projectId: String, name: String) = mutateProject(projectId) { it.copy(name = name.ifBlank { it.name }) }
+
+  override fun duplicateProject(projectId: String) {
+    val original = state.value.projects.firstOrNull { it.id == projectId } ?: return
+    val now = System.currentTimeMillis()
+    val copy = original.copy(
+      id = UUID.randomUUID().toString(),
+      name = "${original.name} Copy",
+      createdAt = now,
+      updatedAt = now,
+      timeline = original.timeline.copy(
+        tracks = original.timeline.tracks.map { track ->
+          track.copy(id = UUID.randomUUID().toString(), clips = track.clips.map { it.copy(id = UUID.randomUUID().toString()) })
+        },
+      ),
+    )
+    state.update { it.copy(projects = listOf(copy) + it.projects, activeProjectId = copy.id) }
+  }
+
+  override fun deleteProject(projectId: String) = state.update { app ->
+    app.copy(projects = app.projects.filterNot { it.id == projectId }, activeProjectId = app.activeProjectId.takeUnless { it == projectId })
+  }
+
+  override fun openProject(projectId: String) = state.update { it.copy(activeProjectId = projectId) }
+
+  override fun addImportedAsset(type: MediaType) = state.update { app ->
+    val index = app.selectedImports.count { it.type == type } + 1
+    val asset = MediaAsset(
+      id = UUID.randomUUID().toString(),
+      uri = "local://${type.name.lowercase()}/$index",
+      type = type,
+      displayName = "${type.label} sample $index",
+      durationMs = when (type) {
+        MediaType.Image -> 4_000
+        MediaType.Video -> 8_000
+        MediaType.Audio -> 12_000
+      },
+      sizeBytes = when (type) {
+        MediaType.Image -> 2_400_000
+        MediaType.Video -> 48_000_000
+        MediaType.Audio -> 6_800_000
+      },
+    )
+    app.copy(selectedImports = app.selectedImports + asset)
+  }
+
+  override fun removeImportedAsset(assetId: String) = state.update { it.copy(selectedImports = it.selectedImports.filterNot { asset -> asset.id == assetId }) }
+
+  override fun addImportsToProject() {
+    val app = state.value
+    val projectId = app.activeProjectId ?: return
+    val imports = app.selectedImports.ifEmpty { listOf(sampleAsset(MediaType.Video, 1), sampleAsset(MediaType.Audio, 1)) }
+    mutateProject(projectId) { project ->
+      val baseTimeline = project.timeline
+      val videoTrack = baseTimeline.tracks.first { it.type == TrackType.Video }
+      val audioTrack = baseTimeline.tracks.first { it.type == TrackType.Audio }
+      val textTrack = baseTimeline.tracks.first { it.type == TrackType.Text }
+      var videoCursor = videoTrack.clips.maxOfOrNull { it.startMs + it.durationMs } ?: 0L
+      var audioCursor = audioTrack.clips.maxOfOrNull { it.startMs + it.durationMs } ?: 0L
+      val updatedTracks = baseTimeline.tracks.map { track ->
+        when (track.type) {
+          TrackType.Video -> track.copy(clips = track.clips + imports.filter { it.type != MediaType.Audio }.map { asset ->
+            TimelineClip(
+              id = UUID.randomUUID().toString(),
+              assetId = asset.id,
+              clipType = if (asset.type == MediaType.Image) ClipType.Image else ClipType.Video,
+              title = asset.displayName,
+              startMs = videoCursor.also { videoCursor += asset.durationMs },
+              durationMs = asset.durationMs,
+            )
+          })
+          TrackType.Audio -> track.copy(clips = track.clips + imports.filter { it.type == MediaType.Audio }.map { asset ->
+            TimelineClip(
+              id = UUID.randomUUID().toString(),
+              assetId = asset.id,
+              clipType = ClipType.Audio,
+              title = asset.displayName,
+              startMs = audioCursor.also { audioCursor += asset.durationMs },
+              durationMs = asset.durationMs,
+              transform = TransformState(opacity = 1f),
+              audioProperties = AudioProperties(volume = 0.8f),
+            )
+          })
+          TrackType.Text -> if (textTrack.clips.isEmpty()) track.copy(clips = listOf(TimelineClip.textClip())) else track
+          else -> track
+        }
+      }
+      project.copy(importedAssets = (project.importedAssets + imports).distinctBy { it.id }, timeline = baseTimeline.copy(tracks = updatedTracks).recalculateDuration())
+    }
+    state.update { it.copy(selectedImports = emptyList()) }
+  }
+
+  override fun selectClip(clipId: String) = updateTimeline { it.copy(selectedClipId = clipId) }
+
+  override fun togglePlayback() = updateTimeline { it.copy(isPlaying = !it.isPlaying, playheadMs = if (it.playheadMs >= it.durationMs) 0L else it.playheadMs) }
+
+  override fun seekBy(deltaMs: Long) = updateTimeline { timeline -> timeline.copy(playheadMs = (timeline.playheadMs + deltaMs).coerceIn(0L, timeline.durationMs)) }
+
+  override fun splitSelectedClip() = withUndo("Split clip") { project ->
+    val selectedId = project.timeline.selectedClipId ?: return@withUndo project
+    val playhead = project.timeline.playheadMs
+    project.copy(timeline = project.timeline.copy(tracks = project.timeline.tracks.map { track ->
+      val clip = track.clips.firstOrNull { it.id == selectedId } ?: return@map track
+      val splitPoint = playhead - clip.startMs
+      if (splitPoint <= 500 || splitPoint >= clip.durationMs - 500) return@map track
+      val first = clip.copy(durationMs = splitPoint)
+      val second = clip.copy(id = UUID.randomUUID().toString(), startMs = playhead, durationMs = clip.durationMs - splitPoint, sourceInMs = clip.sourceInMs + splitPoint)
+      track.copy(clips = track.clips.flatMap { if (it.id == selectedId) listOf(first, second) else listOf(it) })
+    }).recalculateDuration())
+  }
+
+  override fun duplicateSelectedClip() = withUndo("Duplicate clip") { project ->
+    val selectedId = project.timeline.selectedClipId ?: return@withUndo project
+    project.copy(timeline = project.timeline.copy(tracks = project.timeline.tracks.map { track ->
+      val clip = track.clips.firstOrNull { it.id == selectedId } ?: return@map track
+      track.copy(clips = track.clips + clip.copy(id = UUID.randomUUID().toString(), startMs = clip.startMs + clip.durationMs, title = "${clip.title} copy"))
+    }).recalculateDuration())
+  }
+
+  override fun trimSelectedClip(deltaMs: Long) = withUndo("Trim clip") { project ->
+    mapSelectedClip(project) { clip -> clip.copy(durationMs = (clip.durationMs + deltaMs).coerceAtLeast(1_000L)) }.copyTimelineDuration()
+  }
+
+  override fun updateSelectedTool(tool: EditorTool) = updateTimeline { it.copy(selectedTool = tool) }
+
+  override fun adjustSelectedClip(action: ClipAction) = withUndo(action.label) { project ->
+    mapSelectedClip(project) { clip ->
+      when (action) {
+        ClipAction.Rotate -> clip.copy(transform = clip.transform.copy(rotationDegrees = (clip.transform.rotationDegrees + 90f) % 360f))
+        ClipAction.Flip -> clip.copy(transform = clip.transform.copy(flipHorizontal = !clip.transform.flipHorizontal))
+        ClipAction.OpacityDown -> clip.copy(transform = clip.transform.copy(opacity = (clip.transform.opacity - 0.1f).coerceAtLeast(0.2f)))
+        ClipAction.OpacityUp -> clip.copy(transform = clip.transform.copy(opacity = (clip.transform.opacity + 0.1f).coerceAtMost(1f)))
+        ClipAction.SpeedUp -> clip.copy(videoProperties = clip.videoProperties.copy(speed = (clip.videoProperties.speed + 0.25f).coerceAtMost(2f)))
+        ClipAction.SpeedDown -> clip.copy(videoProperties = clip.videoProperties.copy(speed = (clip.videoProperties.speed - 0.25f).coerceAtLeast(0.5f)))
+        ClipAction.Mute -> clip.copy(videoProperties = clip.videoProperties.copy(sourceAudioMuted = !clip.videoProperties.sourceAudioMuted))
+        ClipAction.Filter -> clip.copy(filterAdjustments = clip.filterAdjustments.copy(filterId = if (clip.filterAdjustments.filterId == "cinematic") null else "cinematic", contrast = 1.1f, saturation = 0.92f))
+        ClipAction.Keyframe -> clip.copy(keyframes = clip.keyframes + Keyframe(timeMs = project.timeline.playheadMs, property = KeyframeProperty.Opacity, value = clip.transform.opacity))
+      }
+    }
+  }
+
+  override fun undo() = state.update { app ->
+    val activeId = app.activeProjectId ?: return@update app
+    val command = app.undoStack.lastOrNull() ?: return@update app
+    app.copy(
+      projects = app.projects.map { if (it.id == activeId) command.before else it },
+      undoStack = app.undoStack.dropLast(1),
+      redoStack = app.redoStack + command,
+    )
+  }
+
+  override fun redo() = state.update { app ->
+    val activeId = app.activeProjectId ?: return@update app
+    val command = app.redoStack.lastOrNull() ?: return@update app
+    app.copy(
+      projects = app.projects.map { if (it.id == activeId) command.after else it },
+      undoStack = app.undoStack + command,
+      redoStack = app.redoStack.dropLast(1),
+    )
+  }
+
+  override fun updateExportSettings(settings: ExportSettings) = state.update { it.copy(defaultExportSettings = settings) }
+
+  override fun startExport() = state.update { app ->
+    app.copy(exportJob = ExportJob(projectId = app.activeProjectId.orEmpty(), settings = app.defaultExportSettings, status = ExportStatus.Complete, progressPercent = 100, outputUri = "gallery://ClipyStudio/export-${System.currentTimeMillis()}.mp4"))
+  }
+
+  override fun cancelExport() = state.update { it.copy(exportJob = it.exportJob?.copy(status = ExportStatus.Cancelled, progressPercent = 0)) }
+
+  override fun clearExportResult() = state.update { it.copy(exportJob = null) }
+
+  override fun clearCache() = state.update { it.copy(cacheUsageMb = 0) }
+
+  private fun mutateProject(projectId: String, transform: (Project) -> Project) = state.update { app ->
+    app.copy(projects = app.projects.map { project -> if (project.id == projectId) transform(project).copy(updatedAt = System.currentTimeMillis(), autosaveVersion = project.autosaveVersion + 1) else project })
+  }
+
+  private fun updateTimeline(transform: (Timeline) -> Timeline) {
+    val projectId = state.value.activeProjectId ?: return
+    mutateProject(projectId) { it.copy(timeline = transform(it.timeline)) }
+  }
+
+  private fun withUndo(description: String, transform: (Project) -> Project) {
+    val app = state.value
+    val project = app.activeProject ?: return
+    val after = transform(project).copy(updatedAt = System.currentTimeMillis(), autosaveVersion = project.autosaveVersion + 1)
+    if (after == project) return
+    state.update { current ->
+      current.copy(projects = current.projects.map { if (it.id == project.id) after else it }, undoStack = current.undoStack + UndoRedoCommand(description, project, after), redoStack = emptyList())
+    }
+  }
+
+  private fun mapSelectedClip(project: Project, transform: (TimelineClip) -> TimelineClip): Project {
+    val selectedId = project.timeline.selectedClipId ?: return project
+    return project.copy(timeline = project.timeline.copy(tracks = project.timeline.tracks.map { track ->
+      track.copy(clips = track.clips.map { if (it.id == selectedId) transform(it) else it })
+    }))
+  }
+
+  private fun Project.copyTimelineDuration() = copy(timeline = timeline.recalculateDuration())
+
+  private fun sampleAsset(type: MediaType, index: Int) = MediaAsset(UUID.randomUUID().toString(), "local://sample/$index", type, "Starter ${type.label.lowercase()}", if (type == MediaType.Audio) 10_000 else 6_000, 3_000_000)
 }
+
+data class AppState(
+  val languageCode: LanguageCode = LanguageCode.En,
+  val hasCompletedIntro: Boolean = false,
+  val projects: List<Project> = emptyList(),
+  val activeProjectId: String? = null,
+  val selectedImports: List<MediaAsset> = emptyList(),
+  val defaultExportSettings: ExportSettings = ExportSettings(),
+  val exportJob: ExportJob? = null,
+  val cacheUsageMb: Int = 128,
+  val undoStack: List<UndoRedoCommand> = emptyList(),
+  val redoStack: List<UndoRedoCommand> = emptyList(),
+) {
+  val activeProject: Project? get() = projects.firstOrNull { it.id == activeProjectId }
+}
+
+enum class LanguageCode { En, Vi }
+enum class CanvasRatio(val label: String) { Portrait("9:16"), Square("1:1"), Landscape("16:9") }
+enum class MediaType(val label: String) { Video("Video"), Image("Image"), Audio("Audio") }
+enum class TrackType(val label: String) { Video("Video"), Audio("Audio"), Text("Text"), Sticker("Sticker"), Effect("Effect"), Overlay("Overlay") }
+enum class ClipType { Video, Image, Audio, Text, Sticker, Effect, Overlay }
+enum class EditorTool(val label: String) { Edit("Edit"), Audio("Audio"), Text("Text"), Sticker("Sticker"), Filter("Filter"), Effect("Effect"), Canvas("Canvas"), Keyframe("Keyframe") }
+enum class KeyframeProperty { PositionX, PositionY, Scale, Rotation, Opacity }
+enum class ExportResolution(val label: String) { P720("720p"), P1080("1080p"), P2K("2K"), P4K("4K") }
+enum class QualityPreset(val label: String) { Balanced("Balanced"), High("High"), Studio("Studio") }
+enum class ExportStatus { Idle, Running, Complete, Cancelled, Failed }
+
+enum class ClipAction(val label: String) {
+  Rotate("Rotate"), Flip("Flip"), OpacityDown("Opacity -"), OpacityUp("Opacity +"), SpeedUp("Speed +"), SpeedDown("Speed -"), Mute("Mute"), Filter("Cinematic"), Keyframe("Add keyframe")
+}
+
+data class Project(
+  val id: String,
+  val name: String,
+  val createdAt: Long,
+  val updatedAt: Long,
+  val thumbnailUri: String? = null,
+  val durationMs: Long = 0,
+  val canvasRatio: CanvasRatio = CanvasRatio.Portrait,
+  val timeline: Timeline = Timeline.defaultTimeline(),
+  val importedAssets: List<MediaAsset> = emptyList(),
+  val lastPlaybackPositionMs: Long = 0,
+  val autosaveVersion: Long = 1,
+)
+
+data class MediaAsset(
+  val id: String,
+  val uri: String,
+  val type: MediaType,
+  val displayName: String,
+  val durationMs: Long,
+  val sizeBytes: Long,
+)
+
+data class Timeline(
+  val durationMs: Long,
+  val tracks: List<TimelineTrack>,
+  val playheadMs: Long = 0,
+  val zoomLevel: Float = 1f,
+  val selectedClipId: String? = null,
+  val selectedTool: EditorTool = EditorTool.Edit,
+  val isPlaying: Boolean = false,
+) {
+  fun recalculateDuration() = copy(durationMs = tracks.flatMap { it.clips }.maxOfOrNull { it.startMs + it.durationMs } ?: 0L)
+
+  companion object {
+    fun defaultTimeline(): Timeline {
+      val videoClip = TimelineClip(id = UUID.randomUUID().toString(), title = "Starter video", clipType = ClipType.Video, durationMs = 6_000)
+      return Timeline(
+        durationMs = 10_000,
+        selectedClipId = videoClip.id,
+        tracks = listOf(
+          TimelineTrack(UUID.randomUUID().toString(), TrackType.Video, "Video 1", 0, listOf(videoClip)),
+          TimelineTrack(UUID.randomUUID().toString(), TrackType.Audio, "Music", 1, listOf(TimelineClip.audioClip())),
+          TimelineTrack(UUID.randomUUID().toString(), TrackType.Text, "Text", 2, listOf(TimelineClip.textClip())),
+          TimelineTrack(UUID.randomUUID().toString(), TrackType.Sticker, "Stickers", 3, emptyList()),
+          TimelineTrack(UUID.randomUUID().toString(), TrackType.Effect, "Effects", 4, listOf(TimelineClip.effectClip())),
+        ),
+      )
+    }
+  }
+}
+
+data class TimelineTrack(val id: String, val type: TrackType, val name: String, val orderIndex: Int, val clips: List<TimelineClip>, val isMuted: Boolean = false, val isLocked: Boolean = false)
+
+data class TimelineClip(
+  val id: String,
+  val assetId: String? = null,
+  val clipType: ClipType,
+  val title: String,
+  val startMs: Long = 0,
+  val durationMs: Long,
+  val sourceInMs: Long = 0,
+  val zIndex: Int = 0,
+  val transform: TransformState = TransformState(),
+  val videoProperties: VideoProperties = VideoProperties(),
+  val audioProperties: AudioProperties = AudioProperties(),
+  val textProperties: TextProperties = TextProperties(),
+  val filterAdjustments: FilterAdjustmentSet = FilterAdjustmentSet(),
+  val keyframes: List<Keyframe> = emptyList(),
+) {
+  companion object {
+    fun audioClip() = TimelineClip(UUID.randomUUID().toString(), clipType = ClipType.Audio, title = "Lo-fi beat", durationMs = 10_000, audioProperties = AudioProperties(volume = 0.72f, fadeInMs = 500, fadeOutMs = 800))
+    fun textClip() = TimelineClip(UUID.randomUUID().toString(), clipType = ClipType.Text, title = "Title overlay", startMs = 1_000, durationMs = 4_000, textProperties = TextProperties(content = "Make it pop"))
+    fun effectClip() = TimelineClip(UUID.randomUUID().toString(), clipType = ClipType.Effect, title = "Soft glow", startMs = 2_000, durationMs = 3_000)
+  }
+}
+
+data class TransformState(val positionX: Float = 0.5f, val positionY: Float = 0.5f, val scale: Float = 1f, val rotationDegrees: Float = 0f, val opacity: Float = 1f, val flipHorizontal: Boolean = false, val flipVertical: Boolean = false)
+data class VideoProperties(val speed: Float = 1f, val isFreezeFrame: Boolean = false, val sourceAudioMuted: Boolean = false)
+data class AudioProperties(val volume: Float = 1f, val fadeInMs: Long = 0, val fadeOutMs: Long = 0, val loopEnabled: Boolean = false)
+data class TextProperties(val content: String = "Clipy Studio", val fontSizeSp: Float = 28f, val color: String = "#F4F6FF", val backgroundColor: String? = "#7C5CFF", val alignment: String = "Center", val animation: String = "Fade")
+data class FilterAdjustmentSet(val filterId: String? = null, val brightness: Float = 1f, val contrast: Float = 1f, val saturation: Float = 1f, val exposure: Float = 0f, val temperature: Float = 0f, val sharpness: Float = 0f, val vignette: Float = 0f)
+data class Keyframe(val id: String = UUID.randomUUID().toString(), val timeMs: Long, val property: KeyframeProperty, val value: Float)
+data class UndoRedoCommand(val description: String, val before: Project, val after: Project)
+data class ExportSettings(val format: String = "MP4", val resolution: ExportResolution = ExportResolution.P1080, val fps: Int = 30, val bitrateMbps: Float = 12f, val qualityPreset: QualityPreset = QualityPreset.Balanced, val saveToGallery: Boolean = true)
+data class ExportJob(val id: String = UUID.randomUUID().toString(), val projectId: String, val settings: ExportSettings, val status: ExportStatus = ExportStatus.Idle, val progressPercent: Int = 0, val outputUri: String? = null, val errorMessage: String? = null)
+
+fun Long.asTimecode(): String {
+  val totalSeconds = this / 1_000
+  val minutes = totalSeconds / 60
+  val seconds = totalSeconds % 60
+  return "%02d:%02d".format(minutes, seconds)
+}
+
+fun Long.asSizeLabel(): String = if (this >= 1_000_000) "%.1f MB".format(this / 1_000_000f) else "${this / 1_000} KB"

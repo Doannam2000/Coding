@@ -2,10 +2,12 @@ package com.example.clipystudio.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
-
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+val StudioPrimary = Color(0xFF7C5CFF)
+val StudioSecondary = Color(0xFF00D6C9)
+val StudioBackground = Color(0xFF090A0F)
+val StudioSurface = Color(0xFF151722)
+val StudioSurfaceHigh = Color(0xFF1D2030)
+val StudioAccent = Color(0xFFFFB454)
+val StudioDanger = Color(0xFFFF5C7A)
+val StudioText = Color(0xFFF4F6FF)
+val StudioTextMuted = Color(0xFFA9AEC4)
