@@ -18,6 +18,7 @@ import com.example.clipystudio.data.MediaType
 import com.example.clipystudio.data.CanvasBackground
 import com.example.clipystudio.data.StickerAsset
 import com.example.clipystudio.data.TransitionType
+import com.example.clipystudio.data.TrimHandle
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
@@ -45,6 +46,11 @@ class MainScreenViewModel(private val dataRepository: DataRepository = DefaultDa
   fun togglePlayback() = dataRepository.togglePlayback()
   fun seekTo(positionMs: Long) = dataRepository.seekTo(positionMs)
   fun seekBy(deltaMs: Long) = dataRepository.seekBy(deltaMs)
+  fun scrollTimelineTo(scrollOffsetPx: Float) = dataRepository.scrollTimelineTo(scrollOffsetPx)
+  fun tickPlayback(deltaMs: Long) = dataRepository.tickPlayback(deltaMs)
+  fun dragSelectedClip(deltaMs: Long) = dataRepository.dragSelectedClip(deltaMs)
+  fun trimSelectedClipEdge(handle: TrimHandle, deltaMs: Long) = dataRepository.trimSelectedClipEdge(handle, deltaMs)
+  fun reorderSelectedVideoClip(targetIndex: Int) = dataRepository.reorderSelectedVideoClip(targetIndex)
   fun updateTimelineZoom(delta: Float) = dataRepository.updateTimelineZoom(delta)
   fun updateCanvasRatio(ratio: CanvasRatio) = dataRepository.updateCanvasRatio(ratio)
   fun splitSelectedClip() = dataRepository.splitSelectedClip()

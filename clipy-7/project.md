@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 07:16 UTC
+- Last updated: 2026-04-25 07:22 UTC
 - App: Clipy Studio
 - Slug: clipy
 - Tagline: A premium offline-friendly Android video editor for fast, polished social videos.
 - Target users: General users
-- Design direction: Incremental expansion of the existing dark vertical Clipy Studio workspace into a CapCut-level advanced editor while preserving the current professional, dense, timeline-first visual language. New panels should feel like contextual drawers layered above the existing bottom tool rail, with high-contrast controls, compact preview cards, real state feedback, and no unrelated screen redesigns.
+- Design direction: Preserve Clipy Studio's compact, tool-dense editor language while making the timeline feel more engine-driven and precise. The follow-up design should emphasize a fixed central playhead, horizontally scrollable time ruler, layered track lanes, clear clip geometry, and tactile edit zones for drag, trim, split, and reorder operations without redesigning the broader app shell.
 - Core constraints: android only, MVP first, offline-friendly where possible
 Design style must align with: modern minimal premium
 Typography should align with: clean geometric sans
@@ -264,6 +264,37 @@ UI must remain smooth; Function: lazy load thumbnails, optimize memory, run heav
 
 30. STRICT RULES:
 All tools must work with real logic; Function: no placeholder UI, no fake interactions, preview must match timeline exactly, production-ready only.
+Additional follow-up requirement: TIMELINE ENGINE CORE PART 1:
+
+1. TIMELINE DATA MODEL:
+Function: define ProjectTimeline with tracks (video, audio, text, sticker, overlay, effect) and Clip model including id, type, mediaUri, startTimeMs, durationMs, trimStartMs, trimEndMs, speed, volume, transform, filter, effect.
+
+2. TIME MAPPING:
+Function: convert scrollOffsetPx to currentTimeMs using zoomScale and pixelsPerSecond and ensure stable mapping.
+
+3. PLAYHEAD SYNC:
+Function: keep preview synced with playhead; scrolling updates preview frame instantly and playback scrolls timeline under fixed playhead.
+
+4. TRACK LAYOUT:
+Function: calculate clip position and width based on time and zoom scale and render multi-track layout correctly.
+
+5. CLIP HIT TEST:
+Function: detect selected clip, trim handles, empty area, and interaction zones from touch input precisely.
+
+6. DRAG CLIP:
+Function: update clip startTimeMs during drag, snap to edges/playhead, and prevent invalid overlaps.
+
+7. TRIM CLIP:
+Function: update trimStartMs and trimEndMs with handle drag, enforce min duration, update preview in real time.
+
+8. SPLIT CLIP:
+Function: split selected clip at playhead and create two valid clips preserving all properties.
+
+9. REORDER VIDEO CLIPS:
+Function: reorder main track clips with drag and shift neighbors correctly.
+
+10. MULTI-TRACK LOGIC:
+Function: allow overlapping for audio/overlay/text while maintaining independent track behavior.
 
 ### Core Features
 - Splash -> onboarding/intro -> main app flow
@@ -289,23 +320,13 @@ All tools must work with real logic; Function: no placeholder UI, no fake intera
 - Performance foundations including lazy thumbnail loading, background rendering/export, media proxy strategies for large files, memory-aware preview, and responsive Compose UI
 
 ### Main Screens
-- Sticker Tool Panel
-- Filter And Adjust Panel
-- Effect Panel
-- Transition Panel
-- Canvas Panel
-- Speed Tool Panel
-- Audio Tool Panel
-- Text Tool Panel
-- Overlay Tool Panel
-- Keyframe System
-- Undo Redo System
-- Export Settings Screen
-- Export Progress Screen
-- Export Success Screen
+- Editor Timeline Workspace
+- Preview Canvas Synchronization
+- Timeline Interaction Layer
+- Timeline Engine Unit Tests
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Continue using the existing SharedPreferences-backed repository and in-memory project state for the MVP. Extend current project/timeline models, EditorUiState, repository contract, and ViewModel operations to persist advanced editor state: sticker clips, filter/adjust values, effect clips, transitions, canvas background, speed duration changes, audio edit properties, text style updates, overlay clips, keyframes, export settings, and export job state. Keep preview and timeline driven by the same project state so visible preview layers always match the playhead. Do not introduce Room or a native media rendering stack unless already present; if no native renderer exists, implement a real background export state machine and project composition pipeline contract with deterministic progress/cancel/success/failure behavior, while clearly isolating renderer implementation behind repository/service interfaces.
+- storage: Continue using the existing SharedPreferences-backed repository and in-memory project state. Add ProjectTimeline and TimelineClip as the canonical timeline representation while mapping any existing clip/timeline fields into safe defaults for current projects. Keep timeline math in small deterministic Kotlin functions or a TimelineEngine helper used by MainScreenViewModel. Compose should render from EditorUiState only, dispatching scroll, hit-test, drag, trim, split, and reorder intents to the ViewModel. Persist timeline changes through the current repository contract, route mutating operations through the existing undo/redo snapshot mechanism, and keep preview composition derived from ProjectTimeline.currentTimeMs and active clips.
 <!-- AUTO-GENERATED:CORE_END -->

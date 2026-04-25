@@ -15,6 +15,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -75,6 +77,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -102,9 +105,11 @@ import com.example.clipystudio.data.StickerCategory
 import com.example.clipystudio.data.StickerLibrary
 import com.example.clipystudio.data.Timeline
 import com.example.clipystudio.data.TimelineClip
+import com.example.clipystudio.data.TimelineEngine
 import com.example.clipystudio.data.TimelineTrack
 import com.example.clipystudio.data.TrackType
 import com.example.clipystudio.data.TransitionType
+import com.example.clipystudio.data.TrimHandle
 import com.example.clipystudio.data.asSizeLabel
 import com.example.clipystudio.data.asTimecode
 import com.example.clipystudio.theme.MyApplicationTheme
@@ -117,6 +122,7 @@ import com.example.clipystudio.theme.StudioSurface
 import com.example.clipystudio.theme.StudioSurfaceHigh
 import com.example.clipystudio.theme.StudioTextMuted
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 private enum class Screen { Splash, Intro, Language, Dashboard, Import, Editor, Export, Settings }
 
@@ -435,7 +441,13 @@ private fun EditorScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onI
     )
     PreviewCanvas(project.canvasRatio, timeline, viewModel::selectClip, viewModel::deleteSelectedClip, viewModel::transformSelectedClip, viewModel::updateCanvasRatio)
     PlaybackControls(timeline, viewModel::togglePlayback, viewModel::seekBy)
-    TimelineView(timeline, viewModel::selectClip, viewModel::seekTo, viewModel::updateTimelineZoom, viewModel::trimSelectedClip, viewModel::moveSelectedClip, viewModel::splitSelectedClip)
+    LaunchedEffect(timeline.isPlaying) {
+      while (timeline.isPlaying) {
+        delay(250)
+        viewModel.tickPlayback(250)
+      }
+    }
+    TimelineView(timeline, viewModel::selectClip, viewModel::seekTo, viewModel::scrollTimelineTo, viewModel::updateTimelineZoom, viewModel::trimSelectedClipEdge, viewModel::dragSelectedClip, viewModel::splitSelectedClip, viewModel::reorderSelectedVideoClip)
     Spacer(Modifier.height(8.dp))
     val selectedClip = timeline.tracks.flatMap { it.clips }.firstOrNull { it.id == timeline.selectedClipId }
     when {
@@ -644,50 +656,80 @@ private fun PlaybackControls(timeline: Timeline, onPlay: () -> Unit, onSeek: (Lo
 }
 
 @Composable
-private fun TimelineView(timeline: Timeline, onSelect: (String) -> Unit, onSeek: (Long) -> Unit, onZoom: (Float) -> Unit, onTrim: (Long) -> Unit, onMove: (Long) -> Unit, onSplit: () -> Unit) {
-  Box(Modifier.fillMaxWidth().height(250.dp).clip(RoundedCornerShape(20.dp)).background(Color.Black.copy(alpha = 0.28f))) {
-    LazyColumn(Modifier.fillMaxSize().padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-      item { TimeRuler(timeline, onSeek, onZoom) }
-      items(timeline.tracks.sortedBy { it.orderIndex }, key = { it.id }) { track -> TrackLane(track, timeline.selectedClipId, timeline.zoomLevel, onSelect, onTrim, onMove, onSplit) }
+private fun TimelineView(timeline: Timeline, onSelect: (String) -> Unit, onSeek: (Long) -> Unit, onScroll: (Float) -> Unit, onZoom: (Float) -> Unit, onTrim: (TrimHandle, Long) -> Unit, onMove: (Long) -> Unit, onSplit: () -> Unit, onReorder: (Int) -> Unit) {
+  val projectTimeline = remember(timeline) { TimelineEngine.toProjectTimeline(timeline) }
+  val pxPerSecond = timeline.pixelsPerSecond * timeline.zoomLevel
+  val contentWidth = ((timeline.durationMs / 1_000f) * pxPerSecond).roundToInt().coerceAtLeast(640)
+  Box(Modifier.fillMaxWidth().height(312.dp).clip(RoundedCornerShape(20.dp)).background(Color.Black.copy(alpha = 0.30f))) {
+    Column(Modifier.fillMaxSize().padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+      TimelineHeader(timeline, contentWidth, onSeek, onScroll, onZoom)
+      timeline.tracks.sortedBy { it.orderIndex }.forEach { track ->
+        EngineTrackLane(projectTimeline, track, contentWidth, onSelect, onTrim, onMove, onSplit, onReorder)
+      }
     }
     Box(Modifier.align(Alignment.TopCenter).width(2.dp).fillMaxHeight().background(StudioSecondary))
-    Box(Modifier.align(Alignment.TopCenter).padding(top = 4.dp).size(12.dp).clip(CircleShape).background(StudioSecondary))
-  }
-}
-
-@Composable
-private fun TimeRuler(timeline: Timeline, onSeek: (Long) -> Unit, onZoom: (Float) -> Unit) {
-  Row(Modifier.fillMaxWidth().height(28.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-    Text("Ruler", modifier = Modifier.width(58.dp), fontSize = 12.sp, color = StudioTextMuted)
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.weight(1f)) {
-      items((0..timeline.durationMs step 1_000L).toList()) { tick -> Text(tick.asTimecode(), color = if (kotlin.math.abs(tick - timeline.playheadMs) < 550) StudioSecondary else StudioTextMuted, fontSize = 12.sp, modifier = Modifier.clickable { onSeek(tick) }) }
+    Column(Modifier.align(Alignment.TopCenter).padding(top = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+      Box(Modifier.size(13.dp).clip(CircleShape).background(StudioSecondary))
+      Text(timeline.playheadMs.asTimecode(), color = StudioSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.background(StudioSurface.copy(alpha = 0.82f), RoundedCornerShape(8.dp)).padding(horizontal = 5.dp, vertical = 2.dp))
     }
-    TextButton(onClick = { onZoom(-0.2f) }, modifier = Modifier.width(42.dp)) { Text("-") }
-    TextButton(onClick = { onZoom(0.2f) }, modifier = Modifier.width(42.dp)) { Text("+") }
   }
 }
 
 @Composable
-private fun TrackLane(track: TimelineTrack, selectedClipId: String?, zoom: Float, onSelect: (String) -> Unit, onTrim: (Long) -> Unit, onMove: (Long) -> Unit, onSplit: () -> Unit) {
+private fun TimelineHeader(timeline: Timeline, contentWidth: Int, onSeek: (Long) -> Unit, onScroll: (Float) -> Unit, onZoom: (Float) -> Unit) {
+  val scrollState = rememberScrollState(timeline.scrollOffsetPx.roundToInt())
+  LaunchedEffect(scrollState.value) { onScroll(scrollState.value.toFloat()) }
+  Row(Modifier.fillMaxWidth().height(42.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Text("Ruler", modifier = Modifier.width(58.dp), fontSize = 12.sp, color = StudioTextMuted)
+    Box(Modifier.weight(1f).height(34.dp).horizontalScroll(scrollState)) {
+      Canvas(Modifier.width(contentWidth.dp).fillMaxHeight().semantics { contentDescription = "Scrollable timeline ruler at ${timeline.playheadMs.asTimecode()}" }) {
+        val pxPerMs = timeline.pixelsPerSecond * timeline.zoomLevel / 1_000f
+        for (tick in 0..timeline.durationMs step 1_000L) {
+          val x = tick * pxPerMs
+          drawLine(if (kotlin.math.abs(tick - timeline.playheadMs) < 550) StudioSecondary else StudioTextMuted.copy(alpha = 0.5f), Offset(x, 6f), Offset(x, size.height), strokeWidth = 2f)
+        }
+      }
+      Row(Modifier.width(contentWidth.dp).fillMaxHeight(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+        (0..timeline.durationMs step 2_000L).forEach { tick -> Text(tick.asTimecode(), color = StudioTextMuted, fontSize = 10.sp, modifier = Modifier.clickable { onSeek(tick) }) }
+      }
+    }
+    TextButton(onClick = { onZoom(-0.2f) }, modifier = Modifier.size(42.dp)) { Text("-") }
+    TextButton(onClick = { onZoom(0.2f) }, modifier = Modifier.size(42.dp)) { Text("+") }
+  }
+}
+
+@Composable
+private fun EngineTrackLane(projectTimeline: com.example.clipystudio.data.ProjectTimeline, track: TimelineTrack, contentWidth: Int, onSelect: (String) -> Unit, onTrim: (TrimHandle, Long) -> Unit, onMove: (Long) -> Unit, onSplit: () -> Unit, onReorder: (Int) -> Unit) {
+  val scrollState = rememberScrollState(projectTimeline.scrollOffsetPx.roundToInt())
   Row(Modifier.fillMaxWidth().height(38.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
     Text(track.type.label, modifier = Modifier.width(58.dp), fontSize = 12.sp, color = StudioTextMuted)
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-      items(track.clips.sortedBy { it.startMs }, key = { it.id }) { clip -> ClipBlock(track.type, clip, selectedClipId == clip.id, zoom, onSelect, onTrim, onMove, onSplit) }
+    Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(12.dp)).background(StudioSurface.copy(alpha = 0.55f)).horizontalScroll(scrollState)) {
+      Box(Modifier.width(contentWidth.dp).fillMaxHeight()) {
+        track.clips.sortedBy { it.startMs }.forEachIndexed { index, clip ->
+          EngineClipBlock(track.type, clip, index, selected = projectTimeline.selectedClipId == clip.id, zoom = projectTimeline.zoomScale, pixelsPerSecond = projectTimeline.pixelsPerSecond, onSelect, onTrim, onMove, onSplit, onReorder)
+        }
+      }
     }
   }
 }
 
 @Composable
-private fun ClipBlock(trackType: TrackType, clip: TimelineClip, selected: Boolean, zoom: Float, onSelect: (String) -> Unit, onTrim: (Long) -> Unit, onMove: (Long) -> Unit, onSplit: () -> Unit) {
+private fun EngineClipBlock(trackType: TrackType, clip: TimelineClip, index: Int, selected: Boolean, zoom: Float, pixelsPerSecond: Float, onSelect: (String) -> Unit, onTrim: (TrimHandle, Long) -> Unit, onMove: (Long) -> Unit, onSplit: () -> Unit, onReorder: (Int) -> Unit) {
   val color = when (trackType) { TrackType.Video -> StudioPrimary; TrackType.Audio -> StudioSecondary; TrackType.Text -> StudioAccent; TrackType.Sticker -> Color(0xFFFF65B3); TrackType.Effect -> Color(0xFF55A7FF); TrackType.Overlay -> Color(0xFF56E58A) }
+  val left = ((clip.startMs / 1_000f) * pixelsPerSecond * zoom).roundToInt()
+  val width = ((clip.durationMs / 1_000f) * pixelsPerSecond * zoom).roundToInt().coerceAtLeast(56)
   Box(
-    Modifier.width(((70 + (clip.durationMs / 120).toInt()) * zoom).toInt().coerceIn(72, 260).dp).fillMaxHeight().clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = if (selected) 0.9f else 0.55f)).border(if (selected) 2.dp else 0.dp, Color.White, RoundedCornerShape(12.dp)).clickable { onSelect(clip.id) }.pointerInput(clip.id) { detectTapGestures(onDoubleTap = { onSelect(clip.id); onSplit() }, onLongPress = { onSelect(clip.id); onMove(500) }) }.semantics { contentDescription = "${clip.clipType} clip, starts at ${clip.startMs.asTimecode()}, duration ${clip.durationMs.asTimecode()}" },
+    Modifier.offset { IntOffset(left, 0) }.width(width.dp).fillMaxHeight().padding(vertical = 2.dp).clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = if (selected) 0.92f else 0.58f)).border(if (selected) 2.dp else 1.dp, if (selected) Color.White else Color.White.copy(alpha = 0.18f), RoundedCornerShape(12.dp)).clickable { onSelect(clip.id) }.pointerInput(clip.id, selected) {
+      detectTapGestures(onDoubleTap = { onSelect(clip.id); onSplit() }, onLongPress = { onSelect(clip.id); if (trackType == TrackType.Video) onReorder(index + 1) else onMove(250) })
+    }.pointerInput(clip.id) {
+      detectHorizontalDragGestures(onDragStart = { onSelect(clip.id) }, onHorizontalDrag = { _, dragAmount -> onMove((dragAmount / (pixelsPerSecond * zoom) * 1_000f).roundToInt().toLong()) })
+    }.semantics { contentDescription = "${clip.clipType} clip, ${trackType.label} track, starts at ${clip.startMs.asTimecode()}, duration ${clip.durationMs.asTimecode()}" },
     contentAlignment = Alignment.Center,
   ) {
-    Text(clip.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 14.dp))
+    Text(clip.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.padding(horizontal = 16.dp))
     if (selected) {
-      Box(Modifier.align(Alignment.CenterStart).width(8.dp).fillMaxHeight().background(Color.White.copy(alpha = 0.75f)).clickable { onTrim(-500) })
-      Box(Modifier.align(Alignment.CenterEnd).width(8.dp).fillMaxHeight().background(Color.White.copy(alpha = 0.75f)).clickable { onTrim(500) })
+      Box(Modifier.align(Alignment.CenterStart).width(12.dp).fillMaxHeight().background(Color.White.copy(alpha = 0.82f)).clickable { onTrim(TrimHandle.Left, -250) }.semantics { contentDescription = "Trim left edge" })
+      Box(Modifier.align(Alignment.CenterEnd).width(12.dp).fillMaxHeight().background(Color.White.copy(alpha = 0.82f)).clickable { onTrim(TrimHandle.Right, 250) }.semantics { contentDescription = "Trim right edge" })
     }
   }
 }

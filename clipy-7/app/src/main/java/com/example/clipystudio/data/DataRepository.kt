@@ -25,6 +25,11 @@ interface DataRepository {
   fun togglePlayback()
   fun seekTo(positionMs: Long)
   fun seekBy(deltaMs: Long)
+  fun scrollTimelineTo(scrollOffsetPx: Float)
+  fun tickPlayback(deltaMs: Long)
+  fun dragSelectedClip(deltaMs: Long)
+  fun trimSelectedClipEdge(handle: TrimHandle, deltaMs: Long)
+  fun reorderSelectedVideoClip(targetIndex: Int)
   fun updateTimelineZoom(delta: Float)
   fun updateCanvasRatio(ratio: CanvasRatio)
   fun splitSelectedClip()
@@ -180,13 +185,41 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
 
   override fun selectClip(clipId: String) = updateTimeline { it.copy(selectedClipId = clipId) }
 
-  override fun togglePlayback() = updateTimeline { it.copy(isPlaying = !it.isPlaying, playheadMs = if (it.playheadMs >= it.durationMs) 0L else it.playheadMs) }
+  override fun togglePlayback() = updateTimeline { it.copy(isPlaying = !it.isPlaying, playheadMs = if (it.playheadMs >= it.durationMs) 0L else it.playheadMs).nextVersion() }
 
-  override fun seekTo(positionMs: Long) = updateTimeline { timeline -> timeline.copy(playheadMs = positionMs.coerceIn(0L, timeline.durationMs)) }
+  override fun seekTo(positionMs: Long) = updateTimeline { timeline ->
+    val time = positionMs.coerceIn(0L, timeline.durationMs)
+    timeline.copy(playheadMs = time, scrollOffsetPx = TimelineEngine.scrollFromTime(time, timeline.zoomLevel, timeline.pixelsPerSecond)).nextVersion()
+  }
 
   override fun seekBy(deltaMs: Long) = updateTimeline { timeline -> timeline.copy(playheadMs = (timeline.playheadMs + deltaMs).coerceIn(0L, timeline.durationMs)) }
 
-  override fun updateTimelineZoom(delta: Float) = updateTimeline { timeline -> timeline.copy(zoomLevel = (timeline.zoomLevel + delta).coerceIn(0.65f, 3f)) }
+  override fun scrollTimelineTo(scrollOffsetPx: Float) = updateTimeline { timeline -> TimelineEngine.withScroll(timeline, scrollOffsetPx) }
+
+  override fun tickPlayback(deltaMs: Long) = updateTimeline { timeline -> if (timeline.isPlaying) TimelineEngine.withPlaybackTick(timeline, deltaMs) else timeline }
+
+  override fun dragSelectedClip(deltaMs: Long) = withUndo("Drag clip") { project ->
+    val selectedId = project.timeline.selectedClipId ?: return@withUndo project
+    val result = TimelineEngine.dragClip(project.timeline, selectedId, deltaMs)
+    if (result.rejectedReason != null) project else project.copy(timeline = result.timeline.copy(selectedClipId = result.selectedClipId))
+  }
+
+  override fun trimSelectedClipEdge(handle: TrimHandle, deltaMs: Long) = withUndo("Trim clip edge") { project ->
+    val selectedId = project.timeline.selectedClipId ?: return@withUndo project
+    val result = TimelineEngine.trimClip(project.timeline, selectedId, handle, deltaMs)
+    if (result.rejectedReason != null) project else project.copy(timeline = result.timeline.copy(selectedClipId = result.selectedClipId))
+  }
+
+  override fun reorderSelectedVideoClip(targetIndex: Int) = withUndo("Reorder video") { project ->
+    val selectedId = project.timeline.selectedClipId ?: return@withUndo project
+    val result = TimelineEngine.reorderVideoClip(project.timeline, selectedId, targetIndex)
+    if (result.rejectedReason != null) project else project.copy(timeline = result.timeline.copy(selectedClipId = result.selectedClipId))
+  }
+
+  override fun updateTimelineZoom(delta: Float) = updateTimeline { timeline ->
+    val zoom = (timeline.zoomLevel + delta).coerceIn(0.65f, 3f)
+    timeline.copy(zoomLevel = zoom, scrollOffsetPx = TimelineEngine.scrollFromTime(timeline.playheadMs, zoom, timeline.pixelsPerSecond)).nextVersion()
+  }
 
   override fun updateCanvasRatio(ratio: CanvasRatio) {
     val projectId = state.value.activeProjectId ?: return
@@ -194,16 +227,8 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
   }
 
   override fun splitSelectedClip() = withUndo("Split clip") { project ->
-    val selectedId = project.timeline.selectedClipId ?: return@withUndo project
-    val playhead = project.timeline.playheadMs
-    project.copy(timeline = project.timeline.copy(tracks = project.timeline.tracks.map { track ->
-      val clip = track.clips.firstOrNull { it.id == selectedId } ?: return@map track
-      val splitPoint = playhead - clip.startMs
-      if (splitPoint <= 500 || splitPoint >= clip.durationMs - 500) return@map track
-      val first = clip.copy(durationMs = splitPoint)
-      val second = clip.copy(id = UUID.randomUUID().toString(), startMs = playhead, durationMs = clip.durationMs - splitPoint, sourceInMs = clip.sourceInMs + splitPoint)
-      track.copy(clips = track.clips.flatMap { if (it.id == selectedId) listOf(first, second) else listOf(it) })
-    }).recalculateDuration())
+    val result = TimelineEngine.splitSelectedClip(project.timeline)
+    if (result.rejectedReason != null) project else project.copy(timeline = result.timeline.copy(selectedClipId = result.selectedClipId))
   }
 
   override fun duplicateSelectedClip() = withUndo("Duplicate clip") { project ->
@@ -222,13 +247,9 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
     ).recalculateDuration())
   }
 
-  override fun trimSelectedClip(deltaMs: Long) = withUndo("Trim clip") { project ->
-    mapSelectedClip(project) { clip -> clip.copy(durationMs = (clip.durationMs + deltaMs).coerceAtLeast(1_000L)) }.copyTimelineDuration()
-  }
+  override fun trimSelectedClip(deltaMs: Long) = trimSelectedClipEdge(TrimHandle.Right, deltaMs)
 
-  override fun moveSelectedClip(deltaMs: Long) = withUndo("Move clip") { project ->
-    mapSelectedClip(project) { clip -> clip.copy(startMs = (clip.startMs + deltaMs).coerceAtLeast(0L)) }.copyTimelineDuration()
-  }
+  override fun moveSelectedClip(deltaMs: Long) = dragSelectedClip(deltaMs)
 
   override fun updateSelectedTool(tool: EditorTool) = updateTimeline { it.copy(selectedTool = tool) }
 
@@ -564,10 +585,14 @@ private fun JSONObject.toMediaAsset() = MediaAsset(
 )
 
 private fun Timeline.toJson() = JSONObject()
+  .put("id", id)
   .put("durationMs", durationMs)
   .put("tracks", JSONArray(tracks.map { it.toJson() }))
   .put("playheadMs", playheadMs)
   .put("zoomLevel", zoomLevel.toDouble())
+  .put("pixelsPerSecond", pixelsPerSecond.toDouble())
+  .put("scrollOffsetPx", scrollOffsetPx.toDouble())
+  .put("version", version)
   .put("selectedClipId", selectedClipId)
   .put("selectedTool", selectedTool.name)
   .put("isPlaying", isPlaying)
@@ -576,10 +601,14 @@ private fun Timeline.toJson() = JSONObject()
   .put("recentStickers", JSONArray(recentStickers.map { it.toJson() }))
 
 private fun JSONObject.toTimeline() = Timeline(
+  id = optString("id", UUID.randomUUID().toString()),
   durationMs = optLong("durationMs"),
   tracks = optJSONArray("tracks").toList { it.toTimelineTrack() },
   playheadMs = optLong("playheadMs"),
   zoomLevel = optDouble("zoomLevel", 1.0).toFloat(),
+  pixelsPerSecond = optDouble("pixelsPerSecond", TimelineEngine.DefaultPixelsPerSecond.toDouble()).toFloat(),
+  scrollOffsetPx = optDouble("scrollOffsetPx", 0.0).toFloat(),
+  version = optLong("version", 1L),
   selectedClipId = optNullableString("selectedClipId"),
   selectedTool = enumValueOf(optString("selectedTool", EditorTool.Edit.name)),
   isPlaying = optBoolean("isPlaying"),
@@ -721,10 +750,14 @@ data class MediaAsset(
 )
 
 data class Timeline(
+  val id: String = UUID.randomUUID().toString(),
   val durationMs: Long,
   val tracks: List<TimelineTrack>,
   val playheadMs: Long = 0,
   val zoomLevel: Float = 1f,
+  val pixelsPerSecond: Float = TimelineEngine.DefaultPixelsPerSecond,
+  val scrollOffsetPx: Float = 0f,
+  val version: Long = 1,
   val selectedClipId: String? = null,
   val selectedTool: EditorTool = EditorTool.Edit,
   val isPlaying: Boolean = false,

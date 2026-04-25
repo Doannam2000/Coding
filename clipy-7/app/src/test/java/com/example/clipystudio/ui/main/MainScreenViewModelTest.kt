@@ -15,6 +15,7 @@ import com.example.clipystudio.data.MediaType
 import com.example.clipystudio.data.CanvasBackground
 import com.example.clipystudio.data.StickerAsset
 import com.example.clipystudio.data.TransitionType
+import com.example.clipystudio.data.TrimHandle
 import junit.framework.TestCase.assertEquals
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -46,6 +47,11 @@ private class FakeClipyRepository : DataRepository {
   override fun togglePlayback() = Unit
   override fun seekTo(positionMs: Long) = Unit
   override fun seekBy(deltaMs: Long) = Unit
+  override fun scrollTimelineTo(scrollOffsetPx: Float) = Unit
+  override fun tickPlayback(deltaMs: Long) = Unit
+  override fun dragSelectedClip(deltaMs: Long) = Unit
+  override fun trimSelectedClipEdge(handle: TrimHandle, deltaMs: Long) = Unit
+  override fun reorderSelectedVideoClip(targetIndex: Int) = Unit
   override fun updateTimelineZoom(delta: Float) = Unit
   override fun updateCanvasRatio(ratio: CanvasRatio) = Unit
   override fun splitSelectedClip() = Unit
