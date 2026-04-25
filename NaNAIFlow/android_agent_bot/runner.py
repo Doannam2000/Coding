@@ -527,7 +527,8 @@ class JobRunner:
             self.db.set_job_context(candidate["id"], context)
 
     def _current_stage_retry_count(self, job: dict[str, Any], stage_name: str) -> int:
-        context = job.get("context", {}) if isinstance(job.get("context"), dict) else {}
+        latest = self.db.get_job(job["id"])
+        context = latest.get("context", {}) if latest is not None and isinstance(latest.get("context"), dict) else {}
         retry_counts = context.get("stage_retry_counts")
         if not isinstance(retry_counts, dict):
             return 0
@@ -537,7 +538,8 @@ class JobRunner:
             return 0
 
     def _set_stage_retry_count(self, job: dict[str, Any], stage_name: str, retry_count: int) -> None:
-        context = job.get("context", {}) if isinstance(job.get("context"), dict) else {}
+        latest = self.db.get_job(job["id"])
+        context = latest.get("context", {}) if latest is not None and isinstance(latest.get("context"), dict) else {}
         retry_counts = context.get("stage_retry_counts")
         if not isinstance(retry_counts, dict):
             retry_counts = {}
@@ -594,7 +596,8 @@ class JobRunner:
     def _effective_model_for_job(self, job: dict[str, Any]) -> str | None:
         cli_name = self._current_cli_name()
         default_model = self._default_model_for_cli(cli_name)
-        context = job.get("context", {}) if isinstance(job.get("context"), dict) else {}
+        latest = self.db.get_job(job["id"])
+        context = latest.get("context", {}) if latest is not None and isinstance(latest.get("context"), dict) else {}
         pinned = context.get("selected_model")
         if isinstance(pinned, str) and pinned.strip():
             normalized_pinned = self._normalize_model_for_cli(pinned, cli_name)
@@ -643,7 +646,7 @@ class JobRunner:
         detail = self._humanize_cli_line(stream_name, (line or "").strip())
         if not detail:
             return
-        preview = detail[:700]
+        preview = self._compact_text(detail, 1200)
         self.db.add_event(
             job["id"],
             stage_name,
@@ -652,8 +655,10 @@ class JobRunner:
             {"stream": stream_name, "line": preview},
         )
         if self.live_cli_logs_enabled(job["chat_id"]):
-            short = self._compact_text(preview, 320)
-            self.telegram.send_message(job["chat_id"], f"Job #{job['id']} `{stage_name}` cli {stream_name}: {short}")
+            prefix = f"Job #{job['id']} `{stage_name}` cli {stream_name}: "
+            limit = max(512, TelegramClient.TELEGRAM_TEXT_LIMIT - len(prefix) - 32)
+            payload = self._compact_text(detail, limit)
+            self.telegram.send_message_many(job["chat_id"], f"{prefix}{payload}")
 
     def _humanize_cli_line(self, stream_name: str, line: str) -> str:
         if not line:
@@ -665,37 +670,43 @@ class JobRunner:
         try:
             event = json.loads(cleaned)
         except json.JSONDecodeError:
-            return self._compact_text(cleaned)
+            return self._compact_text(cleaned, 6000)
+
+        if not isinstance(event, dict):
+            return self._compact_text(cleaned, 6000)
 
         event_type = str(event.get("type", "")).strip().lower()
         part = event.get("part") if isinstance(event.get("part"), dict) else {}
         part_type = str(part.get("type", "")).strip().lower()
 
         if event_type == "reasoning":
-            text = self._compact_text(str(part.get("text") or part.get("content") or ""))
-            return f"reasoning: {text}" if text else "reasoning"
+            return ""
 
         if event_type == "text":
-            text = self._compact_text(str(part.get("text") or part.get("content") or ""))
-            return f"text: {text}" if text else "text"
+            text = self._extract_cli_value(part.get("text") or part.get("content"), 6000)
+            if not text or self._looks_like_json_blob(text):
+                return ""
+            return text
 
-        if event_type == "tool_call":
-            tool_name = self._compact_text(str(part.get("toolName") or part.get("name") or event.get("tool") or "tool"), 60)
-            status = self._compact_text(str(part.get("status") or event.get("status") or "started"), 40)
-            return f"tool call: {tool_name} ({status})"
+        if event_type in {"tool_use", "tool_call"} or part_type == "tool":
+            detail = self._humanize_tool_event(event, part)
+            if detail:
+                return detail
 
         if event_type in {"tool_result", "tool_output"}:
-            tool_name = self._compact_text(str(part.get("toolName") or part.get("name") or event.get("tool") or "tool"), 60)
-            summary = self._compact_text(str(part.get("summary") or part.get("text") or part.get("content") or "result"), 180)
-            return f"tool result: {tool_name} - {summary}"
+            detail = self._humanize_tool_event(event, part)
+            if detail:
+                return detail
 
         if event_type in {"message", "progress", "status"}:
-            text = self._compact_text(str(part.get("text") or part.get("content") or event.get("message") or ""), 200)
-            return f"{event_type}: {text}" if text else event_type
+            text = self._extract_cli_value(part.get("text") or part.get("content") or event.get("message"), 6000)
+            return text
 
         if event_type == "step_finish" or part_type == "step-finish":
             reason = self._compact_text(str(part.get("reason") or event.get("reason") or "done"))
             tokens = part.get("tokens") if isinstance(part.get("tokens"), dict) else {}
+            if reason.lower() in {"done", "completed", "complete", "success", "stop"} and not tokens:
+                return ""
             if tokens:
                 in_tokens = tokens.get("input", "?")
                 out_tokens = tokens.get("output", "?")
@@ -704,12 +715,103 @@ class JobRunner:
             return f"finish: {reason}"
 
         if part_type:
-            text = self._compact_text(str(part.get("text") or part.get("content") or ""))
-            return f"{part_type}: {text}" if text else part_type
+            text = self._extract_cli_value(part.get("text") or part.get("content"), 6000)
+            if text:
+                return f"{part_type}: {text}"
+            if part_type in {"tool", "step-finish"}:
+                return ""
+            return part_type
 
         if event_type:
-            return event_type
-        return self._compact_text(cleaned)
+            return ""
+        return self._compact_text(cleaned, 6000)
+
+    def _humanize_tool_event(self, event: dict[str, Any], part: dict[str, Any]) -> str:
+        state = part.get("state") if isinstance(part.get("state"), dict) else {}
+        tool_name = self._compact_text(str(part.get("tool") or part.get("toolName") or part.get("name") or event.get("tool") or "tool"), 60)
+        status = self._compact_text(str(state.get("status") or part.get("status") or event.get("status") or "running"), 40)
+        header = f"tool {tool_name} {status}".strip()
+        exit_code = state.get("exit_code")
+        if exit_code is None:
+            exit_code = state.get("exitCode")
+        if exit_code is not None and str(exit_code).strip():
+            header = f"{header} (exit {exit_code})"
+
+        pieces = [header]
+        command = self._extract_cli_command(state.get("input"))
+        if command:
+            pieces.append(f"command: {command}")
+        elif state.get("input") is not None:
+            input_text = self._extract_cli_value(state.get("input"), 2400)
+            if input_text:
+                pieces.append(f"input: {input_text}")
+
+        output_value = None
+        for candidate in (
+            state.get("summary"),
+            state.get("output"),
+            state.get("result"),
+            state.get("error"),
+            part.get("summary"),
+            part.get("text"),
+            part.get("content"),
+            event.get("message"),
+        ):
+            if candidate not in (None, "", [], {}):
+                output_value = candidate
+                break
+        output_text = self._extract_cli_value(output_value, 2800)
+        if output_text and output_text != command and not self._looks_like_json_blob(output_text):
+            label = "error" if state.get("error") not in (None, "") else "output"
+            pieces.append(f"{label}: {output_text}")
+        return " | ".join(piece for piece in pieces if piece)
+
+    def _extract_cli_command(self, payload: Any) -> str:
+        if isinstance(payload, str):
+            return self._compact_text(payload, 2800)
+        if not isinstance(payload, dict):
+            return ""
+        for key in ("command", "cmd", "script", "arguments", "args", "prompt"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return self._compact_text(value, 2800)
+            if isinstance(value, list):
+                parts = [str(item).strip() for item in value if str(item).strip()]
+                if parts:
+                    return self._compact_text(" ".join(parts), 2800)
+        return ""
+
+    def _extract_cli_value(self, value: Any, limit: int = 260) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return self._compact_text(value, limit)
+        if isinstance(value, bool | int | float):
+            return str(value)
+        if isinstance(value, list):
+            parts: list[str] = []
+            for item in value[:8]:
+                text = self._extract_cli_value(item, min(limit, 400))
+                if text:
+                    parts.append(text)
+            return self._compact_text(", ".join(parts), limit)
+        if isinstance(value, dict):
+            for key in ("summary", "text", "content", "message", "stdout", "stderr", "result", "error", "command"):
+                text = self._extract_cli_value(value.get(key), limit)
+                if text:
+                    return text
+            return self._compact_text(json.dumps(value, ensure_ascii=True), limit)
+        return self._compact_text(str(value), limit)
+
+    def _looks_like_json_blob(self, text: str) -> bool:
+        stripped = (text or "").strip()
+        if not stripped or stripped[0] not in "{[":
+            return False
+        try:
+            json.loads(stripped)
+        except json.JSONDecodeError:
+            return False
+        return True
 
     def _compact_text(self, text: str, limit: int = 260) -> str:
         compact = re.sub(r"\s+", " ", (text or "").strip())
@@ -1113,8 +1215,7 @@ class JobRunner:
         return None
 
     def _ensure_workspace_git(self, job: dict[str, Any], workspace: Path) -> dict[str, Any] | None:
-        existing = run_git(workspace, "rev-parse", "--is-inside-work-tree")
-        if existing.returncode == 0:
+        if (workspace / ".git").exists():
             return None
 
         init_result = run_git(workspace, "init", "-b", f"job-{job['id']}")
@@ -1907,6 +2008,14 @@ class CommandRouter:
                 self.telegram.send_message(chat_id, "No remote origin found. Run /setrepo <job_id>|<repo_url> first.")
                 return
 
+            repo_root = run_git(workspace, "rev-parse", "--show-toplevel")
+            if repo_root.returncode != 0:
+                raise RuntimeError((repo_root.stderr or repo_root.stdout).strip() or "git repo root check failed")
+            resolved_root = Path((repo_root.stdout or "").strip())
+            if resolved_root.resolve() != workspace.resolve():
+                raise RuntimeError(
+                    f"Workspace {workspace} is using parent repo {resolved_root}. Initialize a dedicated repo in the workspace before /pushgit."
+                )
             status = run_git(workspace, "status", "--short")
             if status.returncode != 0:
                 raise RuntimeError((status.stderr or status.stdout).strip() or "git status failed")
@@ -2010,7 +2119,7 @@ class CommandRouter:
             model = models[idx]
             label = model if len(model) <= 36 else f"{model[:33]}..."
             if current and model.lower() == current.lower():
-                label = f"{label} ✅"
+                label = f"{label} [current]"
             rows.append([{"text": label, "callback_data": f"model:pick:{idx}"}])
 
         if total_pages > 1:
@@ -2952,3 +3061,4 @@ class CommandRouter:
         if not raw.isdigit():
             return None
         return self.db.get_job(int(raw))
+

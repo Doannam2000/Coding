@@ -328,7 +328,7 @@ class OpenCodeClient:
             except queue.Empty:
                 continue
             if callback is not None and line.strip():
-                callback(stream_name, line.strip()[:1000])
+                callback(stream_name, line.strip())
             last_activity = time.time()
 
         if timed_out:
@@ -352,7 +352,7 @@ class OpenCodeClient:
             except queue.Empty:
                 break
             if callback is not None and line.strip():
-                callback(stream_name, line.strip()[:1000])
+                callback(stream_name, line.strip())
 
         stdout_thread.join(timeout=1)
         stderr_thread.join(timeout=1)
@@ -652,3 +652,4 @@ def run_powershell(command: str, workdir: Path, timeout_seconds: int | None = No
             stdout=(stdout_tail or ""),
             stderr=((stderr_tail or "") + f"\nCommand timed out after {timeout_seconds} seconds").strip(),
         )
+
