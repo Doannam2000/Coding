@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 07:42 UTC
+- Last updated: 2026-04-25 08:44 UTC
 - App: Clipy Studio
 - Slug: clipy
 - Tagline: A premium offline-friendly Android video editor for fast, polished social videos.
 - Target users: General users
-- Design direction: Incremental export experience updates for Render Pipeline Part 2: keep the existing Clipy Studio visual language stable while expanding the export flow from readiness diagnostics into an active, trustworthy render session. The UI should communicate exact preview-matching render behavior, background processing, progress, cancellation, retry, output save, and share states without introducing a new screen family or unrelated redesign.
+- Design direction: Incremental interaction update for the existing dark export/editor experience: preserve the current MVVM-driven layout and compact panel styling, while making timeline manipulation feel physically grounded, center-anchored, and confidence-building. Motion should read as elastic and precise rather than playful, with restrained visual cues that reinforce velocity, snapping, and zoom focus without introducing a new visual system.
 - Core constraints: android only, MVP first, offline-friendly where possible
 Design style must align with: modern minimal premium
 Typography should align with: clean geometric sans
@@ -403,6 +403,37 @@ Function: run in background, avoid UI blocking, prevent OOM.
 
 25. STRICT:
 Function: exported video must match preview exactly, no fake rendering.
+Additional follow-up requirement: GESTURE PHYSICS + SCROLL INERTIA PART 1:
+
+1. GLOBAL GESTURE RULE:
+Function: all gestures must feel like CapCut: smooth, responsive, predictable, no jitter, no accidental movement, no delayed feedback.
+
+2. TIMELINE SCROLL:
+Function: horizontal timeline scroll must support natural drag, fling inertia, deceleration, edge resistance, and stop smoothly without sudden jump.
+
+3. CENTER PLAYHEAD:
+Function: playhead stays fixed at center while timeline content moves underneath; scroll position must always map accurately to currentTimeMs.
+
+4. FLING PHYSICS:
+Function: after user releases timeline drag, continue scrolling with velocity-based inertia and gradually slow down.
+
+5. EDGE RESISTANCE:
+Function: when timeline reaches start/end, apply soft resistance instead of hard stop, then settle back safely.
+
+6. PINCH ZOOM:
+Function: pinch zoom timeline smoothly around finger focal point, preserve playhead time, clamp min/max zoom, and avoid clip width jumping.
+
+7. SNAP FEELING:
+Function: when dragging or trimming clips, snap softly to playhead, clip edges, timeline start/end, transition points, and beat markers.
+
+8. SNAP THRESHOLD:
+Function: use pixel threshold for snapping, stronger when close and weaker when far, with subtle haptic/visual feedback if available.
+
+9. DRAG CLIP PHYSICS:
+Function: selected clip should lift slightly, follow finger exactly, snap to valid positions, and settle smoothly when released.
+
+10. TRIM HANDLE PHYSICS:
+Function: trim handles must be easy to grab, follow finger precisely, respect minimum duration, and snap to nearby edges/playhead.
 
 ### Core Features
 - Splash -> onboarding/intro -> main app flow
@@ -428,12 +459,12 @@ Function: exported video must match preview exactly, no fake rendering.
 - Performance foundations including lazy thumbnail loading, background rendering/export, media proxy strategies for large files, memory-aware preview, and responsive Compose UI
 
 ### Main Screens
-- Export Progress Surface
-- Export Completion Actions
-- Render Diagnostics Debug Surface
+- Main Editor Timeline Surface
+- Timeline Zoom Interaction Surface
+- Clip Manipulation Surface
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Continue using the existing SharedPreferences-backed DataRepository only for ProjectTimeline persistence. Add executable export orchestration as a separate render/export layer that consumes RenderPipelineState, RenderGraph, FrameRenderPlan, and EncoderConfig without mutating persisted timeline state. MainScreenViewModel should own RenderExportState and one-shot share events, while long-running work runs in ViewModel scope or an injected export executor on background dispatchers. Android MediaCodec, MediaMuxer, MediaExtractor, MediaStore, and Intent sharing should be isolated behind interfaces so pure render planning, frame composition planning, audio mix planning, progress state, cancellation, temp cleanup, and error classification remain unit-testable. Compose should only display state and dispatch intents; it must not decode, composite, encode, mix audio, access temp files directly, or perform bitmap-heavy work.
+- storage: Keep existing timeline persistence unchanged and add gesture physics as an in-memory interaction layer owned by MainScreenViewModel or dedicated timeline interaction state holders. Compose should collect timeline gesture state, pointer input, and animation state, while pure mapping and physics logic for scroll offset, center-playhead time conversion, fling decay, edge resistance, zoom anchoring, and snap resolution live in testable Kotlin components isolated from repository persistence. Any haptic feedback should be optional and triggered through UI-facing hooks without coupling physics math to platform services.
 <!-- AUTO-GENERATED:CORE_END -->

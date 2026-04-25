@@ -25,12 +25,12 @@ interface DataRepository {
   fun togglePlayback()
   fun seekTo(positionMs: Long)
   fun seekBy(deltaMs: Long)
-  fun scrollTimelineTo(scrollOffsetPx: Float)
+  fun scrollTimelineTo(scrollOffsetPx: Float, viewportWidthPx: Float = TimelineEngine.DefaultViewportWidthPx)
   fun tickPlayback(deltaMs: Long)
   fun dragSelectedClip(deltaMs: Long)
   fun trimSelectedClipEdge(handle: TrimHandle, deltaMs: Long)
   fun reorderSelectedVideoClip(targetIndex: Int)
-  fun updateTimelineZoom(delta: Float)
+  fun updateTimelineZoom(delta: Float, focalXpx: Float = TimelineEngine.DefaultViewportWidthPx / 2f, viewportWidthPx: Float = TimelineEngine.DefaultViewportWidthPx)
   fun updateCanvasRatio(ratio: CanvasRatio)
   fun splitSelectedClip()
   fun deleteSelectedClip()
@@ -194,7 +194,13 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
 
   override fun seekBy(deltaMs: Long) = updateTimeline { timeline -> timeline.copy(playheadMs = (timeline.playheadMs + deltaMs).coerceIn(0L, timeline.durationMs)) }
 
-  override fun scrollTimelineTo(scrollOffsetPx: Float) = updateTimeline { timeline -> TimelineEngine.withScroll(timeline, scrollOffsetPx) }
+  override fun scrollTimelineTo(scrollOffsetPx: Float, viewportWidthPx: Float) = updateTimeline { timeline ->
+    TimelineEngine.withScroll(
+      timeline,
+      scrollOffsetPx,
+      viewportWidthPx,
+    )
+  }
 
   override fun tickPlayback(deltaMs: Long) = updateTimeline { timeline -> if (timeline.isPlaying) TimelineEngine.withPlaybackTick(timeline, deltaMs) else timeline }
 
@@ -216,9 +222,9 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
     if (result.rejectedReason != null) project else project.copy(timeline = result.timeline.copy(selectedClipId = result.selectedClipId))
   }
 
-  override fun updateTimelineZoom(delta: Float) = withUndo("Zoom timeline") { project ->
+  override fun updateTimelineZoom(delta: Float, focalXpx: Float, viewportWidthPx: Float) = withUndo("Zoom timeline") { project ->
     val multiplier = (1f + delta).coerceIn(0.55f, 1.55f)
-    project.copy(timeline = TimelineEngine.zoomAroundFocal(project.timeline, multiplier, focalXpx = 220f, viewportWidthPx = 440f).timeline)
+    project.copy(timeline = TimelineEngine.zoomAroundFocal(project.timeline, multiplier, focalXpx = focalXpx, viewportWidthPx = viewportWidthPx).timeline)
   }
 
   override fun updateCanvasRatio(ratio: CanvasRatio) {

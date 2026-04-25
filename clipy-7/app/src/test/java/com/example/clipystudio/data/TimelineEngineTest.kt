@@ -10,8 +10,8 @@ import org.junit.Test
 class TimelineEngineTest {
   @Test
   fun timeFromScroll_isStableAndClamped() {
-    assertEquals(1_000L, TimelineEngine.timeFromScroll(72f, 1f, 72f, 10_000L))
-    assertEquals(500L, TimelineEngine.timeFromScroll(72f, 2f, 72f, 10_000L))
+    assertEquals(4_056L, TimelineEngine.timeFromScroll(72f, 1f, 72f, 10_000L))
+    assertEquals(2_028L, TimelineEngine.timeFromScroll(72f, 2f, 72f, 10_000L))
     assertEquals(10_000L, TimelineEngine.timeFromScroll(999_999f, 1f, 72f, 10_000L))
   }
 
@@ -87,8 +87,116 @@ class TimelineEngineTest {
 
     assertEquals(3_000L, result.focalTimeMs)
     assertEquals(2f, result.newZoomScale, 0.001f)
-    assertEquals(360f, result.newScrollOffsetPx, 0.001f)
+    assertEquals(468f, result.newScrollOffsetPx, 0.001f)
+    assertEquals(4_500L, result.currentTimeMs)
     assertEquals(TimelineEngine.MaxZoomScale, TimelineEngine.zoomAroundFocal(result.timeline, 99f, 72f, 360f).newZoomScale)
+  }
+
+  @Test
+  fun anchorZoom_preservesFocalTimeAcrossZoomLevels() {
+    val anchored = TimelineEngine.anchorZoom(scrollOffsetPx = 144f, previousZoom = 1f, nextZoom = 2f, focalXpx = 72f, durationMs = 20_000, pixelsPerSecond = 72f, viewportWidthPx = 360f)
+
+    assertEquals(3_000L, anchored.currentTimeMs)
+    assertEquals(360f, anchored.nextOffsetPx, 0.001f)
+    assertEquals(0f, anchored.resistanceFraction, 0.001f)
+  }
+
+  @Test
+  fun repeatedPinchZoom_usesPreviousGestureZoomWithoutJumpingClipDensity() {
+    val first = TimelineEngine.zoomAroundFocal(sampleTimeline().copy(durationMs = 20_000, scrollOffsetPx = 144f, zoomLevel = 1f), 1.2f, focalXpx = 160f, viewportWidthPx = 360f)
+    val second = TimelineEngine.zoomAroundFocal(first.timeline, 1.2f, focalXpx = 160f, viewportWidthPx = 360f)
+
+    assertEquals(1.2f, first.newZoomScale, 0.001f)
+    assertEquals(1.44f, second.newZoomScale, 0.001f)
+    assertEquals(first.currentTimeMs, second.currentTimeMs)
+    assertTrue(second.newScrollOffsetPx > first.newScrollOffsetPx)
+  }
+
+  @Test
+  fun dragTimelineAndResistance_stayBoundedNearEdges() {
+    val offset = TimelineEngine.dragTimelineBy(0f, 80f, durationMs = 3_000, zoomScale = 1f, pixelsPerSecond = 72f, viewportWidthPx = 360f)
+
+    assertEquals(-17.6f, offset, 0.001f)
+    assertEquals(17.6f / TimelineEngine.DefaultPhysics.overscrollLimitPx, TimelineEngine.resistanceFraction(offset, 3_000, 1f, 72f, 360f), 0.001f)
+    assertEquals(0f, TimelineEngine.settleScrollOffset(offset, 3_000, 1f, 72f, 360f), 0.001f)
+  }
+
+  @Test
+  fun dragTimeline_returnsCenterMappedTimeAndResistance() {
+    val update = TimelineEngine.dragTimeline(120f, -40f, durationMs = 20_000, zoomScale = 1f, pixelsPerSecond = 72f, viewportWidthPx = 360f)
+
+    assertEquals(160f, update.nextOffsetPx, 0.001f)
+    assertEquals(TimelineEngine.timeFromScroll(160f, 1f, 72f, 20_000, 360f), update.currentTimeMs)
+    assertEquals(0f, update.resistanceFraction, 0.001f)
+  }
+
+  @Test
+  fun advanceFling_deceleratesAndStopsSmoothly() {
+    val frame = TimelineEngine.advanceFling(120f, 600f, 16, durationMs = 20_000, zoomScale = 1f, pixelsPerSecond = 72f, viewportWidthPx = 360f)
+
+    assertEquals(129.6f, frame.nextOffsetPx, 0.001f)
+    assertTrue(frame.nextVelocityPxPerSec < 600f)
+    assertFalse(frame.isFinished)
+    assertEquals(0f, frame.resistanceFraction, 0.001f)
+  }
+
+  @Test
+  fun updateDragVelocity_smoothsRapidPointerNoise() {
+    val first = TimelineEngine.updateDragVelocity(0f, deltaPx = -24f, deltaMs = 16)
+    val smoothed = TimelineEngine.updateDragVelocity(first, deltaPx = -4f, deltaMs = 16)
+
+    assertTrue(first > smoothed)
+    assertTrue(smoothed > 0f)
+  }
+
+  @Test
+  fun dragDuringFling_takesOverFromCurrentFlingOffsetWithoutJump() {
+    val fling = TimelineEngine.advanceFling(120f, 600f, 16, durationMs = 20_000, zoomScale = 1f, pixelsPerSecond = 72f, viewportWidthPx = 360f)
+    val takeover = TimelineEngine.dragTimeline(fling.nextOffsetPx, -10f, durationMs = 20_000, zoomScale = 1f, pixelsPerSecond = 72f, viewportWidthPx = 360f)
+
+    assertEquals(fling.nextOffsetPx + 10f, takeover.nextOffsetPx, 0.001f)
+    assertEquals(TimelineEngine.timeFromScroll(takeover.nextOffsetPx, 1f, 72f, 20_000, 360f), takeover.currentTimeMs)
+  }
+
+  @Test
+  fun settleScrollFrames_returnToNearestLegalBound() {
+    val frames = TimelineEngine.settleScrollFrames(scrollOffsetPx = -18f, durationMs = 3_000, zoomScale = 1f, pixelsPerSecond = 72f, viewportWidthPx = 360f)
+
+    assertTrue(frames.isNotEmpty())
+    assertEquals(0f, frames.last().offsetPx, 0.001f)
+    assertEquals(0f, frames.last().resistanceFraction, 0.001f)
+  }
+
+  @Test
+  fun resolveSnapResolution_prefersStrongestNearbyTarget() {
+    val timeline = sampleTimeline().copy(playheadMs = 1_450, markers = listOf(TimelineMarker(id = "m1", timeMs = 1_454, label = "Beat")))
+    val resolution = TimelineEngine.resolveSnapResolution(timeline, TrackType.Audio, "a1", 1_448)
+
+    assertNotNull(resolution.target)
+    assertTrue(resolution.feedbackIntensity > 0f)
+    assertTrue(resolution.snappedTimeMs == 1_450L || resolution.snappedTimeMs == 1_454L)
+  }
+
+  @Test
+  fun snapStrength_increasesAsTargetGetsCloserWithinPixelThreshold() {
+    val timeline = sampleTimeline().copy(playheadMs = 1_500, zoomLevel = 1f)
+    val far = TimelineEngine.resolveSnapResolution(timeline, TrackType.Audio, "a1", 1_300)
+    val close = TimelineEngine.resolveSnapResolution(timeline, TrackType.Audio, "a1", 1_430)
+
+    assertNotNull(far.target)
+    assertNotNull(close.target)
+    assertTrue(close.feedbackIntensity > far.feedbackIntensity)
+    assertEquals(1_500L, close.snappedTimeMs)
+  }
+
+  @Test
+  fun scrollSnapshot_keepsCenterPlayheadMappingConsistent() {
+    val timeline = sampleTimeline().copy(durationMs = 20_000, scrollOffsetPx = 216f, zoomLevel = 1.5f)
+    val snapshot = TimelineEngine.scrollSnapshot(timeline, viewportWidthPx = 360f)
+
+    assertEquals(TimelineEngine.timeFromScroll(timeline.scrollOffsetPx, timeline.zoomLevel, timeline.pixelsPerSecond, timeline.durationMs, 360f), snapshot.centerPlayheadTimeMs)
+    assertEquals(2_000L, snapshot.visibleStartTimeMs)
+    assertEquals(5_333L, snapshot.visibleEndTimeMs)
   }
 
   @Test
@@ -110,6 +218,30 @@ class TimelineEngineTest {
     assertEquals(SnapTargetType.Playhead, TimelineEngine.resolveSnap(timeline, TrackType.Audio, "a1", 1_420).targetType)
     assertEquals(SnapTargetType.Marker, TimelineEngine.resolveSnap(timeline, TrackType.Audio, "a1", 1_960).targetType)
     assertEquals(SnapTargetType.ClipEnd, TimelineEngine.resolveSnap(timeline, TrackType.Video, "v2", 1_020).targetType)
+  }
+
+  @Test
+  fun resolveDraggedClip_returnsSnappedPreviewAndValidity() {
+    val timeline = sampleTimeline().copy(playheadMs = 1_450)
+
+    val snapped = TimelineEngine.resolveDraggedClip(timeline, "a1", 1_420)
+    val blocked = TimelineEngine.resolveDraggedClip(timeline, "v2", 500)
+
+    assertEquals(1_450L, snapped.resolvedStartTimeMs)
+    assertTrue(snapped.snapResolution.feedbackIntensity > 0f)
+    assertFalse(blocked.isValid)
+  }
+
+  @Test
+  fun resolveTrimGesture_enforcesMinimumDurationAndSnap() {
+    val timeline = sampleTimeline().copy(playheadMs = 1_450)
+
+    val snappedEnd = TimelineEngine.resolveTrimGesture(timeline, "a1", TrimHandle.Right, 1_420)
+    val minimumLeft = TimelineEngine.resolveTrimGesture(timeline, "v1", TrimHandle.Left, 900)
+
+    assertEquals(1_450L, snappedEnd.resolvedTimeMs)
+    assertEquals(400L, minimumLeft.resolvedTimeMs)
+    assertTrue(minimumLeft.isValid)
   }
 
   @Test
