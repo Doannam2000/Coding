@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 07:22 UTC
+- Last updated: 2026-04-25 07:29 UTC
 - App: Clipy Studio
 - Slug: clipy
 - Tagline: A premium offline-friendly Android video editor for fast, polished social videos.
 - Target users: General users
-- Design direction: Preserve Clipy Studio's compact, tool-dense editor language while making the timeline feel more engine-driven and precise. The follow-up design should emphasize a fixed central playhead, horizontally scrollable time ruler, layered track lanes, clear clip geometry, and tactile edit zones for drag, trim, split, and reorder operations without redesigning the broader app shell.
+- Design direction: Incremental refinement of the existing compact dark Clipy Studio timeline editor: keep the fixed-playhead, multi-lane architecture stable while adding production-grade interaction states for pinch zoom, visible-only thumbnail loading, snap feedback, active clip highlighting, transition overlaps, keyframe editing, autosave status, and undo/redo confidence. The design should feel technical, precise, and responsive rather than decorative, with subtle motion and clear state feedback during timeline manipulation.
 - Core constraints: android only, MVP first, offline-friendly where possible
 Design style must align with: modern minimal premium
 Typography should align with: clean geometric sans
@@ -295,6 +295,37 @@ Function: reorder main track clips with drag and shift neighbors correctly.
 
 10. MULTI-TRACK LOGIC:
 Function: allow overlapping for audio/overlay/text while maintaining independent track behavior.
+Additional follow-up requirement: TIMELINE ENGINE CORE PART 2:
+
+11. ZOOM ENGINE:
+Function: implement pinch zoom with focal point preservation and smooth scaling.
+
+12. THUMBNAIL SYSTEM:
+Function: lazy load thumbnails only for visible clips and cache results.
+
+13. SNAP ENGINE:
+Function: snap clip edges to neighbors, playhead, and markers with threshold.
+
+14. ACTIVE CLIP RESOLUTION:
+Function: resolve which clips and overlays are active at currentTimeMs.
+
+15. TRANSITION TIME MODEL:
+Function: manage transition duration between clips and calculate overlap.
+
+16. KEYFRAME SUPPORT:
+Function: interpolate position, scale, rotation, opacity values over time.
+
+17. UNDO/REDO:
+Function: store timeline actions and revert/reapply changes instantly.
+
+18. AUTOSAVE:
+Function: debounce save timeline state and restore exactly.
+
+19. PERFORMANCE:
+Function: optimize recomposition, scrolling, dragging, and memory usage.
+
+20. STRICT:
+Function: no fake timeline, no desync, no lag, production-ready behavior.
 
 ### Core Features
 - Splash -> onboarding/intro -> main app flow
@@ -323,10 +354,11 @@ Function: allow overlapping for audio/overlay/text while maintaining independent
 - Editor Timeline Workspace
 - Preview Canvas Synchronization
 - Timeline Interaction Layer
+- Timeline State Recovery
 - Timeline Engine Unit Tests
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Continue using the existing SharedPreferences-backed repository and in-memory project state. Add ProjectTimeline and TimelineClip as the canonical timeline representation while mapping any existing clip/timeline fields into safe defaults for current projects. Keep timeline math in small deterministic Kotlin functions or a TimelineEngine helper used by MainScreenViewModel. Compose should render from EditorUiState only, dispatching scroll, hit-test, drag, trim, split, and reorder intents to the ViewModel. Persist timeline changes through the current repository contract, route mutating operations through the existing undo/redo snapshot mechanism, and keep preview composition derived from ProjectTimeline.currentTimeMs and active clips.
+- storage: Continue using the existing SharedPreferences-backed DataRepository and ProjectTimeline projection. Add deterministic TimelineEngine functions for zoom focal preservation, visible range calculation, snap target resolution, active composition resolution, transition overlap math, and keyframe interpolation. Keep Compose rendering from EditorUiState only, with gesture callbacks dispatching intents to MainScreenViewModel. Add a small thumbnail coordinator/cache behind the ViewModel or repository boundary so UI asks for visible thumbnail state without decoding images directly in composables. Persist new timeline fields with safe defaults for existing saved projects, debounce autosave on committed mutations, and keep undo/redo snapshots in memory while saving exact ProjectTimeline state for restore.
 <!-- AUTO-GENERATED:CORE_END -->

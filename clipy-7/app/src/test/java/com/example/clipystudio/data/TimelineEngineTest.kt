@@ -80,12 +80,62 @@ class TimelineEngineTest {
     assertTrue(result.timeline.durationMs >= clips.sumOf { it.durationMs })
   }
 
+  @Test
+  fun zoomAroundFocal_preservesFocalTimeAndClamps() {
+    val timeline = sampleTimeline().copy(durationMs = 20_000, scrollOffsetPx = 144f, zoomLevel = 1f)
+    val result = TimelineEngine.zoomAroundFocal(timeline, 2f, focalXpx = 72f, viewportWidthPx = 360f)
+
+    assertEquals(3_000L, result.focalTimeMs)
+    assertEquals(2f, result.newZoomScale, 0.001f)
+    assertEquals(360f, result.newScrollOffsetPx, 0.001f)
+    assertEquals(TimelineEngine.MaxZoomScale, TimelineEngine.zoomAroundFocal(result.timeline, 99f, 72f, 360f).newZoomScale)
+  }
+
+  @Test
+  fun visibleRangeAndThumbnailPlanning_areBoundedToVisibleMedia() {
+    val timeline = sampleTimeline().copy(scrollOffsetPx = 72f, zoomLevel = 1f)
+    val range = TimelineEngine.visibleRange(timeline, viewportWidthPx = 72f, prefetchPx = 0f)
+    val requests = TimelineEngine.planThumbnailRequests(timeline, range)
+
+    assertEquals(1_000L, range.startTimeMs)
+    assertEquals(2_000L, range.endTimeMs)
+    assertEquals(listOf("v2"), requests.map { it.clipId })
+    assertTrue(TimelineEngine.planThumbnailRequests(timeline, range, mapOf(requests.first().cacheKey to TimelineThumbnailState("v2", requests.first().cacheKey, ThumbnailStatus.Ready, 0, 0))).isEmpty())
+  }
+
+  @Test
+  fun snapEngine_usesPlayheadMarkersAndNeighborEdges() {
+    val timeline = sampleTimeline().copy(playheadMs = 1_450, markers = listOf(TimelineMarker(id = "m1", timeMs = 2_000, label = "Beat")))
+
+    assertEquals(SnapTargetType.Playhead, TimelineEngine.resolveSnap(timeline, TrackType.Audio, "a1", 1_420).targetType)
+    assertEquals(SnapTargetType.Marker, TimelineEngine.resolveSnap(timeline, TrackType.Audio, "a1", 1_960).targetType)
+    assertEquals(SnapTargetType.ClipEnd, TimelineEngine.resolveSnap(timeline, TrackType.Video, "v2", 1_020).targetType)
+  }
+
+  @Test
+  fun activeComposition_transitionAndKeyframes_areResolvedFromPlayhead() {
+    val keyed = TimelineClip("txt", clipType = ClipType.Text, title = "Title", startMs = 0, durationMs = 2_000, transform = TransformState(opacity = 0.2f), keyframes = listOf(
+      Keyframe(timeMs = 0, property = KeyframeProperty.Opacity, value = 0.2f),
+      Keyframe(timeMs = 1_000, property = KeyframeProperty.Opacity, value = 1f),
+    ))
+    val timeline = sampleTimeline().copy(
+      playheadMs = 900,
+      transitions = listOf(Transition("t1", TransitionType.Fade, "v1", "v2", 800, 1_000)),
+      tracks = sampleTimeline().tracks.map { if (it.type == TrackType.Text) it.copy(clips = listOf(keyed)) else it },
+    )
+    val composition = TimelineEngine.resolveActiveComposition(timeline)
+
+    assertEquals("v1", composition.video?.clipId)
+    assertNotNull(composition.transition)
+    assertEquals(0.92f, composition.text.first().opacity, 0.001f)
+  }
+
   private fun sampleTimeline() = Timeline(
     durationMs = 3_000,
     tracks = listOf(
       TimelineTrack("video", TrackType.Video, "Video", 0, listOf(
-        TimelineClip("v1", clipType = ClipType.Video, title = "One", startMs = 0, durationMs = 1_000),
-        TimelineClip("v2", clipType = ClipType.Video, title = "Two", startMs = 1_000, durationMs = 1_000),
+        TimelineClip("v1", assetId = "asset-v1", clipType = ClipType.Video, title = "One", startMs = 0, durationMs = 1_000),
+        TimelineClip("v2", assetId = "asset-v2", clipType = ClipType.Video, title = "Two", startMs = 1_000, durationMs = 1_000),
       )),
       TimelineTrack("audio", TrackType.Audio, "Audio", 1, listOf(TimelineClip("a1", clipType = ClipType.Audio, title = "Audio", startMs = 0, durationMs = 1_500))),
       TimelineTrack("text", TrackType.Text, "Text", 2, emptyList()),

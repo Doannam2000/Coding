@@ -216,9 +216,9 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
     if (result.rejectedReason != null) project else project.copy(timeline = result.timeline.copy(selectedClipId = result.selectedClipId))
   }
 
-  override fun updateTimelineZoom(delta: Float) = updateTimeline { timeline ->
-    val zoom = (timeline.zoomLevel + delta).coerceIn(0.65f, 3f)
-    timeline.copy(zoomLevel = zoom, scrollOffsetPx = TimelineEngine.scrollFromTime(timeline.playheadMs, zoom, timeline.pixelsPerSecond)).nextVersion()
+  override fun updateTimelineZoom(delta: Float) = withUndo("Zoom timeline") { project ->
+    val multiplier = (1f + delta).coerceIn(0.55f, 1.55f)
+    project.copy(timeline = TimelineEngine.zoomAroundFocal(project.timeline, multiplier, focalXpx = 220f, viewportWidthPx = 440f).timeline)
   }
 
   override fun updateCanvasRatio(ratio: CanvasRatio) {
@@ -598,6 +598,7 @@ private fun Timeline.toJson() = JSONObject()
   .put("isPlaying", isPlaying)
   .put("canvasBackground", canvasBackground.toJson())
   .put("transitions", JSONArray(transitions.map { it.toJson() }))
+  .put("markers", JSONArray(markers.map { it.toJson() }))
   .put("recentStickers", JSONArray(recentStickers.map { it.toJson() }))
 
 private fun JSONObject.toTimeline() = Timeline(
@@ -614,6 +615,7 @@ private fun JSONObject.toTimeline() = Timeline(
   isPlaying = optBoolean("isPlaying"),
   canvasBackground = optJSONObject("canvasBackground")?.toCanvasBackground() ?: CanvasBackground(),
   transitions = optJSONArray("transitions").toList { it.toTransition() },
+  markers = optJSONArray("markers").toList { it.toTimelineMarker() },
   recentStickers = optJSONArray("recentStickers").toList { it.toStickerAsset() },
 )
 
@@ -685,6 +687,8 @@ private fun CanvasBackground.toJson() = JSONObject().put("color", color).put("bl
 private fun JSONObject.toCanvasBackground() = CanvasBackground(optString("color", "#09090B"), optBoolean("blurEnabled"), optDouble("blurStrength", 0.0).toFloat())
 private fun Transition.toJson() = JSONObject().put("id", id).put("type", type.name).put("fromClipId", fromClipId).put("toClipId", toClipId).put("durationMs", durationMs).put("boundaryMs", boundaryMs)
 private fun JSONObject.toTransition() = Transition(optString("id", UUID.randomUUID().toString()), enumValueOf(optString("type", TransitionType.Fade.name)), optString("fromClipId"), optString("toClipId"), optLong("durationMs", 800), optLong("boundaryMs"))
+private fun TimelineMarker.toJson() = JSONObject().put("id", id).put("timeMs", timeMs).put("label", label).put("color", color)
+private fun JSONObject.toTimelineMarker() = TimelineMarker(optString("id", UUID.randomUUID().toString()), optLong("timeMs"), optString("label", "Marker"), if (isNull("color")) null else optLong("color"))
 private fun StickerAsset.toJson() = JSONObject().put("id", id).put("category", category.name).put("label", label).put("symbol", symbol).put("lastUsedAt", lastUsedAt)
 private fun JSONObject.toStickerAsset() = StickerAsset(optString("id", UUID.randomUUID().toString()), enumValueOf(optString("category", StickerCategory.Emoji.name)), optString("label"), optString("symbol"), optLong("lastUsedAt").takeIf { it > 0 })
 private fun ExportSettings.toJson() = JSONObject().put("format", format).put("resolution", resolution.name).put("fps", fps).put("bitrateMbps", bitrateMbps.toDouble()).put("qualityPreset", qualityPreset.name).put("saveToGallery", saveToGallery)
@@ -763,6 +767,7 @@ data class Timeline(
   val isPlaying: Boolean = false,
   val canvasBackground: CanvasBackground = CanvasBackground(),
   val transitions: List<Transition> = emptyList(),
+  val markers: List<TimelineMarker> = emptyList(),
   val recentStickers: List<StickerAsset> = emptyList(),
 ) {
   fun recalculateDuration() = copy(durationMs = tracks.flatMap { it.clips }.maxOfOrNull { it.startMs + it.durationMs } ?: 0L)
@@ -773,6 +778,7 @@ data class Timeline(
       return Timeline(
         durationMs = 10_000,
         selectedClipId = videoClip.id,
+        markers = listOf(TimelineMarker(timeMs = 2_000, label = "Hook"), TimelineMarker(timeMs = 6_000, label = "Beat")),
         tracks = listOf(
           TimelineTrack(UUID.randomUUID().toString(), TrackType.Video, "Video 1", 0, listOf(videoClip)),
           TimelineTrack(UUID.randomUUID().toString(), TrackType.Audio, "Music", 1, listOf(TimelineClip.audioClip())),
