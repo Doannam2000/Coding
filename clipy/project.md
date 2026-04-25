@@ -2,7 +2,7 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 02:20 UTC
+- Last updated: 2026-04-25 02:22 UTC
 - App: Clipy
 - Slug: clipy
 - Tagline: Fast social-ready video edits and GIF exports in seconds.
@@ -683,6 +683,7 @@ Additional follow-up requirement: [fixbug] Crash when select video/image
 Additional follow-up requirement: [fixbug] Crash when select video/image
 Additional follow-up requirement: [fixbug] Crash when select video/image
 Additional follow-up requirement: [fixbug] BotVibeProject/clipy/app/src/main/java/com/nantcompany/clipy/ClipyApp.kt:3831:14 Unresolved reference 'isVideoSource'.
+Additional follow-up requirement: [fixbug] ClipyApp.kt:3831:14 Unresolved reference 'isVideoSource'.
 
 ### Core Features
 - Splash screen followed by onboarding and main app flow
