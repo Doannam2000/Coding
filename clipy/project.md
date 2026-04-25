@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 02:24 UTC
+- Last updated: 2026-04-25 05:55 UTC
 - App: Clipy
 - Slug: clipy
 - Tagline: Fast social-ready video edits and GIF exports in seconds.
 - Target users: Content creators, TikTok/Reels users, meme makers, casual users needing fast video editing
-- Design direction: Incremental evolution of the current editor into a pro, dark, timeline-first mobile workflow with high contrast controls, compact tool density, and motion cues tied to playback/editing state; preserve existing navigation and MVVM boundaries while upgrading interaction depth.
+- Design direction: Incremental CapCut-style upgrade on top of the current Compose + MVVM foundation: keep existing navigation shell and component architecture stable, evolve editor-centric screens into a professional dark, high-contrast workflow, and align branding/motion for app ID migration to com.nantcompany.capcuteditor without disruptive UI rewrites.
 - Core constraints: Android only, no backend, lightweight but powerful, limit GIF size/duration, smooth UX, handle large videos safely
 Design style must align with: Modern dark creator-tool UI, clean layout, smooth animations, rounded cards, premium feel
 Typography should align with: Inter
@@ -826,6 +826,185 @@ Ensure:
 - Smooth UX
 - No UI overlap
 - Fully usable flow
+Additional follow-up requirement: Rewrite the entire app into a professional CapCut-style mobile video editor.
+
+App ID must use:
+com.nantcompany.capcuteditor
+
+Main goal:
+Turn the current app into a full video editing app like CapCut. Users can create projects, import photos/videos/music, add stickers/text/effects/filters, edit everything on a timeline, preview in real time, and export final videos.
+
+==================================================
+1. APP FLOW
+==================================================
+
+Required screens:
+- Splash screen
+- Intro / onboarding screen
+- Home screen
+- Project list / Draft screen
+- Media picker screen
+- Editor screen
+- Music library screen
+- Sticker library screen
+- Text editor panel
+- Filter / effect panel
+- Export settings screen
+- Export progress screen
+- Settings screen
+
+Main user flow:
+1. User opens app
+2. User taps “New Project”
+3. User selects photos/videos
+4. App opens editor
+5. User edits timeline
+6. User adds music, text, stickers, filters, transitions
+7. User previews video
+8. User exports MP4/MOV
+
+==================================================
+2. MEDIA IMPORT
+==================================================
+
+Support importing:
+- Images: JPG, JPEG, PNG, WEBP
+- Videos: MP4, MOV, MKV, AVI if supported
+- Music/audio: MP3, WAV, AAC, M4A
+
+Media picker requirements:
+- Show tabs: Photos, Videos, Music
+- Display grid thumbnails
+- Support multi-select
+- Show selected count
+- Show video duration
+- Show image preview
+- Handle permissions properly
+- Handle empty media state
+- Handle permission denied state
+- Handle loading state
+
+When importing images:
+- Convert each image into a timeline clip
+- Default duration: 3 seconds
+- Allow user to change duration
+- Support crop, fit, fill modes
+- Support Ken Burns style zoom animation later
+
+When importing videos:
+- Preserve original duration
+- Generate thumbnail
+- Allow trim before/after import
+- Support mute original audio
+
+When importing music:
+- Add music into audio track
+- Show waveform placeholder/visual track
+- Allow trim, volume, fade in/out
+
+==================================================
+3. EDITOR SCREEN UI LIKE CAPCUT
+==================================================
+
+Editor layout:
+- Top app bar:
+  - Back
+  - Undo
+  - Redo
+  - Export button
+- Preview area:
+  - Video/image preview
+  - Text overlay layer
+  - Sticker overlay layer
+  - Drag/scale/rotate overlay controls
+- Playback controls:
+  - Play / pause
+  - Current time / total duration
+  - Seek sync with timeline
+- Timeline area:
+  - Time ruler
+  - Video/image track
+  - Audio track
+  - Text track
+  - Sticker track
+  - Playhead center line
+- Bottom toolbar:
+  - Edit
+  - Audio
+  - Text
+  - Sticker
+  - Filter
+  - Effect
+  - Transition
+  - Canvas
+  - Speed
+  - Export
+
+UI style:
+- Dark theme like CapCut
+- Modern rounded buttons
+- Clean spacing
+- Smooth animations
+- No overlapping UI
+- No clipped text
+- Timeline must scroll smoothly
+- Selected clip must have clear border/handle
+
+==================================================
+4. TIMELINE FEATURES
+==================================================
+
+Timeline must support:
+- Multi-track editing
+- Video/image track
+- Audio/music track
+- Text overlay track
+- Sticker overlay track
+- Effect/filter track
+- Transition track
+
+Clip actions:
+- Select clip
+- Drag clip
+- Reorder clip
+- Trim start
+- Trim end
+- Split at playhead
+- Delete clip
+- Duplicate clip
+- Change duration
+- Mute video audio
+- Adjust volume
+- Change speed
+- Reverse video if possible
+
+Timeline behavior:
+- Horizontal scroll
+- Pinch to zoom timeline
+- Snap clip edges
+- Center playhead like CapCut
+- Preview must sync with scroll position
+- Smooth drag without lag
+- Lazy load thumbnails
+- Show duration labels
+
+==================================================
+5. AUDIO / MUSIC FEATURES
+==================================================
+
+Audio features:
+- Add music from device
+- Add built-in sample music list
+- Extract audio from video
+- Trim audio
+- Split audio
+- Delete audio
+- Adjust volume
+- Fade in
+- Fade out
+- Loop audio
+- Mute original video audio
+- Support multiple audio layers
 
 ### Core Features
 - Splash screen followed by onboarding and main app flow
@@ -849,12 +1028,22 @@ Ensure:
 - Explicit exit action within the app shell
 
 ### Main Screens
-- Home Media Import Screen
-- Editor Screen
-- Export Screen
+- Splash Screen (existing, modified)
+- Intro / Onboarding Screen (existing, modified)
+- Home Screen (existing, expanded)
+- Project List / Draft Screen (new)
+- Media Picker Screen (new or major expansion)
+- Editor Screen (existing, major expansion)
+- Music Library Screen (new)
+- Sticker Library Screen (new)
+- Text Editor Panel (new panel flow)
+- Filter / Effect Panel (new panel flow)
+- Export Settings Screen (existing, expanded)
+- Export Progress Screen (existing, expanded)
+- Settings Screen (existing, modified)
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Room for project/draft metadata + DataStore for editor preferences + file-based project snapshots; MediaStore URIs remain source-of-truth for imported assets with persisted URI permissions.
+- storage: Keep DataStore + existing repositories; add Room-backed project/draft index and serialized timeline snapshots, while retaining MediaStore URI references and persisted URI permissions for imported assets.
 <!-- AUTO-GENERATED:CORE_END -->

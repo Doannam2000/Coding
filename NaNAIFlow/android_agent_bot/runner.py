@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import random
 import re
 import subprocess
 import threading
 import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -316,6 +318,7 @@ CODEX_HARDCODED_MODELS = [
     "gpt-5.1-codex",
     "gpt-5-codex-mini",
 ]
+WORKSPACE_BOT_DOC_FILES = {"agent.md", "project.md"}
 
 
 def slugify(text: str) -> str:
@@ -353,9 +356,20 @@ def human_app_name(text: str) -> str:
 class JobRunner:
     RUNTIME_MODEL_KEY = "worker.selected_model"
     RUNTIME_CLI_BINARY_KEY = "worker.cli_binary"
+    RUNTIME_STAGE_RETRY_LIMIT_KEY = "worker.stage_retry_limit"
     CODE_STAGE_MIN_TIMEOUT_SECONDS = 900
     REPAIR_STAGE_MIN_TIMEOUT_SECONDS = 1200
     REVIEW_STAGE_MIN_TIMEOUT_SECONDS = 900
+    DEFAULT_STAGE_RETRY_LIMIT = 100
+    RETRY_DELAY_MIN_SECONDS = 3.0
+    RETRY_DELAY_MAX_SECONDS = 12.0
+    OPENCODE_MODEL_ALIAS_MAP = {
+        "bigpickle": "opencode/big-pickle",
+        "big-pickle": "opencode/big-pickle",
+        "minimax": "opencode/minimax-m2.5-free",
+        "nemotron": "opencode/nemotron-3-super-free",
+    }
+    MODEL_EFFORT_SUFFIXES = {"low", "medium", "high", "xhigh", "none"}
 
     def __init__(self, settings: Settings, db: BotDatabase, telegram: TelegramClient) -> None:
         self.settings = settings
@@ -373,6 +387,11 @@ class JobRunner:
         self._active_jobs: dict[int, dict[str, Any]] = {}
         self._live_cli_log_chats: set[int] = set()
         self._cli_log_default_seen_chats: set[int] = set()
+        configured_retry_limit = int(
+            self.db.get_runtime_setting(self.RUNTIME_STAGE_RETRY_LIMIT_KEY, self.DEFAULT_STAGE_RETRY_LIMIT)
+            or self.DEFAULT_STAGE_RETRY_LIMIT
+        )
+        self._stage_retry_limit = max(self.DEFAULT_STAGE_RETRY_LIMIT, configured_retry_limit)
         persisted_model = self.db.get_runtime_setting(self.RUNTIME_MODEL_KEY, None)
         self._selected_model: str | None = str(persisted_model).strip() if isinstance(persisted_model, str) and persisted_model.strip() else None
         if self.settings.allowed_telegram_chat_id is not None:
@@ -407,7 +426,7 @@ class JobRunner:
         return chat_id in self._live_cli_log_chats
 
     def set_model(self, model: str | None) -> None:
-        cleaned = (model or "").strip()
+        cleaned = self._normalize_model_for_cli(model, self._current_cli_name())
         self._selected_model = cleaned or None
         self.db.set_runtime_setting(self.RUNTIME_MODEL_KEY, self._selected_model)
 
@@ -428,20 +447,185 @@ class JobRunner:
             min_request_interval_seconds=self.settings.open_code_min_request_interval_seconds,
         )
         self.db.set_runtime_setting(self.RUNTIME_CLI_BINARY_KEY, cleaned)
+        self._reconcile_models_for_current_cli()
         return self.opencode.binary
 
+    def _current_cli_name(self) -> str:
+        return Path(self.opencode.binary).stem.lower() or "opencode"
+
+    def _default_model_for_cli(self, cli_name: str | None = None) -> str | None:
+        resolved_cli = (cli_name or self._current_cli_name()).strip().lower()
+        if resolved_cli == "codex":
+            return CODEX_HARDCODED_MODELS[0]
+        return None
+
+    def _normalize_model_for_cli(self, model: str | None, cli_name: str | None = None) -> str | None:
+        raw = str(model or "").strip().strip("`").strip('"').strip("'")
+        if not raw or raw.lower() in {"default", "reset", "clear"}:
+            return None
+
+        resolved_cli = (cli_name or self._current_cli_name()).strip().lower()
+        normalized = re.sub(r"\s+", " ", raw).strip()
+
+        if resolved_cli == "codex":
+            if "/" in normalized:
+                tail = normalized.split("/")[-1].strip()
+                if tail:
+                    normalized = tail
+
+            parts = normalized.split()
+            if len(parts) > 1 and all(part.lower() in self.MODEL_EFFORT_SUFFIXES for part in parts[1:]):
+                normalized = parts[0]
+            return normalized
+
+        if resolved_cli == "opencode":
+            parts = normalized.split()
+            if len(parts) > 1 and all(part.lower() in self.MODEL_EFFORT_SUFFIXES for part in parts[1:]):
+                normalized = parts[0]
+
+            lowered = normalized.lower()
+            if lowered in self.OPENCODE_MODEL_ALIAS_MAP:
+                return self.OPENCODE_MODEL_ALIAS_MAP[lowered]
+            if "/" in normalized:
+                return normalized
+            if re.match(r"^(gpt-|o[1-9]|codex|claude)", lowered):
+                return None
+            return normalized
+
+        return normalized
+
+    def _reconcile_models_for_current_cli(self) -> None:
+        cli_name = self._current_cli_name()
+        default_model = self._default_model_for_cli(cli_name)
+
+        normalized_runtime = self._normalize_model_for_cli(self._selected_model, cli_name)
+        if normalized_runtime != self._selected_model:
+            self._selected_model = normalized_runtime
+            self.db.set_runtime_setting(self.RUNTIME_MODEL_KEY, self._selected_model)
+
+        for candidate in self.db.list_jobs(limit=200):
+            if candidate["status"] in {"completed", "cancelled", "failed"}:
+                continue
+            context = candidate.get("context", {})
+            if not isinstance(context, dict):
+                continue
+
+            pinned = context.get("selected_model")
+            if not isinstance(pinned, str) or not pinned.strip():
+                continue
+
+            normalized = self._normalize_model_for_cli(pinned, cli_name)
+            replacement = normalized or self._selected_model or default_model
+            current = pinned.strip()
+            if replacement == current:
+                continue
+
+            if replacement:
+                context["selected_model"] = replacement
+            else:
+                context.pop("selected_model", None)
+            self.db.set_job_context(candidate["id"], context)
+
+    def _current_stage_retry_count(self, job: dict[str, Any], stage_name: str) -> int:
+        context = job.get("context", {}) if isinstance(job.get("context"), dict) else {}
+        retry_counts = context.get("stage_retry_counts")
+        if not isinstance(retry_counts, dict):
+            return 0
+        try:
+            return int(retry_counts.get(stage_name, 0) or 0)
+        except Exception:  # noqa: BLE001
+            return 0
+
+    def _set_stage_retry_count(self, job: dict[str, Any], stage_name: str, retry_count: int) -> None:
+        context = job.get("context", {}) if isinstance(job.get("context"), dict) else {}
+        retry_counts = context.get("stage_retry_counts")
+        if not isinstance(retry_counts, dict):
+            retry_counts = {}
+        retry_counts[stage_name] = max(0, int(retry_count))
+        context["stage_retry_counts"] = retry_counts
+        updated = self.db.set_job_context(job["id"], context)
+        if updated:
+            job["context"] = updated.get("context", context)
+
+    def _reset_stage_retry_count(self, job: dict[str, Any], stage_name: str) -> None:
+        if self._current_stage_retry_count(job, stage_name) == 0:
+            return
+        self._set_stage_retry_count(job, stage_name, 0)
+
+    def _handle_stage_failure(self, job: dict[str, Any], stage_name: str, exc: Exception) -> bool:
+        current = self.db.get_job(job["id"])
+        if current is not None and current["status"] in {"paused", "cancelled"}:
+            return False
+
+        error_text = str(exc).strip() or exc.__class__.__name__
+        if self._is_non_retryable_stage_error(stage_name, error_text):
+            return False
+
+        retry_count = self._current_stage_retry_count(job, stage_name)
+        if retry_count >= self._stage_retry_limit:
+            return False
+
+        next_retry = retry_count + 1
+        delay_seconds = round(random.uniform(self.RETRY_DELAY_MIN_SECONDS, self.RETRY_DELAY_MAX_SECONDS), 1)
+        self._set_stage_retry_count(job, stage_name, next_retry)
+        self.db.add_event(
+            job["id"],
+            stage_name,
+            "warning",
+            f"Stage failed, queued retry {next_retry}/{self._stage_retry_limit} after {delay_seconds:.1f}s",
+            {
+                "error": error_text[:1000],
+                "retry": next_retry,
+                "retry_limit": self._stage_retry_limit,
+                "delay_seconds": delay_seconds,
+            },
+        )
+        self.telegram.send_message(
+            job["chat_id"],
+            f"Job #{job['id']} `{stage_name}` failed. Auto retry {next_retry}/{self._stage_retry_limit} in {delay_seconds:.1f}s.\n{error_text[:1200]}",
+        )
+        self._stop.wait(delay_seconds)
+        self.db.requeue_running_job(job["id"])
+        refreshed = self.db.get_job(job["id"])
+        if refreshed is not None:
+            job.update(refreshed)
+        return True
+
     def _effective_model_for_job(self, job: dict[str, Any]) -> str | None:
+        cli_name = self._current_cli_name()
+        default_model = self._default_model_for_cli(cli_name)
         context = job.get("context", {}) if isinstance(job.get("context"), dict) else {}
         pinned = context.get("selected_model")
         if isinstance(pinned, str) and pinned.strip():
-            return pinned.strip()
+            normalized_pinned = self._normalize_model_for_cli(pinned, cli_name)
+            if normalized_pinned != pinned.strip():
+                if normalized_pinned:
+                    context["selected_model"] = normalized_pinned
+                else:
+                    context.pop("selected_model", None)
+                self.db.set_job_context(job["id"], context)
+                job["context"] = context
+            if normalized_pinned:
+                return normalized_pinned
 
         selected = self.selected_model()
         if selected:
-            context["selected_model"] = selected
+            normalized_selected = self._normalize_model_for_cli(selected, cli_name)
+            if normalized_selected != selected:
+                self._selected_model = normalized_selected or None
+                self.db.set_runtime_setting(self.RUNTIME_MODEL_KEY, self._selected_model)
+            if normalized_selected:
+                context["selected_model"] = normalized_selected
+                self.db.set_job_context(job["id"], context)
+                job["context"] = context
+                return normalized_selected
+
+        if default_model:
+            context["selected_model"] = default_model
             self.db.set_job_context(job["id"], context)
             job["context"] = context
-        return selected
+            return default_model
+        return None
 
     def log_mode_snapshot(self, chat_id: int) -> dict[str, Any]:
         cli_name = Path(self.opencode.binary).stem or "opencode"
@@ -543,18 +727,23 @@ class JobRunner:
             try:
                 self._run_job(job)
             except Exception as exc:  # noqa: BLE001
+                stage_name = job.get("current_stage", "unknown")
                 self._active_jobs.pop(job["id"], None)
                 current = self.db.get_job(job["id"])
                 if current is not None and current["status"] == "paused":
                     self.telegram.send_message(job["chat_id"], f"Job #{job['id']} paused at `{current['current_stage']}`")
                     continue
-                stage_name = job.get("current_stage", "unknown")
+                if current is not None and current["status"] == "cancelled":
+                    self.telegram.send_message(job["chat_id"], f"Job #{job['id']} cancelled and stopped")
+                    continue
+                if self._handle_stage_failure(job, stage_name, exc):
+                    continue
                 self.db.mark_job_failed(job["id"], str(exc), stage_name)
                 self.telegram.send_message(job["chat_id"], f"Job #{job['id']} failed at `{stage_name}`\n{exc}")
 
     def _run_job(self, job: dict[str, Any]) -> None:
         current = self.db.get_job(job["id"])
-        if current is None or current["status"] == "paused":
+        if current is None or current["status"] in {"paused", "cancelled"}:
             return
         stage_name = STAGES[job["stage_index"]]
         self._active_jobs[job["id"]] = {"stage": stage_name, "started_at": time.time(), "detail": "Stage bootstrapped"}
@@ -625,6 +814,7 @@ class JobRunner:
         else:
             raise RuntimeError(f"Unsupported stage: {stage_name}")
 
+        self._reset_stage_retry_count(job, stage_name)
         waiting = self.settings.require_stage_approval and stage_name in self.settings.approval_stages
         next_stage_index = self._next_stage_index(job, stage_name, payload)
         updated_job = self.db.save_stage_result(job["id"], stage_name, payload, next_stage_index, waiting)
@@ -798,6 +988,44 @@ class JobRunner:
         current = self.db.get_job(job_id)
         if current is not None and current["status"] == "paused":
             raise RuntimeError("Job paused by user")
+        if current is not None and current["status"] == "cancelled":
+            raise RuntimeError("Job cancelled by user")
+
+    def _is_non_retryable_stage_error(self, stage_name: str, error_text: str) -> bool:
+        normalized = (error_text or "").strip().lower()
+        if not normalized:
+            return False
+        if "does not contain a valid android gradle project" in normalized:
+            return True
+        if stage_name == "code" and "clean it or use a new slug" in normalized:
+            return True
+        return False
+
+    def _prepare_workspace_for_scaffold(self, workspace: Path) -> dict[str, str]:
+        preserved: dict[str, str] = {}
+        unexpected_entries: list[str] = []
+
+        for entry in workspace.iterdir():
+            if entry.name in WORKSPACE_BOT_DOC_FILES and entry.is_file():
+                preserved[entry.name] = entry.read_text(encoding="utf-8", errors="ignore")
+                continue
+            unexpected_entries.append(entry.name)
+
+        if unexpected_entries:
+            sample = ", ".join(sorted(unexpected_entries)[:8])
+            suffix = "" if len(unexpected_entries) <= 8 else f" and {len(unexpected_entries) - 8} more"
+            raise RuntimeError(
+                f"Workspace {workspace} is not empty and contains unexpected files: {sample}{suffix}. "
+                "Clean it or use a new slug."
+            )
+
+        for filename in preserved:
+            (workspace / filename).unlink(missing_ok=True)
+        return preserved
+
+    def _restore_preserved_workspace_docs(self, workspace: Path, preserved: dict[str, str]) -> None:
+        for filename, content in preserved.items():
+            (workspace / filename).write_text(content, encoding="utf-8")
 
     def _package_name(self, job: dict[str, Any]) -> str:
         requested_app_id = self._requested_app_id(job)
@@ -820,15 +1048,13 @@ class JobRunner:
 
     def _ensure_android_scaffold(self, job: dict[str, Any], package_name: str) -> dict[str, Any] | None:
         workspace = Path(job["workspace_path"])
+        workspace.mkdir(parents=True, exist_ok=True)
         gradle_wrapper = workspace / "gradlew.bat"
         app_build = workspace / "app" / "build.gradle.kts"
         if gradle_wrapper.exists() and app_build.exists():
             return None
 
-        if any(workspace.iterdir()):
-            raise RuntimeError(
-                f"Workspace {workspace} is not empty but does not contain a valid Android Gradle project. Clean it or use a new slug."
-            )
+        preserved_docs = self._prepare_workspace_for_scaffold(workspace)
 
         idea = job["context"].get("stages", {}).get("idea", {})
         app_name = idea.get("app_name") or human_app_name(job["slug"])
@@ -842,6 +1068,7 @@ class JobRunner:
         ]
         result = subprocess.run(command, cwd=workspace.parent, capture_output=True, text=True, check=False)
         if result.returncode != 0:
+            self._restore_preserved_workspace_docs(workspace, preserved_docs)
             error_text = (result.stderr or result.stdout or "").strip()
             raise RuntimeError(f"Android scaffold failed: {error_text}")
 
@@ -1059,6 +1286,8 @@ class CommandRouter:
         "/pushgit",
         "/addfeature",
         "/addtask",
+        "/editapp",
+        "/buildbyprompt",
         "/fixbug",
     )
 
@@ -1219,6 +1448,8 @@ class CommandRouter:
 
         if normalized.startswith("/start") or normalized.startswith("/help"):
             self._send_help(chat_id)
+        elif normalized.startswith("/buildbyprompt"):
+            self._build_by_prompt(chat_id, user_id, normalized)
         elif normalized.startswith("/buildapp"):
             self._build_app(chat_id, user_id, normalized)
         elif normalized.startswith("/newandroid"):
@@ -1243,10 +1474,16 @@ class CommandRouter:
             self._add_feature(chat_id, normalized)
         elif normalized.startswith("/addtask"):
             self._add_task(chat_id, normalized)
+        elif normalized.startswith("/editapp"):
+            self._edit_app(chat_id, normalized)
         elif normalized.startswith("/tasks"):
             self._tasks(chat_id, normalized)
+        elif normalized.startswith("/cleartask"):
+            self._clear_task(chat_id, normalized)
         elif normalized.startswith("/fixbug"):
             self._fix_bug(chat_id, normalized)
+        elif normalized.startswith("/deletejob"):
+            self._delete_job(chat_id, normalized)
         elif normalized.startswith("/cancel"):
             self._cancel(chat_id, normalized)
         elif normalized.startswith("/logs"):
@@ -1282,6 +1519,7 @@ class CommandRouter:
         self.telegram.send_message_with_markup(
             chat_id,
             "Commands:\n"
+            "/buildbyprompt <appid>|<prompt>\n"
             "/buildapp with one line or multiline brief\n"
             "/newandroid <slug>|<idea>|<target users>|<constraints>\n"
             "/jobs\n"
@@ -1303,8 +1541,11 @@ class CommandRouter:
             "/resume <job_id>\n"
             "/addfeature <job_id>|<feature request>\n"
             "/addtask <job_id>|<task to run after current one>\n"
+            "/editapp <job_id>|<change request>\n"
             "/tasks <job_id>\n"
+            "/cleartask <job_id>\n"
             "/fixbug <job_id>|<bug description>\n"
+            "/deletejob <job_id>\n"
             "/approve <job_id>\n"
             "/reject <job_id>|<feedback>\n"
             "/cancel <job_id>\n\n"
@@ -1367,6 +1608,57 @@ class CommandRouter:
             reply_markup=self._job_action_markup(job_id, include_approval=False),
         )
 
+    def _edit_app(self, chat_id: int, text: str) -> None:
+        _, _, raw_args = text.partition(" ")
+        parts = [part.strip() for part in raw_args.split("|", 1)]
+        if len(parts) != 2 or not parts[0] or not parts[1] or not parts[0].isdigit():
+            self.telegram.send_message(chat_id, "Usage: /editapp <job_id>|<change request>")
+            return
+
+        job_id = int(parts[0])
+        task_text = parts[1]
+        updated, should_activate_now = self.db.add_follow_up_task(job_id, task_text)
+        if updated is None:
+            self.telegram.send_message(chat_id, "Job not found")
+            return
+
+        if should_activate_now:
+            activated = self.db.activate_next_task(job_id)
+            if activated is None:
+                self.telegram.send_message(chat_id, "Job not found")
+                return
+            self.telegram.send_message_with_markup(
+                chat_id,
+                f"App edit task queued and activated for job #{job_id}: {task_text}\n"
+                f"Job moved to stage `{activated['current_stage']}` with status `{activated['status']}`.",
+                reply_markup=self._job_action_markup(job_id, include_approval=False),
+            )
+            return
+
+        self.telegram.send_message_with_markup(
+            chat_id,
+            f"App edit task queued for job #{job_id}: {task_text}\n"
+            "Bot will run it automatically after current task completes.",
+            reply_markup=self._job_action_markup(job_id, include_approval=False),
+        )
+
+    def _clear_task(self, chat_id: int, text: str) -> None:
+        job = self._job_from_command(text)
+        if job is None:
+            self.telegram.send_message(chat_id, "Usage: /cleartask <job_id>")
+            return
+
+        updated = self.db.clear_follow_up_tasks(job["id"])
+        if updated is None:
+            self.telegram.send_message(chat_id, "Job not found")
+            return
+
+        self.telegram.send_message_with_markup(
+            chat_id,
+            f"Cleared active and pending follow-up tasks for job #{job['id']}.",
+            reply_markup=self._job_action_markup(job["id"], include_approval=updated["waiting_for_approval"]),
+        )
+
     def _fix_bug(self, chat_id: int, text: str) -> None:
         _, _, raw_args = text.partition(" ")
         parts = [part.strip() for part in raw_args.split("|", 1)]
@@ -1399,6 +1691,29 @@ class CommandRouter:
             f"Bug-fix task queued for job #{job_id}: {bug_text}\n"
             "Bot will run it automatically after current task completes.",
             reply_markup=self._job_action_markup(job_id, include_approval=False),
+        )
+
+    def _delete_job(self, chat_id: int, text: str) -> None:
+        job = self._job_from_command(text)
+        if job is None:
+            self.telegram.send_message(chat_id, "Usage: /deletejob <job_id>")
+            return
+
+        if job["status"] == "running" or (self.worker is not None and self.worker.active_progress(job["id"]) is not None):
+            self.telegram.send_message(
+                chat_id,
+                f"Job #{job['id']} is still active. Cancel it first, wait until it stops, then run /deletejob {job['id']}.",
+            )
+            return
+
+        deleted = self.db.delete_job(job["id"])
+        if deleted is None:
+            self.telegram.send_message(chat_id, "Job not found")
+            return
+
+        self.telegram.send_message(
+            chat_id,
+            f"Job #{deleted['id']} deleted from database.\nWorkspace kept: `{deleted['workspace_path']}`",
         )
 
     def _tasks(self, chat_id: int, text: str) -> None:
@@ -1473,15 +1788,19 @@ class CommandRouter:
             self.telegram.send_message(chat_id, "Model reset to default.")
             return
         self.worker.set_model(model)
+        stored_model = self.worker.selected_model()
         pinned_jobs = 0
         for candidate in self.db.list_jobs(limit=100):
             if candidate["status"] in {"completed", "cancelled", "failed"}:
                 continue
             context = candidate.get("context", {})
-            context["selected_model"] = model
+            if stored_model:
+                context["selected_model"] = stored_model
+            else:
+                context.pop("selected_model", None)
             self.db.set_job_context(candidate["id"], context)
             pinned_jobs += 1
-        self.telegram.send_message(chat_id, f"Model set to `{model}`\nPinned on active jobs: {pinned_jobs}")
+        self.telegram.send_message(chat_id, f"Model set to `{stored_model or 'default'}`\nPinned on active jobs: {pinned_jobs}")
 
     def _cli(self, chat_id: int, text: str) -> None:
         if self.worker is None:
@@ -1505,7 +1824,10 @@ class CommandRouter:
         except Exception as exc:  # noqa: BLE001
             self.telegram.send_message(chat_id, f"Failed to switch CLI: {exc}")
             return
-        self.telegram.send_message(chat_id, f"CLI switched to `{Path(resolved).stem.lower()}`\nBinary: `{resolved}`")
+        self.telegram.send_message(
+            chat_id,
+            f"CLI switched to `{Path(resolved).stem.lower()}`\nBinary: `{resolved}`\nModel: `{self.worker.selected_model() or self.worker._default_model_for_cli() or 'default'}`",
+        )
 
     def _set_repo(self, chat_id: int, text: str) -> None:
         parts = text.split(" ", 1)
@@ -2060,6 +2382,35 @@ class CommandRouter:
             reply_markup=self._menu_keyboard(),
         )
 
+    def _build_by_prompt(self, chat_id: int, user_id: int, text: str) -> None:
+        _, _, raw_args = text.partition(" ")
+        parts = [part.strip() for part in raw_args.split("|", 1)]
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            self.telegram.send_message(chat_id, "Usage: /buildbyprompt <appid>|<prompt>")
+            return
+
+        raw_app_id = parts[0]
+        prompt = parts[1]
+
+        if not raw_app_id.startswith("com."):
+            raw_app_id = f"com.app.{raw_app_id}"
+
+        slug = slugify(raw_app_id.split(".")[-1])
+        if not slug:
+            slug = slugify(raw_app_id)
+
+        parsed = {
+            "slug": slug,
+            "idea": prompt,
+            "style": "modern minimal premium",
+            "font": "clean geometric sans",
+            "features": prompt,
+            "target_users": "General users",
+            "constraints": "android only, MVP first, offline-friendly where possible",
+            "app_id": raw_app_id,
+        }
+        self._queue_build_job(chat_id, user_id, parsed)
+
     def _build_app(self, chat_id: int, user_id: int, text: str) -> None:
         parsed = self._parse_build_app_args(text)
         if parsed is None:
@@ -2119,18 +2470,19 @@ class CommandRouter:
         if app_id:
             constraints_text += f"\nUse Android applicationId/package name: {app_id}"
 
-        workspace = self.settings.projects_root / slug
-        workspace.mkdir(parents=True, exist_ok=True)
+        provisional_workspace = self.settings.projects_root / slug
         job_id = self.db.create_job(
             slug=slug,
             request_text=request_text,
             target_users=target_users,
             constraints_text=constraints_text,
-            workspace_path=str(workspace),
+            workspace_path=str(provisional_workspace),
             chat_id=chat_id,
             created_by=user_id,
         )
-        created_job = self.db.get_job(job_id)
+        workspace = self._allocate_workspace_for_job(slug, job_id)
+        workspace.mkdir(parents=True, exist_ok=True)
+        created_job = self.db.update_job_workspace(job_id, str(workspace))
         if self.worker is not None and created_job is not None:
             self.worker._ensure_workspace_docs(created_job, created_job.get("context", {}))
         if self.worker is not None:
@@ -2250,6 +2602,12 @@ class CommandRouter:
             return None
         return values
 
+    def _allocate_workspace_for_job(self, slug: str, job_id: int) -> Path:
+        base_workspace = self.settings.projects_root / slug
+        if not base_workspace.exists():
+            return base_workspace
+        return self.settings.projects_root / f"{slug}-{job_id}"
+
     def _create_job(self, chat_id: int, user_id: int, text: str) -> None:
         _, _, raw_args = text.partition(" ")
         parts = [part.strip() for part in raw_args.split("|")]
@@ -2257,18 +2615,19 @@ class CommandRouter:
             self.telegram.send_message(chat_id, "Usage: /newandroid <slug>|<idea>|<target users>|<constraints>")
             return
         slug = slugify(parts[0])
-        workspace = self.settings.projects_root / slug
-        workspace.mkdir(parents=True, exist_ok=True)
+        provisional_workspace = self.settings.projects_root / slug
         job_id = self.db.create_job(
             slug=slug,
             request_text=parts[1],
             target_users=parts[2],
             constraints_text=parts[3],
-            workspace_path=str(workspace),
+            workspace_path=str(provisional_workspace),
             chat_id=chat_id,
             created_by=user_id,
         )
-        created_job = self.db.get_job(job_id)
+        workspace = self._allocate_workspace_for_job(slug, job_id)
+        workspace.mkdir(parents=True, exist_ok=True)
+        created_job = self.db.update_job_workspace(job_id, str(workspace))
         if self.worker is not None and created_job is not None:
             self.worker._ensure_workspace_docs(created_job, created_job.get("context", {}))
         self.telegram.send_message(chat_id, f"Job #{job_id} queued\nWorkspace: `{workspace}`")

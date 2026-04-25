@@ -60,7 +60,7 @@
       ],
       "lastActivity": "2026-04-24T14:58:36.209Z",
       "preferredCLI": "codex",
-      "preferredModel": "gpt-5.5"
+      "preferredModel": "gpt-5.5 xhigh"
     },
     {
       "path": "D:\\Code\\VibeCoding",
@@ -1162,7 +1162,7 @@
   "defaultModels": {
     "opencode": "codexer/gpt-5.5",
     "claude": "sonnet",
-    "codex": "gpt-5.5"
+    "codex": "gpt-5.5 xhigh"
   },
   "tokenHistory": [
     {
@@ -5005,5 +5005,5 @@
     "uptime": "150h",
     "startTime": "2026-04-18T11:27:06.085Z"
   },
-  "lastUpdated": "2026-04-24T17:38:39.550Z"
+  "lastUpdated": "2026-04-24T18:22:44.453Z"
 }

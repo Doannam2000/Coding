@@ -251,6 +251,33 @@ class BotDatabase:
         should_activate_now = bool(updated and updated.get("status") in {"completed", "failed", "cancelled"})
         return updated, should_activate_now
 
+    def clear_follow_up_tasks(self, job_id: int) -> dict[str, Any] | None:
+        job = self.get_job(job_id)
+        if job is None:
+            return None
+
+        context = job.get("context", {})
+        if not isinstance(context, dict):
+            context = {}
+
+        active_task = str(context.get("active_task") or "").strip()
+        pending = context.get("pending_tasks")
+        pending_count = len(pending) if isinstance(pending, list) else 0
+
+        context.pop("active_task", None)
+        context["pending_tasks"] = []
+        context.pop("task_mode", None)
+
+        updated = self.set_job_context(job_id, context)
+        self.add_event(
+            job_id,
+            job.get("current_stage"),
+            "warning",
+            "Cleared follow-up task queue",
+            {"cleared_active_task": active_task, "cleared_pending_count": pending_count},
+        )
+        return updated
+
     def activate_next_task(self, job_id: int) -> dict[str, Any] | None:
         job = self.get_job(job_id)
         if job is None:
@@ -318,6 +345,19 @@ class BotDatabase:
         self.add_event(job_id, next_stage, "info", "Activated next follow-up task", {"task": next_task})
         return self.get_job(job_id)
 
+    def recover_running_jobs(self) -> int:
+        with self._connect() as conn:
+            rows = conn.execute("select id, current_stage from jobs where status = 'running'").fetchall()
+            if not rows:
+                return 0
+            conn.execute(
+                "update jobs set status = 'queued', updated_at = ? where status = 'running'",
+                (utc_now(),),
+            )
+        for row in rows:
+            self.add_event(int(row["id"]), row["current_stage"], "warning", "Recovered running job after bot restart", None)
+        return len(rows)
+
     def claim_next_job(self) -> dict[str, Any] | None:
         with self._connect() as conn:
             row = conn.execute(
@@ -337,6 +377,21 @@ class BotDatabase:
             )
             claimed = conn.execute("select * from jobs where id = ?", (row["id"],)).fetchone()
         return self._row_to_job(claimed) if claimed else None
+
+    def recover_running_jobs(self) -> int:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "select id, current_stage from jobs where status = 'running'"
+            ).fetchall()
+            if not rows:
+                return 0
+            conn.execute(
+                "update jobs set status = 'queued', updated_at = ? where status = 'running'",
+                (utc_now(),),
+            )
+        for row in rows:
+            self.add_event(int(row["id"]), row["current_stage"], "warning", "Recovered stale running job on startup", None)
+        return len(rows)
 
     def save_stage_result(
         self,
@@ -402,6 +457,24 @@ class BotDatabase:
             )
         return self.get_job(job_id) or {}
 
+    def update_job_workspace(self, job_id: int, workspace_path: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            conn.execute(
+                "update jobs set workspace_path = ?, updated_at = ? where id = ?",
+                (workspace_path, utc_now(), job_id),
+            )
+        return self.get_job(job_id)
+
+    def delete_job(self, job_id: int) -> dict[str, Any] | None:
+        job = self.get_job(job_id)
+        if job is None:
+            return None
+
+        with self._connect() as conn:
+            conn.execute("delete from job_events where job_id = ?", (job_id,))
+            conn.execute("delete from jobs where id = ?", (job_id,))
+        return job
+
     def mark_job_failed(self, job_id: int, error_message: str, stage_name: str) -> None:
         with self._connect() as conn:
             conn.execute(
@@ -417,6 +490,15 @@ class BotDatabase:
                 (utc_now(), job_id),
             )
         return cursor.rowcount > 0
+
+    def requeue_running_job(self, job_id: int) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            conn.execute(
+                "update jobs set status = 'queued', waiting_for_approval = 0, updated_at = ? where id = ? and status = 'running'",
+                (utc_now(), job_id),
+            )
+        return self.get_job(job_id)
+
 
     def pause_job(self, job_id: int) -> dict[str, Any] | None:
         with self._connect() as conn:
