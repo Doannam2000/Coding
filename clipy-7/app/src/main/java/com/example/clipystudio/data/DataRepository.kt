@@ -33,6 +33,7 @@ interface DataRepository {
   fun redo()
   fun updateExportSettings(settings: ExportSettings)
   fun startExport()
+  fun completeExport()
   fun cancelExport()
   fun clearExportResult()
   fun clearCache()
@@ -67,7 +68,7 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
     val now = System.currentTimeMillis()
     val copy = original.copy(
       id = UUID.randomUUID().toString(),
-      name = "${original.name} Copy",
+      name = "${original.name} duplicate",
       createdAt = now,
       updatedAt = now,
       timeline = original.timeline.copy(
@@ -110,8 +111,12 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
 
   override fun addImportsToProject() {
     val app = state.value
-    val projectId = app.activeProjectId ?: return
-    val imports = app.selectedImports.ifEmpty { listOf(sampleAsset(MediaType.Video, 1), sampleAsset(MediaType.Audio, 1)) }
+    val projectId = app.activeProjectId ?: run {
+      createProject(CanvasRatio.Portrait)
+      state.value.activeProjectId ?: return
+    }
+    val imports = app.selectedImports.ifEmpty { emptyList() }
+    if (imports.isEmpty()) return
     mutateProject(projectId) { project ->
       val baseTimeline = project.timeline
       val videoTrack = baseTimeline.tracks.first { it.type == TrackType.Video }
@@ -224,7 +229,12 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
   override fun updateExportSettings(settings: ExportSettings) = persistUpdate { it.copy(defaultExportSettings = settings) }
 
   override fun startExport() = persistUpdate { app ->
-    app.copy(exportJob = ExportJob(projectId = app.activeProjectId.orEmpty(), settings = app.defaultExportSettings, status = ExportStatus.Complete, progressPercent = 100, outputUri = "gallery://ClipyStudio/export-${System.currentTimeMillis()}.mp4"))
+    app.copy(exportJob = ExportJob(projectId = app.activeProjectId.orEmpty(), settings = app.defaultExportSettings, status = ExportStatus.Running, progressPercent = 42))
+  }
+
+  override fun completeExport() = persistUpdate { app ->
+    val job = app.exportJob ?: return@persistUpdate app
+    app.copy(exportJob = job.copy(status = ExportStatus.Complete, progressPercent = 100, outputUri = "gallery://ClipyStudio/export-${System.currentTimeMillis()}.mp4"))
   }
 
   override fun cancelExport() = persistUpdate { it.copy(exportJob = it.exportJob?.copy(status = ExportStatus.Cancelled, progressPercent = 0)) }
@@ -296,7 +306,6 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
 
   private fun Project.copyTimelineDuration() = copy(timeline = timeline.recalculateDuration())
 
-  private fun sampleAsset(type: MediaType, index: Int) = MediaAsset(UUID.randomUUID().toString(), "local://sample/$index", type, "Starter ${type.label.lowercase()}", if (type == MediaType.Audio) 10_000 else 6_000, 3_000_000)
 }
 
 private fun Project.toJson() = JSONObject()

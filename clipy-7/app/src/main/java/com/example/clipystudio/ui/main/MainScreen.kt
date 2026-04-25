@@ -102,6 +102,7 @@ import com.example.clipystudio.theme.StudioSecondary
 import com.example.clipystudio.theme.StudioSurface
 import com.example.clipystudio.theme.StudioSurfaceHigh
 import com.example.clipystudio.theme.StudioTextMuted
+import kotlinx.coroutines.delay
 
 private enum class Screen { Splash, Intro, Language, Dashboard, Import, Editor, Export, Settings }
 
@@ -143,7 +144,10 @@ private fun ClipyStudioApp(appState: AppState, viewModel: MainScreenViewModel, m
   val context = LocalContext.current
   val copy = copyFor(appState.languageCode)
 
-  LaunchedEffect(Unit) { screen = if (appState.hasCompletedIntro) Screen.Dashboard else Screen.Intro }
+  LaunchedEffect(Unit) {
+    delay(550)
+    screen = if (appState.hasCompletedIntro) Screen.Dashboard else Screen.Intro
+  }
   LaunchedEffect(appState.exportJob?.status) {
     if (appState.exportJob?.status == ExportStatus.Complete) snackbarHostState.showSnackbar("Export complete: ${appState.exportJob.outputUri}")
   }
@@ -163,7 +167,7 @@ private fun ClipyStudioApp(appState: AppState, viewModel: MainScreenViewModel, m
   ) { padding ->
     Box(Modifier.fillMaxSize().padding(padding)) {
       when (screen) {
-        Screen.Splash -> LoadingSurface(Modifier.fillMaxSize())
+        Screen.Splash -> LoadingSurface(Modifier.fillMaxSize(), languageCode = appState.languageCode)
         Screen.Intro -> IntroScreen(
           copy = copy,
           onContinue = { viewModel.completeIntro(); screen = Screen.Language },
@@ -174,7 +178,11 @@ private fun ClipyStudioApp(appState: AppState, viewModel: MainScreenViewModel, m
           copy = copy,
           showBack = true,
           onBack = { screen = if (languageFromSettings) Screen.Settings else Screen.Intro },
-          onSave = { language -> viewModel.setLanguage(language); screen = if (languageFromSettings) Screen.Settings else Screen.Dashboard },
+          onSave = { language ->
+            viewModel.setLanguage(language)
+            screen = if (languageFromSettings) Screen.Settings else Screen.Dashboard
+            languageFromSettings = false
+          },
         )
         Screen.Dashboard -> DashboardScreen(
           appState = appState,
@@ -193,7 +201,10 @@ private fun ClipyStudioApp(appState: AppState, viewModel: MainScreenViewModel, m
           onBack = { screen = Screen.Dashboard },
           onAddAsset = viewModel::addImportedAsset,
           onRemove = viewModel::removeImportedAsset,
-          onAddToProject = { viewModel.addImportsToProject(); screen = Screen.Editor },
+          onAddToProject = {
+            viewModel.addImportsToProject()
+            screen = Screen.Editor
+          },
         )
         Screen.Editor -> EditorScreen(
           appState = appState,
@@ -226,7 +237,7 @@ private fun ClipyStudioApp(appState: AppState, viewModel: MainScreenViewModel, m
           title = { Text(if (appState.languageCode == LanguageCode.Vi) "Thoat Clipy Studio?" else "Exit Clipy Studio?") },
           text = { Text(if (appState.languageCode == LanguageCode.Vi) "Ban co the quay lai du an da tu dong luu bat cu luc nao." else "Autosaved projects will be available when you return.") },
           confirmButton = { TextButton(onClick = { (context as? android.app.Activity)?.finish() }) { Text(copy.exit, color = StudioDanger) } },
-          dismissButton = { TextButton(onClick = { exitRequested = false }) { Text("Cancel") } },
+          dismissButton = { TextButton(onClick = { exitRequested = false }) { Text(if (appState.languageCode == LanguageCode.Vi) "Huy" else "Cancel") } },
         )
       }
     }
@@ -342,7 +353,7 @@ private fun ProjectCard(project: Project, onOpen: (String) -> Unit, onRename: (S
     }
     AnimatedVisibility(showActions) {
       Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = { onRename(project.id, "${project.name} Edit") }) { Text("Rename") }
+        OutlinedButton(onClick = { onRename(project.id, "${project.name} Draft") }) { Text("Rename") }
         OutlinedButton(onClick = { onDuplicate(project.id) }) { Text("Duplicate") }
         OutlinedButton(onClick = { onDelete(project.id) }, colors = ButtonDefaults.outlinedButtonColors(contentColor = StudioDanger)) { Text("Delete") }
       }
@@ -367,20 +378,23 @@ private fun ImportScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onA
   }
   StudioScreen {
     TopStrip(title = copy.import, onBack = onBack)
-    Text("Android system pickers are wired for visual/audio selection. Selected URIs are represented as autosaved local metadata in this MVP.", color = StudioTextMuted)
+    Text(if (appState.languageCode == LanguageCode.Vi) "Dung bo chon he thong de them video, anh va am thanh. URI duoc luu thanh metadata ban nhap." else "Use Android system pickers for visual and audio media. Selected URIs are autosaved as draft metadata.", color = StudioTextMuted)
     Spacer(Modifier.height(14.dp))
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-      Button(onClick = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }, shape = RoundedCornerShape(999.dp)) { Text("Import Images/Videos") }
-      Button(onClick = { audioPicker.launch(arrayOf("audio/*")) }, shape = RoundedCornerShape(999.dp)) { Text("Import Audio") }
+      Button(onClick = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }, shape = RoundedCornerShape(999.dp)) { Text(if (appState.languageCode == LanguageCode.Vi) "Them anh/video" else "Import Images/Videos") }
+      Button(onClick = { audioPicker.launch(arrayOf("audio/*")) }, shape = RoundedCornerShape(999.dp)) { Text(if (appState.languageCode == LanguageCode.Vi) "Them am thanh" else "Import Audio") }
       MediaType.entries.forEach { type -> OutlinedButton(onClick = { onAddAsset(type, null, null, null) }, shape = RoundedCornerShape(999.dp)) { Text("Sample ${type.label}") } }
     }
     Spacer(Modifier.height(18.dp))
     Text("Selected (${appState.selectedImports.size})", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    if (appState.selectedImports.isEmpty()) {
+      Text(if (appState.languageCode == LanguageCode.Vi) "Chon it nhat mot tep media de them vao timeline." else "Select at least one media item to add it to the timeline.", color = StudioTextMuted, fontSize = 13.sp)
+    }
     Spacer(Modifier.height(8.dp))
     LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
       items(appState.selectedImports, key = { it.id }) { asset -> MediaAssetCard(asset, onRemove) }
     }
-    Button(onClick = onAddToProject, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(999.dp)) { Text("Add to Project") }
+    Button(onClick = onAddToProject, enabled = appState.selectedImports.isNotEmpty(), modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(999.dp)) { Text(if (appState.languageCode == LanguageCode.Vi) "Them vao du an" else "Add to Project") }
   }
 }
 
@@ -412,8 +426,14 @@ private fun EditorScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onI
 @Composable
 private fun ExportScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onDashboard: () -> Unit, viewModel: MainScreenViewModel) {
   val settings = appState.defaultExportSettings
+  LaunchedEffect(appState.exportJob?.status) {
+    if (appState.exportJob?.status == ExportStatus.Running) {
+      delay(900)
+      viewModel.completeExport()
+    }
+  }
   StudioScreen {
-    TopStrip(title = "Export Video", onBack = onBack)
+    TopStrip(title = if (appState.languageCode == LanguageCode.Vi) "Xuat video" else "Export Video", onBack = onBack)
     ExportOptionCard("Format", settings.format, "MP4 is the MVP target for Android compatibility.")
     ExportOptionCard("Resolution", settings.resolution.label, "720p and 1080p are primary; 2K/4K are device-gated.")
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -433,16 +453,16 @@ private fun ExportScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onD
         Column(Modifier.padding(18.dp)) {
           Text("Status: ${job.status}", fontWeight = FontWeight.Bold)
           LinearProgressIndicator(progress = { job.progressPercent / 100f }, modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), color = StudioSecondary)
-          Text(job.outputUri ?: "Export cancelled", color = StudioTextMuted)
+          Text(job.outputUri ?: if (job.status == ExportStatus.Running) "Rendering MP4 in the background-safe MVP pipeline" else "Export cancelled", color = StudioTextMuted)
           Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = viewModel::cancelExport) { Text("Cancel", color = StudioDanger) }
-            Button(onClick = onDashboard) { Text("Back to Dashboard") }
+            if (job.status == ExportStatus.Running) OutlinedButton(onClick = viewModel::cancelExport) { Text("Cancel", color = StudioDanger) }
+            Button(onClick = onDashboard) { Text(if (appState.languageCode == LanguageCode.Vi) "Ve bang du an" else "Back to Dashboard") }
           }
         }
       }
     }
     Spacer(Modifier.weight(1f))
-    Button(onClick = viewModel::startExport, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(999.dp)) { Text("Start Export") }
+    Button(onClick = viewModel::startExport, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(999.dp)) { Text(if (appState.languageCode == LanguageCode.Vi) "Bat dau xuat" else "Start Export") }
   }
 }
 
@@ -451,9 +471,9 @@ private fun SettingsScreen(appState: AppState, copy: Copy, onBack: () -> Unit, o
   StudioScreen {
     TopStrip(title = copy.settings, onBack = onBack)
     SettingsRow(copy.language, if (appState.languageCode == LanguageCode.En) "English" else "Tieng Viet", onLanguage)
-    SettingsRow("Export defaults", "${appState.defaultExportSettings.resolution.label}, ${appState.defaultExportSettings.fps} FPS, ${appState.defaultExportSettings.qualityPreset.label}", {})
-    SettingsRow("Storage & Cache", "${appState.cacheUsageMb} MB thumbnail/proxy cache", onClearCache, action = "Clear")
-    SettingsRow("App Info", "Offline-friendly local editing MVP · version 1.0", {})
+    SettingsRow(if (appState.languageCode == LanguageCode.Vi) "Mac dinh xuat" else "Export defaults", "${appState.defaultExportSettings.resolution.label}, ${appState.defaultExportSettings.fps} FPS, ${appState.defaultExportSettings.qualityPreset.label}", {})
+    SettingsRow(if (appState.languageCode == LanguageCode.Vi) "Luu tru va cache" else "Storage & Cache", "${appState.cacheUsageMb} MB thumbnail/proxy cache", onClearCache, action = if (appState.languageCode == LanguageCode.Vi) "Xoa" else "Clear")
+    SettingsRow(if (appState.languageCode == LanguageCode.Vi) "Thong tin ung dung" else "App Info", if (appState.languageCode == LanguageCode.Vi) "Bien tap cuc bo offline-friendly MVP - version 1.0" else "Offline-friendly local editing MVP - version 1.0", {})
     SettingsRow(copy.exit, "Close after autosave/export confirmation", onExit, danger = true)
   }
 }
@@ -558,12 +578,12 @@ private fun StudioScreen(horizontalPadding: androidx.compose.ui.unit.Dp = 16.dp,
 }
 
 @Composable
-private fun LoadingSurface(modifier: Modifier = Modifier) {
+private fun LoadingSurface(modifier: Modifier = Modifier, languageCode: LanguageCode = LanguageCode.En) {
   Box(modifier.fillMaxSize().background(Brush.radialGradient(listOf(StudioSurfaceHigh, StudioBackground))), contentAlignment = Alignment.Center) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
       OnboardingIllustration(StudioSecondary)
       Text("Clipy Studio", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-      Text("Loading studio", color = StudioTextMuted)
+      Text(if (languageCode == LanguageCode.Vi) "Dang tai studio" else "Loading studio", color = StudioTextMuted)
       LinearProgressIndicator(modifier = Modifier.width(160.dp).padding(top = 18.dp), color = StudioSecondary)
     }
   }

@@ -46,6 +46,7 @@ class MainScreenViewModel(private val dataRepository: DataRepository = DefaultDa
   fun redo() = dataRepository.redo()
   fun updateExportSettings(settings: ExportSettings) = dataRepository.updateExportSettings(settings)
   fun startExport() = dataRepository.startExport()
+  fun completeExport() = dataRepository.completeExport()
   fun cancelExport() = dataRepository.cancelExport()
   fun clearExportResult() = dataRepository.clearExportResult()
   fun clearCache() = dataRepository.clearCache()

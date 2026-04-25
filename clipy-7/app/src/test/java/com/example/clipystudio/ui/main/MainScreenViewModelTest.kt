@@ -47,6 +47,7 @@ private class FakeClipyRepository : DataRepository {
   override fun redo() = Unit
   override fun updateExportSettings(settings: ExportSettings) = Unit
   override fun startExport() = Unit
+  override fun completeExport() = Unit
   override fun cancelExport() = Unit
   override fun clearExportResult() = Unit
   override fun clearCache() = Unit
