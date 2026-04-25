@@ -23,12 +23,20 @@ interface DataRepository {
   fun addImportsToProject()
   fun selectClip(clipId: String)
   fun togglePlayback()
+  fun seekTo(positionMs: Long)
   fun seekBy(deltaMs: Long)
+  fun updateTimelineZoom(delta: Float)
+  fun updateCanvasRatio(ratio: CanvasRatio)
   fun splitSelectedClip()
+  fun deleteSelectedClip()
   fun duplicateSelectedClip()
   fun trimSelectedClip(deltaMs: Long)
+  fun moveSelectedClip(deltaMs: Long)
   fun updateSelectedTool(tool: EditorTool)
   fun adjustSelectedClip(action: ClipAction)
+  fun transformSelectedClip(deltaX: Float, deltaY: Float, scaleChange: Float, rotationChange: Float)
+  fun addAudioClipAtPlayhead(title: String, source: AudioSource)
+  fun addTextClipAtPlayhead(content: String, fontSizeSp: Float, color: String, backgroundColor: String?, strokeEnabled: Boolean, shadowEnabled: Boolean, alignment: String, animation: String)
   fun undo()
   fun redo()
   fun updateExportSettings(settings: ExportSettings)
@@ -161,7 +169,16 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
 
   override fun togglePlayback() = updateTimeline { it.copy(isPlaying = !it.isPlaying, playheadMs = if (it.playheadMs >= it.durationMs) 0L else it.playheadMs) }
 
+  override fun seekTo(positionMs: Long) = updateTimeline { timeline -> timeline.copy(playheadMs = positionMs.coerceIn(0L, timeline.durationMs)) }
+
   override fun seekBy(deltaMs: Long) = updateTimeline { timeline -> timeline.copy(playheadMs = (timeline.playheadMs + deltaMs).coerceIn(0L, timeline.durationMs)) }
+
+  override fun updateTimelineZoom(delta: Float) = updateTimeline { timeline -> timeline.copy(zoomLevel = (timeline.zoomLevel + delta).coerceIn(0.65f, 3f)) }
+
+  override fun updateCanvasRatio(ratio: CanvasRatio) {
+    val projectId = state.value.activeProjectId ?: return
+    mutateProject(projectId) { it.copy(canvasRatio = ratio) }
+  }
 
   override fun splitSelectedClip() = withUndo("Split clip") { project ->
     val selectedId = project.timeline.selectedClipId ?: return@withUndo project
@@ -184,8 +201,20 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
     }).recalculateDuration())
   }
 
+  override fun deleteSelectedClip() = withUndo("Delete clip") { project ->
+    val selectedId = project.timeline.selectedClipId ?: return@withUndo project
+    project.copy(timeline = project.timeline.copy(
+      selectedClipId = null,
+      tracks = project.timeline.tracks.map { track -> track.copy(clips = track.clips.filterNot { it.id == selectedId }) },
+    ).recalculateDuration())
+  }
+
   override fun trimSelectedClip(deltaMs: Long) = withUndo("Trim clip") { project ->
     mapSelectedClip(project) { clip -> clip.copy(durationMs = (clip.durationMs + deltaMs).coerceAtLeast(1_000L)) }.copyTimelineDuration()
+  }
+
+  override fun moveSelectedClip(deltaMs: Long) = withUndo("Move clip") { project ->
+    mapSelectedClip(project) { clip -> clip.copy(startMs = (clip.startMs + deltaMs).coerceAtLeast(0L)) }.copyTimelineDuration()
   }
 
   override fun updateSelectedTool(tool: EditorTool) = updateTimeline { it.copy(selectedTool = tool) }
@@ -202,8 +231,60 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
         ClipAction.Mute -> clip.copy(videoProperties = clip.videoProperties.copy(sourceAudioMuted = !clip.videoProperties.sourceAudioMuted))
         ClipAction.Filter -> clip.copy(filterAdjustments = clip.filterAdjustments.copy(filterId = if (clip.filterAdjustments.filterId == "cinematic") null else "cinematic", contrast = 1.1f, saturation = 0.92f))
         ClipAction.Keyframe -> clip.copy(keyframes = clip.keyframes + Keyframe(timeMs = project.timeline.playheadMs, property = KeyframeProperty.Opacity, value = clip.transform.opacity))
+        ClipAction.VolumeDown -> clip.copy(audioProperties = clip.audioProperties.copy(volume = (clip.audioProperties.volume - 0.1f).coerceAtLeast(0f)))
+        ClipAction.VolumeUp -> clip.copy(audioProperties = clip.audioProperties.copy(volume = (clip.audioProperties.volume + 0.1f).coerceAtMost(1f)))
+        ClipAction.Fade -> clip.copy(audioProperties = clip.audioProperties.copy(fadeInMs = if (clip.audioProperties.fadeInMs == 0L) 600 else 0, fadeOutMs = if (clip.audioProperties.fadeOutMs == 0L) 600 else 0))
+        ClipAction.Loop -> clip.copy(audioProperties = clip.audioProperties.copy(loopEnabled = !clip.audioProperties.loopEnabled))
+        ClipAction.Replace -> clip.copy(title = "${clip.title} replaced", assetId = clip.assetId ?: "replacement://${UUID.randomUUID()}")
+        ClipAction.Crop -> clip.copy(filterAdjustments = clip.filterAdjustments.copy(vignette = if (clip.filterAdjustments.vignette == 0f) 0.28f else 0f))
       }
     }
+  }
+
+  override fun transformSelectedClip(deltaX: Float, deltaY: Float, scaleChange: Float, rotationChange: Float) = withUndo("Transform overlay") { project ->
+    mapSelectedClip(project) { clip ->
+      clip.copy(transform = clip.transform.copy(
+        positionX = (clip.transform.positionX + deltaX).coerceIn(0.05f, 0.95f),
+        positionY = (clip.transform.positionY + deltaY).coerceIn(0.05f, 0.95f),
+        scale = (clip.transform.scale * scaleChange).coerceIn(0.35f, 3f),
+        rotationDegrees = (clip.transform.rotationDegrees + rotationChange) % 360f,
+      ))
+    }
+  }
+
+  override fun addAudioClipAtPlayhead(title: String, source: AudioSource) = withUndo("Add audio") { project ->
+    val clip = TimelineClip(
+      id = UUID.randomUUID().toString(),
+      clipType = ClipType.Audio,
+      title = title,
+      startMs = project.timeline.playheadMs,
+      durationMs = if (source == AudioSource.SoundEffect) 1_500 else 8_000,
+      audioProperties = AudioProperties(volume = if (source == AudioSource.SoundEffect) 0.9f else 0.72f, fadeInMs = 300, fadeOutMs = 500),
+    )
+    project.copy(timeline = project.timeline.copy(
+      selectedClipId = clip.id,
+      selectedTool = EditorTool.Audio,
+      tracks = project.timeline.tracks.map { if (it.type == TrackType.Audio) it.copy(clips = it.clips + clip) else it },
+    ).recalculateDuration())
+  }
+
+  override fun addTextClipAtPlayhead(content: String, fontSizeSp: Float, color: String, backgroundColor: String?, strokeEnabled: Boolean, shadowEnabled: Boolean, alignment: String, animation: String) = withUndo("Add text") { project ->
+    val text = content.ifBlank { "New title" }
+    val clip = TimelineClip(
+      id = UUID.randomUUID().toString(),
+      clipType = ClipType.Text,
+      title = text.take(18),
+      startMs = project.timeline.playheadMs,
+      durationMs = 3_500,
+      zIndex = 10 + project.timeline.tracks.flatMap { it.clips }.count { it.clipType == ClipType.Text },
+      textProperties = TextProperties(content = text, fontSizeSp = fontSizeSp, color = color, backgroundColor = backgroundColor, strokeEnabled = strokeEnabled, shadowEnabled = shadowEnabled, alignment = alignment, animation = animation),
+      transform = TransformState(positionY = 0.42f),
+    )
+    project.copy(timeline = project.timeline.copy(
+      selectedClipId = clip.id,
+      selectedTool = EditorTool.Text,
+      tracks = project.timeline.tracks.map { if (it.type == TrackType.Text) it.copy(clips = it.clips + clip) else it },
+    ).recalculateDuration())
   }
 
   override fun undo() = persistUpdate { app ->
@@ -429,8 +510,8 @@ private fun VideoProperties.toJson() = JSONObject().put("speed", speed.toDouble(
 private fun JSONObject.toVideoProperties() = VideoProperties(optDouble("speed", 1.0).toFloat(), optBoolean("isFreezeFrame"), optBoolean("sourceAudioMuted"))
 private fun AudioProperties.toJson() = JSONObject().put("volume", volume.toDouble()).put("fadeInMs", fadeInMs).put("fadeOutMs", fadeOutMs).put("loopEnabled", loopEnabled)
 private fun JSONObject.toAudioProperties() = AudioProperties(optDouble("volume", 1.0).toFloat(), optLong("fadeInMs"), optLong("fadeOutMs"), optBoolean("loopEnabled"))
-private fun TextProperties.toJson() = JSONObject().put("content", content).put("fontSizeSp", fontSizeSp.toDouble()).put("color", color).put("backgroundColor", backgroundColor).put("alignment", alignment).put("animation", animation)
-private fun JSONObject.toTextProperties() = TextProperties(optString("content", "Clipy Studio"), optDouble("fontSizeSp", 28.0).toFloat(), optString("color", "#F4F6FF"), optNullableString("backgroundColor"), optString("alignment", "Center"), optString("animation", "Fade"))
+private fun TextProperties.toJson() = JSONObject().put("content", content).put("fontSizeSp", fontSizeSp.toDouble()).put("color", color).put("backgroundColor", backgroundColor).put("strokeEnabled", strokeEnabled).put("shadowEnabled", shadowEnabled).put("alignment", alignment).put("animation", animation)
+private fun JSONObject.toTextProperties() = TextProperties(optString("content", "Clipy Studio"), optDouble("fontSizeSp", 28.0).toFloat(), optString("color", "#F4F6FF"), optNullableString("backgroundColor"), optBoolean("strokeEnabled"), optBoolean("shadowEnabled"), optString("alignment", "Center"), optString("animation", "Fade"))
 private fun FilterAdjustmentSet.toJson() = JSONObject().put("filterId", filterId).put("brightness", brightness.toDouble()).put("contrast", contrast.toDouble()).put("saturation", saturation.toDouble()).put("exposure", exposure.toDouble()).put("temperature", temperature.toDouble()).put("sharpness", sharpness.toDouble()).put("vignette", vignette.toDouble())
 private fun JSONObject.toFilterAdjustmentSet() = FilterAdjustmentSet(optNullableString("filterId"), optDouble("brightness", 1.0).toFloat(), optDouble("contrast", 1.0).toFloat(), optDouble("saturation", 1.0).toFloat(), optDouble("exposure").toFloat(), optDouble("temperature").toFloat(), optDouble("sharpness").toFloat(), optDouble("vignette").toFloat())
 private fun Keyframe.toJson() = JSONObject().put("id", id).put("timeMs", timeMs).put("property", property.name).put("value", value.toDouble())
@@ -456,18 +537,19 @@ data class AppState(
 }
 
 enum class LanguageCode { En, Vi }
-enum class CanvasRatio(val label: String) { Portrait("9:16"), Square("1:1"), Landscape("16:9") }
+enum class CanvasRatio(val label: String) { Portrait("9:16"), Square("1:1"), Landscape("16:9"), FourFive("4:5"), Original("Original") }
 enum class MediaType(val label: String) { Video("Video"), Image("Image"), Audio("Audio") }
 enum class TrackType(val label: String) { Video("Video"), Audio("Audio"), Text("Text"), Sticker("Sticker"), Effect("Effect"), Overlay("Overlay") }
 enum class ClipType { Video, Image, Audio, Text, Sticker, Effect, Overlay }
-enum class EditorTool(val label: String) { Edit("Edit"), Audio("Audio"), Text("Text"), Sticker("Sticker"), Filter("Filter"), Effect("Effect"), Canvas("Canvas"), Keyframe("Keyframe") }
+enum class EditorTool(val label: String) { Edit("Edit"), Audio("Audio"), Text("Text"), Sticker("Sticker"), Overlay("Overlay"), Filter("Filter"), Effect("Effect"), Transition("Transition"), Canvas("Canvas"), Speed("Speed"), Export("Export") }
+enum class AudioSource(val label: String) { DeviceMusic("Device Music"), BuiltInMusic("Built-in Music"), ExtractedAudio("Extracted Audio"), SoundEffect("Sound Effects") }
 enum class KeyframeProperty { PositionX, PositionY, Scale, Rotation, Opacity }
 enum class ExportResolution(val label: String) { P720("720p"), P1080("1080p"), P2K("2K"), P4K("4K") }
 enum class QualityPreset(val label: String) { Balanced("Balanced"), High("High"), Studio("Studio") }
 enum class ExportStatus { Idle, Running, Complete, Cancelled, Failed }
 
 enum class ClipAction(val label: String) {
-  Rotate("Rotate"), Flip("Flip"), OpacityDown("Opacity -"), OpacityUp("Opacity +"), SpeedUp("Speed +"), SpeedDown("Speed -"), Mute("Mute"), Filter("Cinematic"), Keyframe("Add keyframe")
+  Rotate("Rotate"), Flip("Flip"), OpacityDown("Opacity -"), OpacityUp("Opacity +"), SpeedUp("Speed +"), SpeedDown("Speed -"), Mute("Mute"), Filter("Cinematic"), Keyframe("Add keyframe"), VolumeDown("Volume -"), VolumeUp("Volume +"), Fade("Fade"), Loop("Loop"), Replace("Replace"), Crop("Crop")
 }
 
 data class Project(
@@ -515,7 +597,8 @@ data class Timeline(
           TimelineTrack(UUID.randomUUID().toString(), TrackType.Audio, "Music", 1, listOf(TimelineClip.audioClip())),
           TimelineTrack(UUID.randomUUID().toString(), TrackType.Text, "Text", 2, listOf(TimelineClip.textClip())),
           TimelineTrack(UUID.randomUUID().toString(), TrackType.Sticker, "Stickers", 3, emptyList()),
-          TimelineTrack(UUID.randomUUID().toString(), TrackType.Effect, "Effects", 4, listOf(TimelineClip.effectClip())),
+          TimelineTrack(UUID.randomUUID().toString(), TrackType.Overlay, "Overlay", 4, emptyList()),
+          TimelineTrack(UUID.randomUUID().toString(), TrackType.Effect, "Effects", 5, listOf(TimelineClip.effectClip())),
         ),
       )
     }
@@ -550,7 +633,7 @@ data class TimelineClip(
 data class TransformState(val positionX: Float = 0.5f, val positionY: Float = 0.5f, val scale: Float = 1f, val rotationDegrees: Float = 0f, val opacity: Float = 1f, val flipHorizontal: Boolean = false, val flipVertical: Boolean = false)
 data class VideoProperties(val speed: Float = 1f, val isFreezeFrame: Boolean = false, val sourceAudioMuted: Boolean = false)
 data class AudioProperties(val volume: Float = 1f, val fadeInMs: Long = 0, val fadeOutMs: Long = 0, val loopEnabled: Boolean = false)
-data class TextProperties(val content: String = "Clipy Studio", val fontSizeSp: Float = 28f, val color: String = "#F4F6FF", val backgroundColor: String? = "#7C5CFF", val alignment: String = "Center", val animation: String = "Fade")
+data class TextProperties(val content: String = "Clipy Studio", val fontSizeSp: Float = 28f, val color: String = "#F4F6FF", val backgroundColor: String? = "#7C5CFF", val strokeEnabled: Boolean = false, val shadowEnabled: Boolean = true, val alignment: String = "Center", val animation: String = "Fade")
 data class FilterAdjustmentSet(val filterId: String? = null, val brightness: Float = 1f, val contrast: Float = 1f, val saturation: Float = 1f, val exposure: Float = 0f, val temperature: Float = 0f, val sharpness: Float = 0f, val vignette: Float = 0f)
 data class Keyframe(val id: String = UUID.randomUUID().toString(), val timeMs: Long, val property: KeyframeProperty, val value: Float)
 data class UndoRedoCommand(val description: String, val before: Project, val after: Project)

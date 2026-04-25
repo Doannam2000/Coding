@@ -13,6 +13,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,6 +67,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -77,8 +80,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
 import com.example.clipystudio.data.AppState
+import com.example.clipystudio.data.AudioSource
 import com.example.clipystudio.data.CanvasRatio
 import com.example.clipystudio.data.ClipAction
+import com.example.clipystudio.data.ClipType
 import com.example.clipystudio.data.EditorTool
 import com.example.clipystudio.data.ExportResolution
 import com.example.clipystudio.data.ExportStatus
@@ -406,20 +411,61 @@ private fun EditorScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onI
     return
   }
   val timeline = project.timeline
+  var showExitDialog by remember { mutableStateOf(false) }
+  BackHandler { showExitDialog = true }
   StudioScreen(horizontalPadding = 10.dp) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-      TextButton(onClick = onBack) { Text("Back") }
-      Text("Saved v${project.autosaveVersion}", modifier = Modifier.weight(1f), color = StudioSecondary, textAlign = TextAlign.Center)
-      TextButton(onClick = viewModel::undo) { Text("Undo") }
-      TextButton(onClick = viewModel::redo) { Text("Redo") }
-      Button(onClick = onExport, shape = RoundedCornerShape(999.dp)) { Text(copy.export) }
-    }
-    PreviewCanvas(project.canvasRatio, timeline)
+    EditorTopBar(
+      title = project.name,
+      version = project.autosaveVersion,
+      canUndo = appState.undoStack.isNotEmpty(),
+      canRedo = appState.redoStack.isNotEmpty(),
+      onBack = { showExitDialog = true },
+      onUndo = viewModel::undo,
+      onRedo = viewModel::redo,
+      onExport = onExport,
+    )
+    PreviewCanvas(project.canvasRatio, timeline, viewModel::selectClip, viewModel::deleteSelectedClip, viewModel::transformSelectedClip, viewModel::updateCanvasRatio)
     PlaybackControls(timeline, viewModel::togglePlayback, viewModel::seekBy)
-    TimelineView(timeline, viewModel::selectClip)
+    TimelineView(timeline, viewModel::selectClip, viewModel::seekTo, viewModel::updateTimelineZoom, viewModel::trimSelectedClip, viewModel::moveSelectedClip, viewModel::splitSelectedClip)
     Spacer(Modifier.height(8.dp))
-    ToolRail(timeline.selectedTool, viewModel::updateSelectedTool, onImport)
-    ToolPanel(timeline, viewModel)
+    val selectedClip = timeline.tracks.flatMap { it.clips }.firstOrNull { it.id == timeline.selectedClipId }
+    when {
+      selectedClip != null && timeline.selectedTool == EditorTool.Edit -> ClipEditPanel(selectedClip, viewModel)
+      timeline.selectedTool == EditorTool.Audio -> AudioToolPanel(viewModel)
+      timeline.selectedTool == EditorTool.Text -> TextToolPanel(viewModel)
+      timeline.selectedTool == EditorTool.Canvas -> CanvasToolPanel(project.canvasRatio, viewModel::updateCanvasRatio)
+      else -> ToolPanel(timeline, viewModel)
+    }
+    Spacer(Modifier.height(8.dp))
+    ToolRail(timeline.selectedTool, viewModel::updateSelectedTool, onImport, onExport)
+  }
+  if (showExitDialog) {
+    AlertDialog(
+      onDismissRequest = { showExitDialog = false },
+      title = { Text(if (appState.languageCode == LanguageCode.Vi) "Luu truoc khi thoat?" else "Save before leaving?") },
+      text = { Text(if (appState.languageCode == LanguageCode.Vi) "Du an da duoc tu dong luu. Ban co the luu va thoat, bo qua thay doi dang chon, hoac tiep tuc bien tap." else "Your project is autosaved. Save and exit, discard the current editor selection, or keep editing.") },
+      confirmButton = { TextButton(onClick = onBack) { Text(if (appState.languageCode == LanguageCode.Vi) "Luu & thoat" else "Save & Exit") } },
+      dismissButton = {
+        Row {
+          TextButton(onClick = onBack) { Text(if (appState.languageCode == LanguageCode.Vi) "Bo qua" else "Discard", color = StudioDanger) }
+          TextButton(onClick = { showExitDialog = false }) { Text(if (appState.languageCode == LanguageCode.Vi) "Huy" else "Cancel") }
+        }
+      },
+    )
+  }
+}
+
+@Composable
+private fun EditorTopBar(title: String, version: Long, canUndo: Boolean, canRedo: Boolean, onBack: () -> Unit, onUndo: () -> Unit, onRedo: () -> Unit, onExport: () -> Unit) {
+  Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
+    TextButton(onClick = onBack, modifier = Modifier.semantics { contentDescription = "Back from editor" }) { Text("Back") }
+    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+      Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
+      Text("Autosaved v$version", color = StudioSecondary, fontSize = 11.sp)
+    }
+    TextButton(onClick = onUndo, enabled = canUndo, modifier = Modifier.semantics { contentDescription = "Undo edit" }) { Text("Undo") }
+    TextButton(onClick = onRedo, enabled = canRedo, modifier = Modifier.semantics { contentDescription = "Redo edit" }) { Text("Redo") }
+    Button(onClick = onExport, shape = RoundedCornerShape(999.dp), modifier = Modifier.height(44.dp).semantics { contentDescription = "Export project" }) { Text("Export") }
   }
 }
 
@@ -479,17 +525,48 @@ private fun SettingsScreen(appState: AppState, copy: Copy, onBack: () -> Unit, o
 }
 
 @Composable
-private fun PreviewCanvas(ratio: CanvasRatio, timeline: Timeline) {
-  val ratioValue = when (ratio) { CanvasRatio.Portrait -> 9f / 16f; CanvasRatio.Square -> 1f; CanvasRatio.Landscape -> 16f / 9f }
+private fun PreviewCanvas(ratio: CanvasRatio, timeline: Timeline, onSelect: (String) -> Unit, onDelete: () -> Unit, onTransform: (Float, Float, Float, Float) -> Unit, onRatio: (CanvasRatio) -> Unit) {
+  val ratioValue = when (ratio) { CanvasRatio.Portrait -> 9f / 16f; CanvasRatio.Square -> 1f; CanvasRatio.Landscape -> 16f / 9f; CanvasRatio.FourFive -> 4f / 5f; CanvasRatio.Original -> 3f / 4f }
   val glow by animateFloatAsState(if (timeline.isPlaying) 1f else 0.35f, label = "previewGlow")
-  Box(Modifier.fillMaxWidth().height(270.dp).clip(RoundedCornerShape(24.dp)).background(StudioSurfaceHigh), contentAlignment = Alignment.Center) {
-    Box(Modifier.fillMaxHeight(0.88f).aspectRatio(ratioValue).clip(RoundedCornerShape(18.dp)).background(Brush.radialGradient(listOf(StudioPrimary.copy(alpha = 0.55f * glow), StudioBackground)))) {
-      Canvas(Modifier.fillMaxSize()) {
-        drawRect(Color.White.copy(alpha = 0.06f), style = Stroke(width = 2.dp.toPx()))
-        drawCircle(StudioSecondary.copy(alpha = glow), radius = 18.dp.toPx(), center = center)
+  val activeClips = timeline.tracks.flatMap { it.clips }.filter { timeline.playheadMs >= it.startMs && timeline.playheadMs <= it.startMs + it.durationMs }.sortedBy { it.zIndex }
+  val selectedClip = activeClips.firstOrNull { it.id == timeline.selectedClipId }
+  Column(Modifier.fillMaxWidth()) {
+    Box(Modifier.fillMaxWidth().height(282.dp).clip(RoundedCornerShape(24.dp)).background(StudioSurfaceHigh), contentAlignment = Alignment.Center) {
+      Box(Modifier.fillMaxHeight(0.88f).aspectRatio(ratioValue).clip(RoundedCornerShape(18.dp)).background(Brush.radialGradient(listOf(StudioPrimary.copy(alpha = 0.55f * glow), StudioBackground)))) {
+        Box(Modifier.fillMaxSize().pointerInput(timeline.selectedClipId) { detectTransformGestures { _, pan, zoom, rotation -> if (timeline.selectedClipId != null) onTransform(pan.x / 600f, pan.y / 900f, zoom, rotation) } })
+        Canvas(Modifier.fillMaxSize()) {
+          drawRect(Color.White.copy(alpha = 0.06f), style = Stroke(width = 2.dp.toPx()))
+          drawCircle(StudioSecondary.copy(alpha = glow), radius = 18.dp.toPx(), center = center)
+          if (selectedClip != null) {
+            drawLine(StudioSecondary.copy(alpha = 0.35f), Offset(size.width / 2, 0f), Offset(size.width / 2, size.height), strokeWidth = 1.dp.toPx())
+            drawLine(StudioSecondary.copy(alpha = 0.35f), Offset(0f, size.height / 2), Offset(size.width, size.height / 2), strokeWidth = 1.dp.toPx())
+          }
+        }
+        activeClips.filter { it.clipType == ClipType.Text || it.clipType == ClipType.Sticker || it.clipType == ClipType.Overlay }.forEach { clip ->
+          PreviewLayerChip(clip, selected = clip.id == timeline.selectedClipId, onSelect = { onSelect(clip.id) }, onDelete = onDelete)
+        }
+        Text("Preview ${timeline.playheadMs.asTimecode()}", modifier = Modifier.align(Alignment.TopCenter).padding(10.dp), fontWeight = FontWeight.Bold)
+        Text("Tap overlays, drag/pinch/rotate selected layer", modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp), color = StudioTextMuted, fontSize = 12.sp)
       }
-      Text("Preview ${timeline.playheadMs.asTimecode()}", modifier = Modifier.align(Alignment.TopCenter).padding(10.dp), fontWeight = FontWeight.Bold)
-      Text("Drag / pinch / rotate overlays", modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp), color = StudioTextMuted, fontSize = 12.sp)
+    }
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      CanvasRatio.entries.forEach { item -> FilterChip(selected = ratio == item, onClick = { onRatio(item) }, label = { Text(item.label, fontSize = 12.sp) }) }
+    }
+  }
+}
+
+@Composable
+private fun PreviewLayerChip(clip: TimelineClip, selected: Boolean, onSelect: () -> Unit, onDelete: () -> Unit) {
+  val startPadding = ((clip.transform.positionX * 240).coerceIn(12f, 220f)).dp
+  val topPadding = ((clip.transform.positionY * 180).coerceIn(18f, 170f)).dp
+  Box(Modifier.fillMaxSize()) {
+    Box(Modifier.align(Alignment.TopStart).padding(start = startPadding, top = topPadding).clip(RoundedCornerShape(14.dp)).background(StudioBackground.copy(alpha = 0.72f)).border(if (selected) 2.dp else 1.dp, if (selected) StudioPrimary else Color.White.copy(alpha = 0.35f), RoundedCornerShape(14.dp)).clickable(onClick = onSelect).pointerInput(clip.id) { detectTapGestures(onDoubleTap = { onSelect() }, onTap = { onSelect() }) }.padding(horizontal = 12.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
+      Text(if (clip.clipType == ClipType.Text) clip.textProperties.content else clip.title, fontSize = clip.textProperties.fontSizeSp.coerceIn(14f, 34f).sp, maxLines = 2, textAlign = TextAlign.Center)
+    }
+    if (selected) {
+      TextButton(onClick = onDelete, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).semantics { contentDescription = "Delete selected overlay" }) { Text("Delete", color = StudioDanger) }
+      Box(Modifier.align(Alignment.Center).size(10.dp).clip(CircleShape).background(StudioPrimary))
+      Text("Rotate", modifier = Modifier.align(Alignment.TopCenter).padding(top = 22.dp), color = StudioSecondary, fontSize = 11.sp)
     }
   }
 }
@@ -508,10 +585,11 @@ private fun PlaybackControls(timeline: Timeline, onPlay: () -> Unit, onSeek: (Lo
 }
 
 @Composable
-private fun TimelineView(timeline: Timeline, onSelect: (String) -> Unit) {
+private fun TimelineView(timeline: Timeline, onSelect: (String) -> Unit, onSeek: (Long) -> Unit, onZoom: (Float) -> Unit, onTrim: (Long) -> Unit, onMove: (Long) -> Unit, onSplit: () -> Unit) {
   Box(Modifier.fillMaxWidth().height(250.dp).clip(RoundedCornerShape(20.dp)).background(Color.Black.copy(alpha = 0.28f))) {
-    LazyColumn(Modifier.fillMaxSize().padding(vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-      items(timeline.tracks, key = { it.id }) { track -> TrackLane(track, timeline.selectedClipId, onSelect) }
+    LazyColumn(Modifier.fillMaxSize().padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+      item { TimeRuler(timeline, onSeek, onZoom) }
+      items(timeline.tracks.sortedBy { it.orderIndex }, key = { it.id }) { track -> TrackLane(track, timeline.selectedClipId, timeline.zoomLevel, onSelect, onTrim, onMove, onSplit) }
     }
     Box(Modifier.align(Alignment.TopCenter).width(2.dp).fillMaxHeight().background(StudioSecondary))
     Box(Modifier.align(Alignment.TopCenter).padding(top = 4.dp).size(12.dp).clip(CircleShape).background(StudioSecondary))
@@ -519,29 +597,132 @@ private fun TimelineView(timeline: Timeline, onSelect: (String) -> Unit) {
 }
 
 @Composable
-private fun TrackLane(track: TimelineTrack, selectedClipId: String?, onSelect: (String) -> Unit) {
+private fun TimeRuler(timeline: Timeline, onSeek: (Long) -> Unit, onZoom: (Float) -> Unit) {
+  Row(Modifier.fillMaxWidth().height(28.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Text("Ruler", modifier = Modifier.width(58.dp), fontSize = 12.sp, color = StudioTextMuted)
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.weight(1f)) {
+      items((0..timeline.durationMs step 1_000L).toList()) { tick -> Text(tick.asTimecode(), color = if (kotlin.math.abs(tick - timeline.playheadMs) < 550) StudioSecondary else StudioTextMuted, fontSize = 12.sp, modifier = Modifier.clickable { onSeek(tick) }) }
+    }
+    TextButton(onClick = { onZoom(-0.2f) }, modifier = Modifier.width(42.dp)) { Text("-") }
+    TextButton(onClick = { onZoom(0.2f) }, modifier = Modifier.width(42.dp)) { Text("+") }
+  }
+}
+
+@Composable
+private fun TrackLane(track: TimelineTrack, selectedClipId: String?, zoom: Float, onSelect: (String) -> Unit, onTrim: (Long) -> Unit, onMove: (Long) -> Unit, onSplit: () -> Unit) {
   Row(Modifier.fillMaxWidth().height(38.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
     Text(track.type.label, modifier = Modifier.width(58.dp), fontSize = 12.sp, color = StudioTextMuted)
     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-      items(track.clips, key = { it.id }) { clip -> ClipBlock(track.type, clip, selectedClipId == clip.id, onSelect) }
+      items(track.clips.sortedBy { it.startMs }, key = { it.id }) { clip -> ClipBlock(track.type, clip, selectedClipId == clip.id, zoom, onSelect, onTrim, onMove, onSplit) }
     }
   }
 }
 
 @Composable
-private fun ClipBlock(trackType: TrackType, clip: TimelineClip, selected: Boolean, onSelect: (String) -> Unit) {
+private fun ClipBlock(trackType: TrackType, clip: TimelineClip, selected: Boolean, zoom: Float, onSelect: (String) -> Unit, onTrim: (Long) -> Unit, onMove: (Long) -> Unit, onSplit: () -> Unit) {
   val color = when (trackType) { TrackType.Video -> StudioPrimary; TrackType.Audio -> StudioSecondary; TrackType.Text -> StudioAccent; TrackType.Sticker -> Color(0xFFFF65B3); TrackType.Effect -> Color(0xFF55A7FF); TrackType.Overlay -> Color(0xFF56E58A) }
   Box(
-    Modifier.width((70 + (clip.durationMs / 120).toInt()).coerceAtMost(170).dp).fillMaxHeight().clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = if (selected) 0.9f else 0.55f)).border(if (selected) 2.dp else 0.dp, Color.White, RoundedCornerShape(12.dp)).clickable { onSelect(clip.id) }.semantics { contentDescription = "${clip.clipType} clip, starts at ${clip.startMs.asTimecode()}, duration ${clip.durationMs.asTimecode()}" },
+    Modifier.width(((70 + (clip.durationMs / 120).toInt()) * zoom).toInt().coerceIn(72, 260).dp).fillMaxHeight().clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = if (selected) 0.9f else 0.55f)).border(if (selected) 2.dp else 0.dp, Color.White, RoundedCornerShape(12.dp)).clickable { onSelect(clip.id) }.pointerInput(clip.id) { detectTapGestures(onDoubleTap = { onSelect(clip.id); onSplit() }, onLongPress = { onSelect(clip.id); onMove(500) }) }.semantics { contentDescription = "${clip.clipType} clip, starts at ${clip.startMs.asTimecode()}, duration ${clip.durationMs.asTimecode()}" },
     contentAlignment = Alignment.Center,
-  ) { Text(clip.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp)) }
+  ) {
+    Text(clip.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 14.dp))
+    if (selected) {
+      Box(Modifier.align(Alignment.CenterStart).width(8.dp).fillMaxHeight().background(Color.White.copy(alpha = 0.75f)).clickable { onTrim(-500) })
+      Box(Modifier.align(Alignment.CenterEnd).width(8.dp).fillMaxHeight().background(Color.White.copy(alpha = 0.75f)).clickable { onTrim(500) })
+    }
+  }
 }
 
 @Composable
-private fun ToolRail(selected: EditorTool, onSelect: (EditorTool) -> Unit, onImport: () -> Unit) {
+private fun ToolRail(selected: EditorTool, onSelect: (EditorTool) -> Unit, onImport: () -> Unit, onExport: () -> Unit) {
   LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
     item { FilterChip(selected = false, onClick = onImport, label = { Text("+ Media") }) }
-    items(EditorTool.entries, key = { it.name }) { tool -> FilterChip(selected = selected == tool, onClick = { onSelect(tool) }, label = { Text(tool.label) }) }
+    items(EditorTool.entries, key = { it.name }) { tool -> FilterChip(selected = selected == tool, onClick = { if (tool == EditorTool.Export) onExport() else onSelect(tool) }, label = { Text(tool.label) }) }
+  }
+}
+
+@Composable
+private fun ClipEditPanel(selectedClip: TimelineClip, viewModel: MainScreenViewModel) {
+  Card(colors = CardDefaults.cardColors(containerColor = StudioSurfaceHigh), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+    Column(Modifier.padding(14.dp)) {
+      Text("Edit ${selectedClip.clipType}", fontWeight = FontWeight.Bold)
+      Text("${selectedClip.startMs.asTimecode()} · ${selectedClip.durationMs.asTimecode()} · ${selectedClip.title}", color = StudioTextMuted, fontSize = 13.sp)
+      Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = viewModel::splitSelectedClip, modifier = Modifier.semantics { contentDescription = "Split selected clip" }) { Text("Split") }
+        OutlinedButton(onClick = viewModel::deleteSelectedClip, modifier = Modifier.semantics { contentDescription = "Delete selected clip" }) { Text("Delete") }
+        OutlinedButton(onClick = viewModel::duplicateSelectedClip) { Text("Duplicate") }
+        OutlinedButton(onClick = { viewModel.adjustSelectedClip(ClipAction.SpeedDown) }) { Text("Speed -") }
+        OutlinedButton(onClick = { viewModel.adjustSelectedClip(ClipAction.SpeedUp) }) { Text("Speed +") }
+        OutlinedButton(onClick = { viewModel.adjustSelectedClip(ClipAction.VolumeDown) }) { Text("Volume -") }
+        OutlinedButton(onClick = { viewModel.adjustSelectedClip(ClipAction.VolumeUp) }) { Text("Volume +") }
+        OutlinedButton(onClick = { viewModel.adjustSelectedClip(ClipAction.Replace) }) { Text("Replace") }
+        OutlinedButton(onClick = { viewModel.adjustSelectedClip(ClipAction.Mute) }) { Text("Mute") }
+        OutlinedButton(onClick = { viewModel.adjustSelectedClip(ClipAction.Crop) }) { Text("Crop") }
+        OutlinedButton(onClick = { viewModel.adjustSelectedClip(ClipAction.Rotate) }) { Text("Rotate") }
+        OutlinedButton(onClick = { viewModel.adjustSelectedClip(ClipAction.Flip) }) { Text("Flip") }
+      }
+    }
+  }
+}
+
+@Composable
+private fun AudioToolPanel(viewModel: MainScreenViewModel) {
+  var tab by remember { mutableStateOf(AudioSource.BuiltInMusic) }
+  val items = when (tab) {
+    AudioSource.DeviceMusic -> listOf("Device track placeholder" to "02:14", "Local song metadata" to "01:08")
+    AudioSource.BuiltInMusic -> listOf("Neon pulse" to "00:18", "Lo-fi creator bed" to "00:30")
+    AudioSource.ExtractedAudio -> listOf("Extract from selected video" to "linked", "Voice layer sample" to "00:11")
+    AudioSource.SoundEffect -> listOf("Camera click" to "00:01", "Whoosh pop" to "00:02")
+  }
+  Card(colors = CardDefaults.cardColors(containerColor = StudioSurfaceHigh), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+    Column(Modifier.padding(14.dp)) {
+      Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { AudioSource.entries.forEach { source -> FilterChip(selected = tab == source, onClick = { tab = source }, label = { Text(source.label) }) } }
+      items.forEach { item ->
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+          Column(Modifier.weight(1f)) { Text(item.first, fontWeight = FontWeight.Bold); Text(item.second, color = StudioTextMuted, fontSize = 12.sp) }
+          TextButton(onClick = {}) { Text("Play") }
+          Button(onClick = { viewModel.addAudioClipAtPlayhead(item.first, tab) }, shape = RoundedCornerShape(999.dp)) { Text("Add") }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun TextToolPanel(viewModel: MainScreenViewModel) {
+  var text by remember { mutableStateOf("Make it pop") }
+  var size by remember { mutableStateOf(28f) }
+  var color by remember { mutableStateOf("#F4F6FF") }
+  var background by remember { mutableStateOf(true) }
+  var stroke by remember { mutableStateOf(false) }
+  var shadow by remember { mutableStateOf(true) }
+  var alignment by remember { mutableStateOf("Center") }
+  var animation by remember { mutableStateOf("Fade") }
+  Card(colors = CardDefaults.cardColors(containerColor = StudioSurfaceHigh), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+    Column(Modifier.padding(14.dp)) {
+      OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text("Text") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+      Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(22f, 28f, 34f, 42f).forEach { value -> FilterChip(selected = size == value, onClick = { size = value }, label = { Text("${value.toInt()}sp") }) }
+        listOf("#F4F6FF", "#FACC15", "#22D3EE", "#FF65B3").forEach { value -> FilterChip(selected = color == value, onClick = { color = value }, label = { Text(value) }) }
+      }
+      Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChip(selected = background, onClick = { background = !background }, label = { Text("Background") })
+        FilterChip(selected = stroke, onClick = { stroke = !stroke }, label = { Text("Stroke") })
+        FilterChip(selected = shadow, onClick = { shadow = !shadow }, label = { Text("Shadow") })
+        listOf("Left", "Center", "Right").forEach { value -> FilterChip(selected = alignment == value, onClick = { alignment = value }, label = { Text(value) }) }
+        listOf("Fade", "Slide", "Pop", "Typewriter").forEach { value -> FilterChip(selected = animation == value, onClick = { animation = value }, label = { Text(value) }) }
+      }
+      Button(onClick = { viewModel.addTextClipAtPlayhead(text, size, color, if (background) "#7C5CFF" else null, stroke, shadow, alignment, animation) }, modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(48.dp), shape = RoundedCornerShape(999.dp)) { Text("Add Text") }
+    }
+  }
+}
+
+@Composable
+private fun CanvasToolPanel(selected: CanvasRatio, onRatio: (CanvasRatio) -> Unit) {
+  Card(colors = CardDefaults.cardColors(containerColor = StudioSurfaceHigh), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+    Row(Modifier.padding(14.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      CanvasRatio.entries.forEach { ratio -> FilterChip(selected = selected == ratio, onClick = { onRatio(ratio) }, label = { Text(ratio.label) }) }
+    }
   }
 }
 
@@ -557,13 +738,14 @@ private fun ToolPanel(timeline: Timeline, viewModel: MainScreenViewModel) {
         when (timeline.selectedTool) {
           EditorTool.Edit -> listOf(ClipAction.Rotate, ClipAction.Flip, ClipAction.SpeedDown, ClipAction.SpeedUp, ClipAction.OpacityDown, ClipAction.OpacityUp, ClipAction.Mute)
           EditorTool.Filter, EditorTool.Effect -> listOf(ClipAction.Filter, ClipAction.OpacityDown, ClipAction.OpacityUp)
-          EditorTool.Keyframe -> listOf(ClipAction.Keyframe)
+          EditorTool.Speed -> listOf(ClipAction.SpeedDown, ClipAction.SpeedUp)
           else -> listOf(ClipAction.OpacityDown, ClipAction.OpacityUp, ClipAction.Keyframe)
         }.forEach { action -> OutlinedButton(onClick = { viewModel.adjustSelectedClip(action) }) { Text(action.label) } }
       }
       Spacer(Modifier.height(8.dp))
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = viewModel::splitSelectedClip) { Text("Split") }
+        OutlinedButton(onClick = viewModel::deleteSelectedClip) { Text("Delete") }
         OutlinedButton(onClick = viewModel::duplicateSelectedClip) { Text("Duplicate") }
         OutlinedButton(onClick = { viewModel.trimSelectedClip(-500) }) { Text("Trim -") }
         OutlinedButton(onClick = { viewModel.trimSelectedClip(500) }) { Text("Trim +") }

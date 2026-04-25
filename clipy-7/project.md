@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 06:32 UTC
+- Last updated: 2026-04-25 07:10 UTC
 - App: Clipy Studio
 - Slug: clipy
 - Tagline: A premium offline-friendly Android video editor for fast, polished social videos.
 - Target users: General users
-- Design direction: Premium offline-first Android video editor with an original dark studio aesthetic: graphite-black surfaces, subtle depth, neon-cyan editing accents, rounded Material 3 components, dense but readable controls, and a timeline-first workspace that feels professional without cloning any specific competitor. The UI should prioritize accurate preview-timeline sync, clear functional affordances, and fast short-video creation for 9:16, 1:1, and 16:9 projects.
+- Design direction: Incremental Editor Screen update only: preserve the existing dark premium Material 3 studio language, but make the editor feel closer to a professional mobile video timeline workspace with a fixed-center playhead, dense tool access, high-contrast clip selection, and contextual bottom panels. The screen should prioritize edit precision, thumb-friendly controls, immediate preview feedback, and non-overlapping safe-area behavior across phones and tablets.
 - Core constraints: android only, MVP first, offline-friendly where possible
 Design style must align with: modern minimal premium
 Typography should align with: clean geometric sans
@@ -168,6 +168,51 @@ STRICT:
 - Preview must always sync with timeline
 - Production-ready only
 Use Android applicationId/package name: com.nantcompany.clipy
+Additional follow-up requirement: [uxui] EDITOR SCREEN FULL SPEC:
+
+Build the Editor Screen identical to CapCut in UI, UX, layout, gestures, timeline behavior, and editing flow.
+
+1. LAYOUT STRUCTURE:
+UI: vertical dark layout with Top Bar, Preview Canvas, Playback Controls, Timeline Area, and Bottom Tool Menu; Function: all zones must resize safely on different Android screens, support system bars, keyboard, and avoid overlap or clipped text.
+
+2. TOP BAR:
+UI: left Back button, center project name with ellipsis, right Undo, Redo, Export buttons; Function: Back shows Save & Exit / Discard / Cancel dialog, Undo reverts last edit, Redo reapplies edit, Export sends the full current project state to ExportScreen.
+
+3. PREVIEW CANVAS:
+UI: black preview area centered above timeline, supports 9:16, 1:1, 16:9, 4:5, original ratio; Function: render current video/image frame from timeline, show active text/sticker/overlay layers only at current playhead time, and update instantly when user seeks or edits.
+
+4. PREVIEW OVERLAY CONTROLS:
+UI: selected overlay shows bounding box, resize corners, rotate handle, delete button, center guide lines; Function: tap selects, drag moves, pinch scales, rotate gesture rotates, double tap text opens editor, delete removes overlay and timeline item.
+
+5. PLAYBACK CONTROLS:
+UI: compact row with Play/Pause, current time, total duration, optional mini progress indicator; Function: Play starts preview and moves timeline, Pause stops playback, seeking updates playhead, preview frame, active overlays, and selected clip state.
+
+6. TIMELINE AREA:
+UI: fixed center playhead, time ruler, video/image track, audio track, text track, sticker track, overlay track, effect track; Function: timeline scroll changes current time, playback scrolls timeline under fixed playhead, zoom scale changes clip width accurately.
+
+7. VIDEO/IMAGE TRACK:
+UI: main track clip blocks with thumbnails, duration label, selected border, trim handles; Function: tap selects clip, drag reorders/moves clip, left/right handles trim, double tap splits, long press enables drag mode, clips snap to neighbors and playhead.
+
+8. AUDIO TRACK:
+UI: waveform-style blocks below video track with name, duration, selected highlight, fade indicators; Function: audio clips can be moved, trimmed, split, duplicated, deleted, volume adjusted, faded in/out, looped, and synced with video timeline.
+
+9. TEXT TRACK:
+UI: text clips shown as colored blocks with text preview label; Function: text appears only during its time range, can be moved, trimmed, duplicated, deleted, edited, animated, and selected from either preview or timeline.
+
+10. STICKER/OVERLAY TRACK:
+UI: sticker and overlay clips shown on separate tracks with small icon/thumbnail label; Function: stickers/overlays can be moved, resized on preview, trimmed on timeline, duplicated, deleted, reordered by layer, and shown only during active time.
+
+11. CLIP EDIT PANEL:
+UI: bottom contextual panel appears when a clip is selected with buttons Split, Delete, Duplicate, Speed, Volume, Replace, Mute, Crop, Rotate, Flip; Function: every button must perform real logic and update preview, timeline, project state, undo history, and autosave immediately.
+
+12. TOOL MENU:
+UI: bottom horizontal scroll menu with Edit, Audio, Text, Sticker, Overlay, Filter, Effect, Transition, Canvas, Speed, Export; Function: tapping a tool opens its panel, highlights selected tool, hides irrelevant controls, and keeps selected clip/overlay state.
+
+13. AUDIO TOOL PANEL:
+UI: tabs Device Music, Built-in Music, Extracted Audio, Sound Effects with list items containing title, duration, play, add; Function: preview audio, add to audio track at playhead, extract audio from video, and support trim/volume/fade after insertion.
+
+14. TEXT TOOL PANEL:
+UI: Add Text button, text input, font size, color, background, stroke, shadow, alignment, animation options; Function: creates editable text overlay at playhead, adds text clip to timeline, supports drag/scale/rotate on preview and duration editing.
 
 ### Core Features
 - Splash -> onboarding/intro -> main app flow
@@ -193,16 +238,17 @@ Use Android applicationId/package name: com.nantcompany.clipy
 - Performance foundations including lazy thumbnail loading, background rendering/export, media proxy strategies for large files, memory-aware preview, and responsive Compose UI
 
 ### Main Screens
-- Splash
-- Intro
-- Language Selection
-- Project Dashboard
-- Media Import
 - Editor Workspace
-- Export And Settings
+- Preview Canvas
+- Timeline Area
+- Clip Edit Panel
+- Bottom Tool Menu
+- Audio Tool Panel
+- Text Tool Panel
+- Export Handoff
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Room for projects, timeline state, settings, and undo/redo metadata; Android MediaStore and app-scoped files for imported media references, generated thumbnails, waveform caches, proxy files, autosave snapshots, and exported videos. Media playback and preview should use Media3/ExoPlayer with Compose integration. Export should use a staged Android media pipeline with MediaCodec/MediaMuxer or a proven FFmpeg-based library if licensing and app size are acceptable.
+- storage: Continue using the existing SharedPreferences-backed repository and in-memory project state for the MVP. Extend current ViewModel state and timeline models only where needed for editor interactions, autosave snapshots, undo/redo command history, selected tool/panel state, overlay transforms, audio/text insertion, timeline zoom, and export handoff. Do not introduce Room, Media3, or native rendering in this follow-up unless already present in the codebase; represent preview frames, thumbnails, and waveforms with buildable MVP placeholders tied to real project/timeline state.
 <!-- AUTO-GENERATED:CORE_END -->

@@ -3,6 +3,7 @@ package com.example.clipystudio.ui.main
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.clipystudio.data.AppState
+import com.example.clipystudio.data.AudioSource
 import com.example.clipystudio.data.CanvasRatio
 import com.example.clipystudio.data.ClipAction
 import com.example.clipystudio.data.DataRepository
@@ -36,12 +37,20 @@ class MainScreenViewModel(private val dataRepository: DataRepository = DefaultDa
   fun addImportsToProject() = dataRepository.addImportsToProject()
   fun selectClip(clipId: String) = dataRepository.selectClip(clipId)
   fun togglePlayback() = dataRepository.togglePlayback()
+  fun seekTo(positionMs: Long) = dataRepository.seekTo(positionMs)
   fun seekBy(deltaMs: Long) = dataRepository.seekBy(deltaMs)
+  fun updateTimelineZoom(delta: Float) = dataRepository.updateTimelineZoom(delta)
+  fun updateCanvasRatio(ratio: CanvasRatio) = dataRepository.updateCanvasRatio(ratio)
   fun splitSelectedClip() = dataRepository.splitSelectedClip()
+  fun deleteSelectedClip() = dataRepository.deleteSelectedClip()
   fun duplicateSelectedClip() = dataRepository.duplicateSelectedClip()
   fun trimSelectedClip(deltaMs: Long) = dataRepository.trimSelectedClip(deltaMs)
+  fun moveSelectedClip(deltaMs: Long) = dataRepository.moveSelectedClip(deltaMs)
   fun updateSelectedTool(tool: EditorTool) = dataRepository.updateSelectedTool(tool)
   fun adjustSelectedClip(action: ClipAction) = dataRepository.adjustSelectedClip(action)
+  fun transformSelectedClip(deltaX: Float, deltaY: Float, scaleChange: Float, rotationChange: Float) = dataRepository.transformSelectedClip(deltaX, deltaY, scaleChange, rotationChange)
+  fun addAudioClipAtPlayhead(title: String, source: AudioSource) = dataRepository.addAudioClipAtPlayhead(title, source)
+  fun addTextClipAtPlayhead(content: String, fontSizeSp: Float, color: String, backgroundColor: String?, strokeEnabled: Boolean, shadowEnabled: Boolean, alignment: String, animation: String) = dataRepository.addTextClipAtPlayhead(content, fontSizeSp, color, backgroundColor, strokeEnabled, shadowEnabled, alignment, animation)
   fun undo() = dataRepository.undo()
   fun redo() = dataRepository.redo()
   fun updateExportSettings(settings: ExportSettings) = dataRepository.updateExportSettings(settings)
