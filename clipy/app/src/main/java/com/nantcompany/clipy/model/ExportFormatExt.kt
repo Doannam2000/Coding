@@ -7,8 +7,8 @@ fun ExportFormat.mimeType(): String =
   }
 
 fun String.exportMimeType(): String =
-  if (equals("GIF", ignoreCase = true)) {
-    ExportFormat.Gif.mimeType()
-  } else {
-    ExportFormat.Mp4.mimeType()
+  when {
+    equals("GIF", ignoreCase = true) -> ExportFormat.Gif.mimeType()
+    equals("MOV", ignoreCase = true) -> "video/quicktime"
+    else -> ExportFormat.Mp4.mimeType()
   }

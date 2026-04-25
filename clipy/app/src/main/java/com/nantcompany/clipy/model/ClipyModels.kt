@@ -28,6 +28,26 @@ enum class WatermarkPosition {
 
 enum class ExportFormat { Gif, Mp4 }
 
+enum class OutputFormat(
+  val label: String,
+  val mimeType: String,
+  val extension: String,
+) {
+  MP4(label = "MP4", mimeType = "video/mp4", extension = ".mp4"),
+  MOV(label = "MOV", mimeType = "video/quicktime", extension = ".mov"),
+}
+
+enum class OutputResolution(
+  val label: String,
+  val maxWidth: Int,
+  val maxHeight: Int,
+) {
+  P720(label = "720p", maxWidth = 1280, maxHeight = 720),
+  P1080(label = "1080p", maxWidth = 1920, maxHeight = 1080),
+  P2K(label = "2K", maxWidth = 2560, maxHeight = 1440),
+  P4K(label = "4K", maxWidth = 3840, maxHeight = 2160),
+}
+
 enum class Mp4Quality {
   Fast,
   Balanced,
@@ -62,8 +82,146 @@ data class ProjectDraft(
   val gifFps: Int = 18,
   val gifResolution: String = "720p",
   val mp4Quality: Mp4Quality = Mp4Quality.Balanced,
+  val outputFormat: OutputFormat = OutputFormat.MP4,
+  val outputResolution: OutputResolution = OutputResolution.P1080,
+  val outputFps: Int = 30,
   val outputName: String = "clipy_export",
   val lastUpdatedAt: Long = System.currentTimeMillis(),
+)
+
+data class EditorProject(
+  val projectId: String,
+  val name: String,
+  val createdAtEpochMs: Long,
+  val updatedAtEpochMs: Long,
+  val aspectRatio: String,
+  val durationUs: Long,
+  val timeline: TimelineState,
+  val exportDefaults: ExportPreset,
+  val version: Int,
+)
+
+data class MediaAsset(
+  val assetId: String,
+  val uri: String,
+  val type: AssetType,
+  val mimeType: String,
+  val durationUs: Long?,
+  val width: Int?,
+  val height: Int?,
+  val rotationDeg: Int?,
+  val sampleRate: Int?,
+  val channels: Int?,
+)
+
+enum class AssetType { Video, Image, Audio }
+
+data class Track(
+  val trackId: String,
+  val trackType: TrackType,
+  val clips: List<Clip>,
+  val isMuted: Boolean,
+  val volume: Float,
+  val isLocked: Boolean,
+  val zIndex: Int,
+)
+
+enum class TrackType { Video, Audio, Text, Sticker }
+
+data class Clip(
+  val clipId: String,
+  val assetId: String?,
+  val trackId: String,
+  val timelineStartUs: Long,
+  val timelineEndUs: Long,
+  val sourceInUs: Long,
+  val sourceOutUs: Long,
+  val playbackSpeed: Float,
+  val transform: ClipTransform,
+  val filterSettings: FilterSettings,
+  val transitionIn: TransitionSpec?,
+  val transitionOut: TransitionSpec?,
+  val audioSettings: AudioClipSettings,
+  val overlayPayload: OverlayPayload?,
+)
+
+data class ClipTransform(
+  val positionX: Float = 0.5f,
+  val positionY: Float = 0.5f,
+  val scale: Float = 1f,
+  val rotationDeg: Float = 0f,
+)
+
+data class FilterSettings(
+  val brightness: Float = 0f,
+  val contrast: Float = 1f,
+  val blur: Float = 0f,
+  val sharpen: Float = 0f,
+  val lutPreset: String? = null,
+)
+
+data class TransitionSpec(
+  val id: String,
+  val durationUs: Long,
+)
+
+data class AudioClipSettings(
+  val gain: Float = 1f,
+  val fadeInUs: Long = 0L,
+  val fadeOutUs: Long = 0L,
+)
+
+data class TimelineState(
+  val playheadUs: Long,
+  val zoomLevel: Float,
+  val viewportStartUs: Long,
+  val viewportEndUs: Long,
+  val selectedTrackId: String?,
+  val selectedClipId: String?,
+  val isPlaying: Boolean,
+  val isSnappingEnabled: Boolean,
+  val editingMode: EditingMode,
+  val undoStack: List<String>,
+  val redoStack: List<String>,
+)
+
+enum class EditingMode { Edit, Audio, Text, Sticker, Effects, Export }
+
+data class OverlayPayload(
+  val overlayType: OverlayType,
+  val text: String?,
+  val fontFamily: String?,
+  val fontSizeSp: Float?,
+  val fontColor: Long?,
+  val animation: OverlayAnimation?,
+  val stickerAssetUri: String?,
+  val positionX: Float,
+  val positionY: Float,
+  val scale: Float,
+  val rotationDeg: Float,
+  val startUs: Long,
+  val endUs: Long,
+)
+
+enum class OverlayType { Text, Sticker }
+
+enum class OverlayAnimation { Fade, Slide, Scale }
+
+data class ExportPreset(
+  val outputFormat: OutputFormat,
+  val resolution: OutputResolution,
+  val fps: Int,
+  val bitrateMbps: Int,
+)
+
+data class ExportRequest(
+  val projectId: String,
+  val outputFormat: OutputFormat,
+  val resolution: OutputResolution,
+  val fps: Int,
+  val bitrateMbps: Int,
+  val audioBitrateKbps: Int,
+  val destinationUri: String,
 )
 
 data class UserPreferences(
@@ -71,6 +229,9 @@ data class UserPreferences(
   val defaultGifFps: Int = 18,
   val defaultGifResolution: String = "720p",
   val defaultMp4Quality: Mp4Quality = Mp4Quality.Balanced,
+  val defaultOutputFormat: OutputFormat = OutputFormat.MP4,
+  val defaultOutputResolution: OutputResolution = OutputResolution.P1080,
+  val defaultOutputFps: Int = 30,
   val defaultMuteEnabled: Boolean = false,
   val defaultCropRatio: CropRatio = CropRatio.Story,
   val saveBehavior: SaveBehavior = SaveBehavior.AppFolder,
@@ -222,6 +383,7 @@ private const val MAX_GIF_DURATION_MS = 15_000L
 
 val SupportedGifFps = listOf(12, 18, 24, 30)
 val SupportedGifResolutions = listOf("480p", "720p", "1080p")
+val SupportedVideoFps = listOf(24, 30, 60)
 
 fun ProjectDraft.timelineSnapshot(): TimelineSnapshot =
   TimelineSnapshot(
@@ -498,9 +660,35 @@ fun resolutionPreset(label: String, cropRatio: CropRatio): ResolutionPreset {
   }
 }
 
+fun resolutionPreset(resolution: OutputResolution, cropRatio: CropRatio): ResolutionPreset {
+  val maxLandscapeWidth = resolution.maxWidth
+  val maxLandscapeHeight = resolution.maxHeight
+  return when (cropRatio) {
+    CropRatio.Square -> {
+      val side = minOf(maxLandscapeWidth, maxLandscapeHeight)
+      ResolutionPreset(resolution.label, side, side)
+    }
+    CropRatio.Portrait -> {
+      val width = maxLandscapeHeight.coerceAtLeast(720)
+      val height = ((width * 5f) / 4f).roundToInt().coerceAtMost(maxLandscapeWidth)
+      ResolutionPreset(resolution.label, width, height)
+    }
+    CropRatio.Story -> {
+      val width = maxLandscapeHeight.coerceAtLeast(720)
+      val height = ((width * 16f) / 9f).roundToInt().coerceAtMost(maxLandscapeWidth)
+      ResolutionPreset(resolution.label, width, height)
+    }
+    CropRatio.Landscape -> ResolutionPreset(resolution.label, maxLandscapeWidth, maxLandscapeHeight)
+  }
+}
+
 fun buildExportPlan(draft: ProjectDraft): ExportPlan {
   val durationMs = (draft.trimEndMs - draft.trimStartMs).coerceAtLeast(MIN_TRIM_GAP_MS)
-  val resolution = resolutionPreset(draft.gifResolution, draft.cropRatio)
+  val resolution = if (draft.exportFormat == ExportFormat.Gif) {
+    resolutionPreset(draft.gifResolution, draft.cropRatio)
+  } else {
+    resolutionPreset(draft.outputResolution, draft.cropRatio)
+  }
   val filterParts = buildList {
     add("trim=start=${draft.trimStartMs / 1000f}:end=${draft.trimEndMs / 1000f}")
     add("setpts=${1f / draft.speedMultiplier}*PTS")
@@ -529,7 +717,7 @@ fun buildExportPlan(draft: ProjectDraft): ExportPlan {
     "ffmpeg -i INPUT -vf \"${filterParts.joinToString(",")} ,fps=${draft.gifFps},split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse\" -loop 0 OUTPUT.gif"
       .replace(" ,fps", ",fps")
   } else {
-    "ffmpeg -i INPUT -vf \"${filterParts.joinToString(",")}\" ${audioParts.joinToString(" ")} $qualityArgs -movflags +faststart OUTPUT.mp4"
+    "ffmpeg -i INPUT -vf \"${filterParts.joinToString(",")},fps=${draft.outputFps}\" ${audioParts.joinToString(" ")} $qualityArgs -movflags +faststart OUTPUT${draft.outputFormat.extension}"
   }
   val steps = if (draft.exportFormat == ExportFormat.Gif) {
     listOf("Opening source URI", "Sampling timeline frames", "Rendering GIF palette", "Writing GIF export", "Saving to MediaStore")
@@ -537,8 +725,8 @@ fun buildExportPlan(draft: ProjectDraft): ExportPlan {
     listOf("Opening source URI", "Sampling timeline frames", "Building MP4 filters", "Writing MP4 export", "Saving to MediaStore")
   }
   return ExportPlan(
-    extension = if (draft.exportFormat == ExportFormat.Gif) ".gif" else ".mp4",
-    mimeType = if (draft.exportFormat == ExportFormat.Gif) "image/gif" else "video/mp4",
+    extension = if (draft.exportFormat == ExportFormat.Gif) ".gif" else draft.outputFormat.extension,
+    mimeType = if (draft.exportFormat == ExportFormat.Gif) "image/gif" else draft.outputFormat.mimeType,
     ffmpegCommand = command,
     progressSteps = steps,
     warnings = warnings,
@@ -560,6 +748,9 @@ fun ProjectDraft.validateExport(): ExportValidation {
   }
   if (exportFormat == ExportFormat.Gif && trimEndMs - trimStartMs > MAX_GIF_DURATION_MS) {
     return ExportValidation(false, "GIF export must stay within 15 seconds for reliable output.")
+  }
+  if (exportFormat == ExportFormat.Mp4 && outputFps !in SupportedVideoFps) {
+    return ExportValidation(false, "Video FPS must be one of: 24, 30, 60.")
   }
   return ExportValidation(true)
 }

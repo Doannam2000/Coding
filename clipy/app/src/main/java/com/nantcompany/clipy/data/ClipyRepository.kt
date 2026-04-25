@@ -11,6 +11,8 @@ import com.nantcompany.clipy.model.ExportJobState
 import com.nantcompany.clipy.model.ExportRecord
 import com.nantcompany.clipy.model.ExportRecordUi
 import com.nantcompany.clipy.model.Mp4Quality
+import com.nantcompany.clipy.model.OutputFormat
+import com.nantcompany.clipy.model.OutputResolution
 import com.nantcompany.clipy.model.ProjectDraft
 import com.nantcompany.clipy.model.SaveBehavior
 import com.nantcompany.clipy.model.sanitizeTimeline
@@ -103,6 +105,9 @@ class ClipyRepository private constructor(context: Context) {
         timelineZoom = 1f,
         outputName = sanitizeOutputName(resolvedName.substringBeforeLast('.')),
         exportFormat = ExportFormat.Gif,
+        outputFormat = OutputFormat.MP4,
+        outputResolution = OutputResolution.P1080,
+        outputFps = 30,
       )
     }
   }
@@ -160,13 +165,16 @@ class ClipyRepository private constructor(context: Context) {
 
   suspend fun updateSettings(prefs: UserPreferences) {
     preferenceRepository.setLanguage(AppLanguage.entries.first { it.code == prefs.languageCode })
-    preferenceRepository.updateDefaults(
-      gifFps = prefs.defaultGifFps,
-      gifResolution = prefs.defaultGifResolution,
-      quality = prefs.defaultMp4Quality,
-      cropRatio = prefs.defaultCropRatio,
-      saveBehavior = prefs.saveBehavior,
-      defaultMuteEnabled = prefs.defaultMuteEnabled,
+      preferenceRepository.updateDefaults(
+        gifFps = prefs.defaultGifFps,
+        gifResolution = prefs.defaultGifResolution,
+        quality = prefs.defaultMp4Quality,
+        outputFormat = prefs.defaultOutputFormat,
+        outputResolution = prefs.defaultOutputResolution,
+        outputFps = prefs.defaultOutputFps,
+        cropRatio = prefs.defaultCropRatio,
+        saveBehavior = prefs.saveBehavior,
+        defaultMuteEnabled = prefs.defaultMuteEnabled,
     )
     applyDefaultSettingsToDraft()
   }
@@ -190,9 +198,12 @@ class ClipyRepository private constructor(context: Context) {
         isBoomerang = record.isBoomerang,
         watermarkText = record.watermarkText,
         exportFormat = if (record.format.equals("GIF", ignoreCase = true)) ExportFormat.Gif else ExportFormat.Mp4,
+        outputFormat = if (record.format.equals("MOV", ignoreCase = true)) OutputFormat.MOV else OutputFormat.MP4,
         gifFps = record.gifFps ?: it.gifFps,
         gifResolution = record.gifResolution ?: it.gifResolution,
         mp4Quality = record.mp4Quality?.let { quality -> Mp4Quality.entries.firstOrNull { entry -> entry.name == quality } } ?: it.mp4Quality,
+        outputResolution = it.outputResolution,
+        outputFps = it.outputFps,
         outputName = "${record.outputName}_redo",
       )
     }
@@ -223,7 +234,11 @@ class ClipyRepository private constructor(context: Context) {
           sourceUri = sanitizedDraft.sourceUri,
           outputUri = result.outputUri,
           outputName = sanitizedDraft.outputName,
-          format = sanitizedDraft.exportFormat.name.uppercase(Locale.getDefault()),
+          format = if (sanitizedDraft.exportFormat == ExportFormat.Gif) {
+            "GIF"
+          } else {
+            sanitizedDraft.outputFormat.label
+          },
           durationMs = sanitizedDraft.trimEndMs - sanitizedDraft.trimStartMs,
           cropRatio = sanitizedDraft.cropRatio.label,
           speedMultiplier = sanitizedDraft.speedMultiplier,
@@ -271,6 +286,9 @@ class ClipyRepository private constructor(context: Context) {
         gifFps = prefs.defaultGifFps,
         gifResolution = prefs.defaultGifResolution,
         mp4Quality = prefs.defaultMp4Quality,
+        outputFormat = prefs.defaultOutputFormat,
+        outputResolution = prefs.defaultOutputResolution,
+        outputFps = prefs.defaultOutputFps,
         isMuted = prefs.defaultMuteEnabled,
       )
     }

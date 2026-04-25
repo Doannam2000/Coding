@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import com.nantcompany.clipy.model.ExportFormat
+import com.nantcompany.clipy.model.OutputFormat
 import com.nantcompany.clipy.model.ProjectDraft
 import com.nantcompany.clipy.model.SaveBehavior
 import com.nantcompany.clipy.model.sanitizeOutputName
@@ -30,7 +31,11 @@ class AndroidVideoExporter(private val context: Context) {
     val tempOutput =
       File.createTempFile(
         sanitizeOutputName(draft.outputName),
-        if (draft.exportFormat == ExportFormat.Gif) ".gif" else ".mp4",
+        when {
+          draft.exportFormat == ExportFormat.Gif -> ".gif"
+          draft.outputFormat == OutputFormat.MOV -> ".mov"
+          else -> ".mp4"
+        },
         context.cacheDir,
       )
 
@@ -62,9 +67,10 @@ class AndroidVideoExporter(private val context: Context) {
           92 to "Saving export",
         )
       } else {
+        val containerLabel = if (draft.outputFormat == OutputFormat.MOV) "MOV" else "MP4"
         listOf(
           8 to "Opening source",
-          28 to "Preparing MP4 export",
+          28 to "Preparing $containerLabel export",
           72 to "Copying source media",
           92 to "Saving export",
         )
@@ -153,12 +159,20 @@ private fun Context.copyExportToMediaStore(file: File, draft: ProjectDraft, save
       ExportFormat.Gif -> Environment.DIRECTORY_PICTURES + "/Clipy"
       ExportFormat.Mp4 -> Environment.DIRECTORY_MOVIES + "/Clipy"
     }
-  val mimeType = if (draft.exportFormat == ExportFormat.Gif) "image/gif" else "video/mp4"
+  val mimeType = when {
+    draft.exportFormat == ExportFormat.Gif -> "image/gif"
+    draft.outputFormat == OutputFormat.MOV -> "video/quicktime"
+    else -> "video/mp4"
+  }
   val values =
     ContentValues().apply {
       put(
         MediaStore.MediaColumns.DISPLAY_NAME,
-        sanitizeOutputName(draft.outputName) + if (draft.exportFormat == ExportFormat.Gif) ".gif" else ".mp4",
+        sanitizeOutputName(draft.outputName) + when {
+          draft.exportFormat == ExportFormat.Gif -> ".gif"
+          draft.outputFormat == OutputFormat.MOV -> ".mov"
+          else -> ".mp4"
+        },
       )
       put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

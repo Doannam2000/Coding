@@ -13,6 +13,8 @@ import com.nantcompany.clipy.model.AppLanguage
 import com.nantcompany.clipy.model.CropRatio
 import com.nantcompany.clipy.model.ExportFormat
 import com.nantcompany.clipy.model.Mp4Quality
+import com.nantcompany.clipy.model.OutputFormat
+import com.nantcompany.clipy.model.OutputResolution
 import com.nantcompany.clipy.model.UserPreferences
 import com.nantcompany.clipy.model.WatermarkPosition
 import kotlinx.coroutines.Dispatchers
@@ -474,6 +476,18 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
 
   fun updateMp4Quality(quality: Mp4Quality) {
     repository.updateDraft { it.copy(mp4Quality = quality) }
+  }
+
+  fun updateOutputFormat(format: OutputFormat) {
+    repository.updateDraft { it.copy(outputFormat = format) }
+  }
+
+  fun updateOutputResolution(resolution: OutputResolution) {
+    repository.updateDraft { it.copy(outputResolution = resolution) }
+  }
+
+  fun updateOutputFps(fps: Int) {
+    repository.updateDraft { it.copy(outputFps = fps) }
   }
 
   fun updateOutputName(name: String) {

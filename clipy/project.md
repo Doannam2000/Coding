@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 02:22 UTC
+- Last updated: 2026-04-25 02:24 UTC
 - App: Clipy
 - Slug: clipy
 - Tagline: Fast social-ready video edits and GIF exports in seconds.
 - Target users: Content creators, TikTok/Reels users, meme makers, casual users needing fast video editing
-- Design direction: Keep the current Media Picker visual language unchanged and introduce only stability-focused feedback states around image/video selection so the flow feels reliable, predictable, and non-disruptive when a media item cannot be opened immediately.
+- Design direction: Incremental evolution of the current editor into a pro, dark, timeline-first mobile workflow with high contrast controls, compact tool density, and motion cues tied to playback/editing state; preserve existing navigation and MVVM boundaries while upgrading interaction depth.
 - Core constraints: Android only, no backend, lightweight but powerful, limit GIF size/duration, smooth UX, handle large videos safely
 Design style must align with: Modern dark creator-tool UI, clean layout, smooth animations, rounded cards, premium feel
 Typography should align with: Inter
@@ -684,6 +684,148 @@ Additional follow-up requirement: [fixbug] Crash when select video/image
 Additional follow-up requirement: [fixbug] Crash when select video/image
 Additional follow-up requirement: [fixbug] BotVibeProject/clipy/app/src/main/java/com/nantcompany/clipy/ClipyApp.kt:3831:14 Unresolved reference 'isVideoSource'.
 Additional follow-up requirement: [fixbug] ClipyApp.kt:3831:14 Unresolved reference 'isVideoSource'.
+Additional follow-up requirement: [uxui] You are a Senior Mobile Architect & Video Editor Engine Builder.
+
+Your task: Transform an existing mobile app into a professional video editing app similar to CapCut.
+
+## CORE REQUIREMENTS
+
+Build a FULL-FEATURED VIDEO EDITOR with:
+
+### 🎬 1. Timeline Editing (CRITICAL)
+- Multi-track timeline (video, audio, text, sticker)
+- Drag & drop clips
+- Trim, split, merge clips
+- Smooth horizontal scroll timeline
+- Zoom in/out timeline (pinch gesture)
+- Snap to edges (like CapCut)
+- Preview sync with timeline
+
+### 🎵 2. Audio System
+- Add background music
+- Extract audio from video
+- Trim audio
+- Fade in / fade out
+- Volume control per track
+- Multi audio layers
+
+### 🖼 3. Media Input
+Support import:
+- Images (jpg, png)
+- Videos (mp4, mov, etc.)
+- Audio files
+
+From:
+- Local storage
+- Gallery picker
+
+### 🎨 4. Effects & Visual Tools
+- Filters (brightness, contrast, LUT presets)
+- Transitions between clips
+- Blur / sharpen
+- Color grading basic tools
+- Speed control (0.5x → 2x)
+
+### 😎 5. Sticker & Text
+- Add text overlays
+- Custom fonts
+- Text animation (fade, slide, scale)
+- Stickers (static + animated)
+- Drag/resize/rotate elements on preview
+
+### 📺 6. Preview Player
+- Real-time preview
+- Play / pause
+- Seek by timeline
+- Sync UI with timeline position
+
+### ⚡️ 7. Performance (IMPORTANT)
+- Smooth timeline (no lag)
+- Use background processing for rendering
+- Optimize memory usage
+- Lazy loading media
+
+### 🎞 8. Export System
+Export video:
+- Formats: MP4, MOV
+- Resolution: 720p, 1080p, 2K, 4K
+- FPS options (24, 30, 60)
+- Progress indicator while exporting
+
+### 🧠 9. Architecture
+- MVVM
+- Clean architecture
+- Separate:
+  - UI layer
+  - Editing engine
+  - Media processing
+
+### 🧱 10. UI/UX (LIKE CAPCUT)
+- Dark theme
+- Bottom toolbar (Edit, Audio, Text, Sticker)
+- Timeline at bottom
+- Preview on top
+- Smooth animations
+- Modern, minimal UI
+
+### 🛠 11. State Management
+- Handle:
+  - Undo / redo
+  - Current timeline position
+  - Selected clip
+  - Editing mode
+
+---
+
+## OUTPUT REQUIREMENTS
+
+Generate:
+
+1. Full UI screens:
+   - Home (pick media)
+   - Editor screen (timeline + preview)
+   - Export screen
+
+2. Core components:
+   - TimelineView
+   - VideoPlayer
+   - AudioTrack
+   - OverlayLayer (text/sticker)
+
+3. Editing engine:
+   - Clip model
+   - Track model
+   - Timeline state
+
+4. Export pipeline:
+   - Render video with effects
+   - Combine audio + video
+
+5. Clean, production-ready code
+- No placeholder logic
+- No fake UI
+- Fully functional structure
+
+---
+
+## EXTRA (OPTIONAL BUT RECOMMENDED)
+
+- Gesture controls (drag, pinch, scale)
+- Auto-save project
+- Draft system
+- Templates (basic)
+
+---
+
+## IMPORTANT
+
+This is NOT a demo app.
+This is a REAL video editor like CapCut.
+
+Ensure:
+- Smooth UX
+- No UI overlap
+- Fully usable flow
 
 ### Core Features
 - Splash screen followed by onboarding and main app flow
@@ -707,11 +849,12 @@ Additional follow-up requirement: [fixbug] ClipyApp.kt:3831:14 Unresolved refere
 - Explicit exit action within the app shell
 
 ### Main Screens
-- Media Picker Screen
-- Selection Destination Screen
+- Home Media Import Screen
+- Editor Screen
+- Export Screen
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Retain the current ViewModel-managed UI state and MediaStore/content-URI access. Add only minimal validation and safe payload transfer around the selection-to-continue integration point.
+- storage: Room for project/draft metadata + DataStore for editor preferences + file-based project snapshots; MediaStore URIs remain source-of-truth for imported assets with persisted URI permissions.
 <!-- AUTO-GENERATED:CORE_END -->

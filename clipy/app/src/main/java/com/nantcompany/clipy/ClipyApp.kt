@@ -139,6 +139,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -179,6 +180,8 @@ import com.nantcompany.clipy.model.CropRatio
 import com.nantcompany.clipy.model.ExportFormat
 import com.nantcompany.clipy.model.ExportRecordUi
 import com.nantcompany.clipy.model.Mp4Quality
+import com.nantcompany.clipy.model.OutputFormat
+import com.nantcompany.clipy.model.OutputResolution
 import com.nantcompany.clipy.model.SaveBehavior
 import com.nantcompany.clipy.model.editorTimelineUiState
 import com.nantcompany.clipy.model.shouldDispatchTimelinePreviewSeek
@@ -310,6 +313,7 @@ private enum class EditorTrack {
   Video,
   Audio,
   Text,
+  Sticker,
 }
 
 private enum class TimelineTool {
@@ -322,11 +326,19 @@ private enum class EditorPrimaryTool {
   Edit,
   Audio,
   Text,
+  Sticker,
   Effects,
-  Filters,
+  Export,
 }
 
 private data class TextClipUi(
+  val id: String,
+  val label: String,
+  val startMs: Long,
+  val endMs: Long,
+)
+
+private data class StickerClipUi(
   val id: String,
   val label: String,
   val startMs: Long,
@@ -456,14 +468,13 @@ fun ClipyApp(finishApp: () -> Unit) {
           onGifFpsChange = viewModel::updateGifFps,
           onGifResolutionChange = viewModel::updateGifResolution,
           onMp4QualityChange = viewModel::updateMp4Quality,
+          onOutputFormatChange = viewModel::updateOutputFormat,
+          onOutputResolutionChange = viewModel::updateOutputResolution,
+          onOutputFpsChange = viewModel::updateOutputFps,
           onOutputNameChange = viewModel::updateOutputName,
           onOpenHistory = { navController.navigate(HISTORY) },
           onOpenSettings = { navController.navigate(SETTINGS) },
-          onExport = {
-            if (viewModel.startExport()) {
-              navController.navigate(EXPORT)
-            }
-          },
+          onExport = { navController.navigate(EXPORT) },
         )
       }
     }
@@ -499,7 +510,16 @@ fun ClipyApp(finishApp: () -> Unit) {
       )
     }
     composable(EXPORT) {
-      ExportScreen(state = state, onBack = navController::popBackStack, onCancel = viewModel::cancelExport)
+      ExportScreen(
+        state = state,
+        onBack = navController::popBackStack,
+        onCancel = viewModel::cancelExport,
+        onStartExport = viewModel::startExport,
+        onFormatChange = viewModel::updateFormat,
+        onOutputFormatChange = viewModel::updateOutputFormat,
+        onOutputResolutionChange = viewModel::updateOutputResolution,
+        onOutputFpsChange = viewModel::updateOutputFps,
+      )
     }
   }
 }
@@ -1137,6 +1157,9 @@ private fun EditorScreen(
   onGifFpsChange: (Int) -> Unit,
   onGifResolutionChange: (String) -> Unit,
   onMp4QualityChange: (Mp4Quality) -> Unit,
+  onOutputFormatChange: (OutputFormat) -> Unit,
+  onOutputResolutionChange: (OutputResolution) -> Unit,
+  onOutputFpsChange: (Int) -> Unit,
   onOutputNameChange: (String) -> Unit,
   onOpenHistory: () -> Unit,
   onOpenSettings: () -> Unit,
@@ -1177,11 +1200,28 @@ private fun EditorScreen(
       ),
     )
   }
+  var stickerClips by remember(draft.sourceUri) {
+    mutableStateOf(
+      listOf(
+        StickerClipUi(
+          id = "sticker-0",
+          label = context.getString(R.string.editor_sticker_default_label),
+          startMs = draft.trimStartMs,
+          endMs = (draft.trimStartMs + 1800L).coerceAtMost(draft.trimEndMs),
+        ),
+      ),
+    )
+  }
   var selectedTextClipId by rememberSaveable(draft.sourceUri) { mutableStateOf("text-0") }
+  var selectedStickerClipId by rememberSaveable(draft.sourceUri) { mutableStateOf("sticker-0") }
   var selectedAudioSegmentId by rememberSaveable(draft.sourceUri) { mutableStateOf("seg-0") }
   var previewZoom by rememberSaveable { mutableStateOf(1f) }
   var previewFill by rememberSaveable { mutableStateOf(false) }
   var previewOverlayVisible by rememberSaveable { mutableStateOf(true) }
+  var overlayPositionX by rememberSaveable { mutableStateOf(0.5f) }
+  var overlayPositionY by rememberSaveable { mutableStateOf(0.18f) }
+  var overlayScale by rememberSaveable { mutableStateOf(1f) }
+  var overlayRotationDeg by rememberSaveable { mutableStateOf(0f) }
   var previewScrubberWidthPx by remember { mutableStateOf(0) }
   var toolPanelExpanded by rememberSaveable { mutableStateOf(true) }
   var volumeAmount by rememberSaveable(draft.sourceUri) { mutableStateOf(1f) }
@@ -1255,6 +1295,15 @@ private fun EditorScreen(
       ),
     )
     selectedTextClipId = textClips.firstOrNull()?.id ?: "text-0"
+    stickerClips = listOf(
+      StickerClipUi(
+        id = "sticker-0",
+        label = context.getString(R.string.editor_sticker_default_label),
+        startMs = draft.trimStartMs,
+        endMs = (draft.trimStartMs + 1800L).coerceAtMost(draft.trimEndMs),
+      ),
+    )
+    selectedStickerClipId = stickerClips.firstOrNull()?.id ?: "sticker-0"
     selectedPrimaryTool = EditorPrimaryTool.Edit
     volumeAmount = 1f
     fadeAmount = 0.18f
@@ -1263,6 +1312,10 @@ private fun EditorScreen(
     previewZoom = 1f
     previewFill = false
     previewOverlayVisible = true
+    overlayPositionX = 0.5f
+    overlayPositionY = 0.18f
+    overlayScale = 1f
+    overlayRotationDeg = 0f
     toolPanelExpanded = true
     undoRedoState = UndoRedoState()
   }
@@ -1329,6 +1382,12 @@ private fun EditorScreen(
 
   val previewProgress = ((draft.playheadMs - draft.trimStartMs).toFloat() / (draft.trimEndMs - draft.trimStartMs).coerceAtLeast(1L).toFloat())
     .coerceIn(0f, 1f)
+  val activeTextOverlayLabel = remember(draft.playheadMs, textClips) {
+    textClips.firstOrNull { draft.playheadMs in it.startMs..it.endMs }?.label
+  }
+  val activeStickerOverlayLabel = remember(draft.playheadMs, stickerClips) {
+    stickerClips.firstOrNull { draft.playheadMs in it.startMs..it.endMs }?.label
+  }
   val centerTransportAlpha by animateFloatAsState(
     targetValue = if (previewOverlayVisible || !isPlaying) 1f else 0f,
     animationSpec = tween(durationMillis = 180),
@@ -1517,39 +1576,34 @@ private fun EditorScreen(
                     )
                   }
                 } else {
-                  AndroidView(
-                    modifier = Modifier
-                      .fillMaxSize()
-                      .pointerInput(draft.trimStartMs, draft.trimEndMs) {
-                        detectTransformGestures { _, pan, zoom, _ ->
-                          previewOverlayVisible = true
-                          previewZoom = (previewZoom * zoom).coerceIn(1f, 3f)
-                          if (kotlin.math.abs(pan.x) > 6f) {
-                            val deltaMs = (pan.x * -6f).roundToLong()
-                            onPlayheadChange((draft.playheadMs + deltaMs).coerceIn(draft.trimStartMs, draft.trimEndMs))
-                          }
-                        }
-                      },
-                    factory = { viewContext ->
-                      PlayerView(viewContext).apply {
-                        useController = false
-                        resizeMode = if (previewFill) {
-                          AspectRatioFrameLayout.RESIZE_MODE_FILL
-                        } else {
-                          AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        }
-                        this.player = player
+                  VideoPlayer(
+                    modifier = Modifier.fillMaxSize(),
+                    player = player,
+                    previewFill = previewFill,
+                    previewZoom = previewZoom,
+                    onTransform = { panX, zoom ->
+                      previewOverlayVisible = true
+                      previewZoom = (previewZoom * zoom).coerceIn(1f, 3f)
+                      if (kotlin.math.abs(panX) > 6f) {
+                        val deltaMs = (panX * -6f).roundToLong()
+                        onPlayheadChange((draft.playheadMs + deltaMs).coerceIn(draft.trimStartMs, draft.trimEndMs))
                       }
                     },
-                    update = {
-                      it.player = player
-                      it.resizeMode = if (previewFill) {
-                        AspectRatioFrameLayout.RESIZE_MODE_FILL
-                      } else {
-                        AspectRatioFrameLayout.RESIZE_MODE_FIT
-                      }
-                      it.scaleX = previewZoom
-                      it.scaleY = previewZoom
+                  )
+                  OverlayLayer(
+                    modifier = Modifier.fillMaxSize(),
+                    textLabel = activeTextOverlayLabel,
+                    stickerLabel = activeStickerOverlayLabel,
+                    positionX = overlayPositionX,
+                    positionY = overlayPositionY,
+                    scale = overlayScale,
+                    rotationDeg = overlayRotationDeg,
+                    visible = previewOverlayVisible && (activeTextOverlayLabel != null || activeStickerOverlayLabel != null),
+                    onTransform = { panX, panY, zoom, rotation ->
+                      overlayPositionX = (overlayPositionX + (panX / 1080f)).coerceIn(0.08f, 0.92f)
+                      overlayPositionY = (overlayPositionY + (panY / 1920f)).coerceIn(0.08f, 0.92f)
+                      overlayScale = (overlayScale * zoom).coerceIn(0.65f, 2.6f)
+                      overlayRotationDeg = (overlayRotationDeg + rotation).coerceIn(-45f, 45f)
                     },
                   )
                   if (previewOverlayAlpha > 0.01f) {
@@ -1748,6 +1802,20 @@ private fun EditorScreen(
                       leadingIcon = { Icon(Icons.Rounded.TextFields, contentDescription = null) },
                       label = { Text(stringResource(R.string.editor_quick_add_text)) },
                     )
+                    AssistChip(
+                      onClick = {
+                        val newId = "sticker-${stickerClips.size}"
+                        val startMs = draft.playheadMs.coerceIn(draft.trimStartMs, draft.trimEndMs)
+                        val endMs = (startMs + 1800L).coerceAtMost(draft.trimEndMs)
+                        stickerClips = stickerClips + StickerClipUi(newId, context.getString(R.string.editor_sticker_default_label), startMs, endMs)
+                        selectedStickerClipId = newId
+                        selectedTrack = EditorTrack.Sticker
+                        selectedPrimaryTool = EditorPrimaryTool.Sticker
+                        recordEditorAction(context.getString(R.string.editor_history_add_sticker))
+                      },
+                      leadingIcon = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
+                      label = { Text(stringResource(R.string.editor_quick_add_sticker)) },
+                    )
                   }
                   Surface(shape = RoundedCornerShape(999.dp), color = Color(0x33161C28)) {
                     Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1784,7 +1852,8 @@ private fun EditorScreen(
                       textAlign = TextAlign.Center,
                       modifier = Modifier.fillMaxWidth(),
                     )
-                    TimelineEditor(
+                    TimelineView {
+                      TimelineEditor(
                       sourceUri = draft.sourceUri,
                       canLoadVideoFrames = shouldLoadVideoTimelineFrames(draft.sourceUri, isUsableVideoSource),
                       timeline = timeline,
@@ -1796,6 +1865,8 @@ private fun EditorScreen(
                       selectedAudioSegmentId = selectedAudioSegmentId,
                       textClips = textClips,
                       selectedTextClipId = selectedTextClipId,
+                      stickerClips = stickerClips,
+                      selectedStickerClipId = selectedStickerClipId,
                       audioGain = audioGain,
                       isMuted = draft.isMuted,
                       onTrimStartChange = onTrimStartChange,
@@ -1808,6 +1879,7 @@ private fun EditorScreen(
                       onToolSelected = { selectedTimelineTool = it },
                       onAudioSegmentSelected = { selectedAudioSegmentId = it },
                       onTextClipSelected = { selectedTextClipId = it },
+                      onStickerClipSelected = { selectedStickerClipId = it },
                       onAudioCut = {
                         val updated = splitAudioSegments(audioSegments, selectedAudioSegmentId, draft.playheadMs)
                         audioSegments = updated
@@ -1824,6 +1896,7 @@ private fun EditorScreen(
                         visibleWindowEndMs = endMs
                       },
                     )
+                    }
                     Row(
                       modifier = Modifier.fillMaxWidth(),
                       horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1832,6 +1905,7 @@ private fun EditorScreen(
                         EditorTrack.Video -> stringResource(R.string.editor_timeline_video_track)
                         EditorTrack.Audio -> stringResource(R.string.editor_timeline_audio_track)
                         EditorTrack.Text -> stringResource(R.string.editor_timeline_text_track)
+                        EditorTrack.Sticker -> stringResource(R.string.editor_timeline_sticker_track)
                       }, modifier = Modifier.weight(1f))
                       EditorStatChip(label = stringResource(R.string.editor_duration_label), value = dockState.durationLabel, modifier = Modifier.weight(1f))
                       EditorStatChip(label = stringResource(R.string.editor_timeline_ruler), value = dockState.visibleWindowLabel, modifier = Modifier.weight(1f))
@@ -1886,6 +1960,9 @@ private fun EditorScreen(
                 gifFps = draft.gifFps,
                 gifResolution = draft.gifResolution,
                 mp4Quality = draft.mp4Quality,
+                outputFormat = draft.outputFormat,
+                outputResolution = draft.outputResolution,
+                outputFps = draft.outputFps,
                 audioSplitEnabled = selectedAudioSegmentId != null,
                 onCropChange = onCropChange,
                 onSpeedChange = onSpeedChange,
@@ -1900,6 +1977,9 @@ private fun EditorScreen(
                 onGifFpsChange = onGifFpsChange,
                 onGifResolutionChange = onGifResolutionChange,
                 onMp4QualityChange = onMp4QualityChange,
+                onOutputFormatChange = onOutputFormatChange,
+                onOutputResolutionChange = onOutputResolutionChange,
+                onOutputFpsChange = onOutputFpsChange,
                 onCollapse = { toolPanelExpanded = false },
               )
             }
@@ -2167,7 +2247,9 @@ private fun HistoryScreen(state: AppSnapshot, onBack: () -> Unit, onClearHistory
     when (filter) {
       HistoryFilter.All -> state.history
       HistoryFilter.Gif -> state.history.filter { it.formatLabel.equals("GIF", ignoreCase = true) }
-      HistoryFilter.Mp4 -> state.history.filter { it.formatLabel.equals("MP4", ignoreCase = true) }
+      HistoryFilter.Mp4 -> state.history.filter {
+        it.formatLabel.equals("MP4", ignoreCase = true) || it.formatLabel.equals("MOV", ignoreCase = true)
+      }
     }
   }
 
@@ -2244,13 +2326,25 @@ private fun HistoryScreen(state: AppSnapshot, onBack: () -> Unit, onClearHistory
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ExportScreen(state: AppSnapshot, onBack: () -> Unit, onCancel: () -> Unit) {
+private fun ExportScreen(
+  state: AppSnapshot,
+  onBack: () -> Unit,
+  onCancel: () -> Unit,
+  onStartExport: () -> Boolean,
+  onFormatChange: (ExportFormat) -> Unit,
+  onOutputFormatChange: (OutputFormat) -> Unit,
+  onOutputResolutionChange: (OutputResolution) -> Unit,
+  onOutputFpsChange: (Int) -> Unit,
+) {
   val context = LocalContext.current
   val job = state.exportJobState
   val latestExport = latestExportRecord(state)
   val outputUri = job.outputUri ?: latestExport?.outputUri.orEmpty()
   val saveBehavior = saveBehaviorLabel(state.preferences.saveBehavior)
   var sharedOutputUri by rememberSaveable { mutableStateOf<String?>(null) }
+  val safeDraftOutputFps = state.draft.outputFps.coerceIn(24, 60)
+  val isExportRunning = job.status == "Running" && job.isCancellable
+  val canRunExport = !isExportRunning
 
   LaunchedEffect(job.status, outputUri, state.preferences.saveBehavior) {
     if (
@@ -2283,6 +2377,44 @@ private fun ExportScreen(state: AppSnapshot, onBack: () -> Unit, onCancel: () ->
         Text(state.draft.outputName, style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(8.dp))
         Text(exportSummary(state), color = ClipyMuted)
+        Spacer(Modifier.height(10.dp))
+        ChipRow(
+          items = ExportFormat.entries.toList(),
+          selected = state.draft.exportFormat,
+          label = { Text(if (it == ExportFormat.Gif) "GIF" else "VIDEO") },
+          onSelected = {
+            if (canRunExport) onFormatChange(it)
+          },
+        )
+        if (state.draft.exportFormat == ExportFormat.Mp4) {
+          Spacer(Modifier.height(8.dp))
+          ChipRow(
+            items = OutputFormat.entries.toList(),
+            selected = state.draft.outputFormat,
+            label = { Text(it.label) },
+            onSelected = {
+              if (canRunExport) onOutputFormatChange(it)
+            },
+          )
+          Spacer(Modifier.height(8.dp))
+          ChipRow(
+            items = OutputResolution.entries.toList(),
+            selected = state.draft.outputResolution,
+            label = { Text(it.label) },
+            onSelected = {
+              if (canRunExport) onOutputResolutionChange(it)
+            },
+          )
+          Spacer(Modifier.height(8.dp))
+          ChipRow(
+            items = listOf(24, 30, 60),
+            selected = safeDraftOutputFps,
+            label = { Text("${it} FPS") },
+            onSelected = {
+              if (canRunExport) onOutputFpsChange(it)
+            },
+          )
+        }
         Spacer(Modifier.height(6.dp))
         Text(stringResource(R.string.export_save_behavior, saveBehavior), color = ClipyMuted)
         Spacer(Modifier.height(6.dp))
@@ -2298,6 +2430,16 @@ private fun ExportScreen(state: AppSnapshot, onBack: () -> Unit, onCancel: () ->
         Text("${job.progressPercent}%", style = MaterialTheme.typography.titleLarge)
         Text(job.currentStep, color = ClipyMuted)
         Spacer(Modifier.height(20.dp))
+        if (!isExportRunning) {
+          Button(
+            onClick = { onStartExport() },
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary),
+          ) {
+            Text(stringResource(R.string.export_start))
+          }
+          Spacer(Modifier.height(12.dp))
+        }
         when {
           job.status == "Blocked" -> {
             Text(job.errorMessage ?: stringResource(R.string.export_source_missing), color = MaterialTheme.colorScheme.error)
@@ -2409,6 +2551,8 @@ private fun TimelineEditor(
   selectedAudioSegmentId: String?,
   textClips: List<TextClipUi>,
   selectedTextClipId: String?,
+  stickerClips: List<StickerClipUi>,
+  selectedStickerClipId: String?,
   audioGain: Float,
   isMuted: Boolean,
   onTrimStartChange: (Long) -> Unit,
@@ -2421,6 +2565,7 @@ private fun TimelineEditor(
   onToolSelected: (TimelineTool) -> Unit,
   onAudioSegmentSelected: (String) -> Unit,
   onTextClipSelected: (String) -> Unit,
+  onStickerClipSelected: (String) -> Unit,
   onAudioCut: () -> Unit,
   onAudioGainChange: (Float) -> Unit,
   onInteractionChange: (Boolean) -> Unit,
@@ -2650,6 +2795,7 @@ private fun TimelineEditor(
     EditorTrack.Video -> formatTimelineWindow(timeline.trimStartMs, timeline.trimEndMs)
     EditorTrack.Audio -> formatTimelineWindow(audioTrimStartMs, audioTrimEndMs)
     EditorTrack.Text -> formatTimelineWindow(timeline.trimStartMs, timeline.trimEndMs)
+    EditorTrack.Sticker -> formatTimelineWindow(timeline.trimStartMs, timeline.trimEndMs)
   }
   val playheadOffsetPx by remember(timeline.playheadMs, duration, trackWidthPx, currentScrollPx, viewportWidthPx) {
     derivedStateOf {
@@ -2754,7 +2900,7 @@ private fun TimelineEditor(
           subtitle = if (isMuted) stringResource(R.string.editor_audio_muted) else stringResource(R.string.editor_audio_linked),
           onSelect = { onTrackSelected(EditorTrack.Audio) },
         ) {
-          AudioWaveformTrack(
+          AudioTrack(
             modifier = Modifier.fillMaxSize().padding(horizontal = with(density) { edgePadding.toDp() }),
             samples = waveformSamples,
             segments = audioSegments,
@@ -2785,6 +2931,26 @@ private fun TimelineEditor(
             trackWidthPx = trackWidthPx,
             selectedTrack = selectedTrack,
             onClipSelected = onTextClipSelected,
+          )
+        }
+        TimelineTrackLane(
+          modifier = Modifier.fillMaxWidth().weight(0.9f),
+          title = stringResource(R.string.editor_timeline_sticker_track),
+          selected = selectedTrack == EditorTrack.Sticker,
+          iconLabel = stringResource(R.string.editor_timeline_sticker_icon),
+          subtitle = stringResource(R.string.editor_quick_add_sticker),
+          onSelect = { onTrackSelected(EditorTrack.Sticker) },
+        ) {
+          StickerOverlayTrack(
+            modifier = Modifier.fillMaxSize().padding(horizontal = with(density) { edgePadding.toDp() }),
+            clips = stickerClips,
+            selectedClipId = selectedStickerClipId,
+            currentScrollPx = currentScrollPx,
+            viewportWidthPx = viewportWidthPx,
+            durationMs = duration,
+            trackWidthPx = trackWidthPx,
+            selectedTrack = selectedTrack,
+            onClipSelected = onStickerClipSelected,
           )
         }
       }
@@ -3138,6 +3304,7 @@ private fun TimelineTrackHeader(
       TimelineFilterChip(selected = selectedTrack == EditorTrack.Video, onClick = { onTrackSelected(EditorTrack.Video) }, label = stringResource(R.string.editor_timeline_video_track))
       TimelineFilterChip(selected = selectedTrack == EditorTrack.Audio, onClick = { onTrackSelected(EditorTrack.Audio) }, label = stringResource(R.string.editor_timeline_audio_track))
       TimelineFilterChip(selected = selectedTrack == EditorTrack.Text, onClick = { onTrackSelected(EditorTrack.Text) }, label = stringResource(R.string.editor_timeline_text_track))
+      TimelineFilterChip(selected = selectedTrack == EditorTrack.Sticker, onClick = { onTrackSelected(EditorTrack.Sticker) }, label = stringResource(R.string.editor_timeline_sticker_track))
       TimelineFilterChip(selected = selectedTool == TimelineTool.Trim, onClick = { onToolSelected(TimelineTool.Trim) }, label = stringResource(R.string.editor_timeline_trim_tool))
       TimelineFilterChip(selected = selectedTool == TimelineTool.Split, onClick = { onToolSelected(TimelineTool.Split) }, label = stringResource(R.string.editor_timeline_cut_tool))
       if (selectedTrack == EditorTrack.Audio) {
@@ -3183,6 +3350,7 @@ private fun TimelineActionRow(
             EditorTrack.Video -> stringResource(R.string.editor_timeline_focus_video)
             EditorTrack.Audio -> stringResource(R.string.editor_timeline_focus_audio)
             EditorTrack.Text -> stringResource(R.string.editor_timeline_text_track)
+            EditorTrack.Sticker -> stringResource(R.string.editor_timeline_sticker_track)
           },
           color = ClipyOnDark,
           style = MaterialTheme.typography.labelLarge,
@@ -3264,6 +3432,57 @@ private fun TextOverlayTrack(
 }
 
 @Composable
+private fun TimelineView(content: @Composable ColumnScope.() -> Unit) {
+  Column(content = content)
+}
+
+@Composable
+private fun StickerOverlayTrack(
+  modifier: Modifier = Modifier,
+  clips: List<StickerClipUi>,
+  selectedClipId: String?,
+  currentScrollPx: Float,
+  viewportWidthPx: Int,
+  durationMs: Long,
+  trackWidthPx: Float,
+  selectedTrack: EditorTrack,
+  onClipSelected: (String) -> Unit,
+) {
+  val density = LocalDensity.current
+  Box(modifier = modifier) {
+    Box(
+      modifier = Modifier
+        .fillMaxSize()
+        .clip(RoundedCornerShape(12.dp))
+        .background(if (selectedTrack == EditorTrack.Sticker) ClipyAccent.copy(alpha = 0.05f) else Color.Transparent),
+    )
+    clips.forEach { clip ->
+      val clipStartPx = (viewportWidthPx / 2f) + timelineMsToTrackPx(clip.startMs, durationMs, trackWidthPx) - currentScrollPx
+      val clipEndPx = (viewportWidthPx / 2f) + timelineMsToTrackPx(clip.endMs, durationMs, trackWidthPx) - currentScrollPx
+      Box(
+        modifier = Modifier
+          .offset { IntOffset(clipStartPx.roundToInt(), 10.dp.roundToPx()) }
+          .width(with(density) { (clipEndPx - clipStartPx).coerceAtLeast(52f).toDp() })
+          .height(32.dp)
+          .clip(RoundedCornerShape(14.dp))
+          .background(if (clip.id == selectedClipId) Color(0xFF33F59E0B) else Color(0xFF2A2630))
+          .border(1.dp, if (clip.id == selectedClipId) Color(0xFFF59E0B) else Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+          .clickable { onClipSelected(clip.id) }
+          .padding(horizontal = 10.dp),
+        contentAlignment = Alignment.CenterStart,
+      ) {
+        Text(
+          text = clip.label,
+          color = ClipyOnDark,
+          style = MaterialTheme.typography.labelMedium,
+          maxLines = 1,
+        )
+      }
+    }
+  }
+}
+
+@Composable
 private fun MiniActionButton(
   icon: androidx.compose.ui.graphics.vector.ImageVector,
   label: String,
@@ -3293,15 +3512,17 @@ private fun PrimaryToolRail(selected: EditorPrimaryTool, onSelected: (EditorPrim
         EditorPrimaryTool.Edit -> Icons.Rounded.FitScreen
         EditorPrimaryTool.Audio -> Icons.Rounded.GraphicEq
         EditorPrimaryTool.Text -> Icons.Rounded.TextFields
+        EditorPrimaryTool.Sticker -> Icons.Rounded.AutoAwesome
         EditorPrimaryTool.Effects -> Icons.Rounded.AutoFixHigh
-        EditorPrimaryTool.Filters -> Icons.Rounded.FilterAlt
+        EditorPrimaryTool.Export -> Icons.Rounded.FilterAlt
       }
       val label = when (tool) {
         EditorPrimaryTool.Edit -> stringResource(R.string.editor_primary_tool_edit)
         EditorPrimaryTool.Audio -> stringResource(R.string.editor_primary_tool_audio)
         EditorPrimaryTool.Text -> stringResource(R.string.editor_primary_tool_text)
+        EditorPrimaryTool.Sticker -> stringResource(R.string.editor_primary_tool_sticker)
         EditorPrimaryTool.Effects -> stringResource(R.string.editor_primary_tool_effects)
-        EditorPrimaryTool.Filters -> stringResource(R.string.editor_primary_tool_filters)
+        EditorPrimaryTool.Export -> stringResource(R.string.editor_primary_tool_export)
       }
       FilterChip(
         selected = selected == tool,
@@ -3335,6 +3556,9 @@ private fun ContextToolPanel(
   gifFps: Int,
   gifResolution: String,
   mp4Quality: Mp4Quality,
+  outputFormat: OutputFormat,
+  outputResolution: OutputResolution,
+  outputFps: Int,
   audioSplitEnabled: Boolean,
   onCropChange: (CropRatio) -> Unit,
   onSpeedChange: (Float) -> Unit,
@@ -3346,8 +3570,12 @@ private fun ContextToolPanel(
   onGifFpsChange: (Int) -> Unit,
   onGifResolutionChange: (String) -> Unit,
   onMp4QualityChange: (Mp4Quality) -> Unit,
+  onOutputFormatChange: (OutputFormat) -> Unit,
+  onOutputResolutionChange: (OutputResolution) -> Unit,
+  onOutputFpsChange: (Int) -> Unit,
   onCollapse: () -> Unit,
 ) {
+  val safeOutputFps = outputFps.coerceIn(24, 60)
   Surface(shape = RoundedCornerShape(18.dp), color = Color(0xCC161C28)) {
     Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -3356,8 +3584,9 @@ private fun ContextToolPanel(
             EditorPrimaryTool.Edit -> stringResource(R.string.editor_primary_tool_edit)
             EditorPrimaryTool.Audio -> stringResource(R.string.editor_primary_tool_audio)
             EditorPrimaryTool.Text -> stringResource(R.string.editor_primary_tool_text)
+            EditorPrimaryTool.Sticker -> stringResource(R.string.editor_primary_tool_sticker)
             EditorPrimaryTool.Effects -> stringResource(R.string.editor_primary_tool_effects)
-            EditorPrimaryTool.Filters -> stringResource(R.string.editor_primary_tool_filters)
+            EditorPrimaryTool.Export -> stringResource(R.string.editor_primary_tool_export)
           },
           style = MaterialTheme.typography.titleMedium,
         )
@@ -3380,15 +3609,31 @@ private fun ContextToolPanel(
         EditorPrimaryTool.Text -> {
           ChipRow(items = listOf(stringResource(R.string.editor_context_text_style), stringResource(R.string.editor_context_text_position)), selected = stringResource(R.string.editor_context_text_style), label = { Text(it) }, onSelected = {})
         }
+        EditorPrimaryTool.Sticker -> {
+          ChipRow(
+            items = listOf(
+              stringResource(R.string.editor_sticker_category_memes),
+              stringResource(R.string.editor_sticker_category_reaction),
+              stringResource(R.string.editor_sticker_category_shapes),
+            ),
+            selected = stringResource(R.string.editor_sticker_category_memes),
+            label = { Text(it) },
+            onSelected = {},
+          )
+          Text(stringResource(R.string.editor_sticker_hint), color = ClipyMuted, style = MaterialTheme.typography.bodySmall)
+        }
         EditorPrimaryTool.Effects -> {
           SliderRow(label = stringResource(R.string.editor_context_effects_intensity), value = effectIntensity, valueLabel = String.format(java.util.Locale.US, "%.0f%%", effectIntensity * 100f), onValueChange = onEffectIntensityChange, valueRange = 0f..1f)
         }
-        EditorPrimaryTool.Filters -> {
+        EditorPrimaryTool.Export -> {
           ChipRow(items = ExportFormat.entries.toList(), selected = exportFormat, label = { Text(it.name.uppercase()) }, onSelected = onFormatChange)
           if (exportFormat == ExportFormat.Gif) {
             ChipRow(items = listOf(12, 18, 24, 30), selected = gifFps, label = { Text("${it} FPS") }, onSelected = onGifFpsChange)
             ChipRow(items = listOf("480p", "720p", "1080p"), selected = gifResolution, label = { Text(it) }, onSelected = onGifResolutionChange)
           } else {
+            ChipRow(items = OutputFormat.entries.toList(), selected = outputFormat, label = { Text(it.label) }, onSelected = onOutputFormatChange)
+            ChipRow(items = OutputResolution.entries.toList(), selected = outputResolution, label = { Text(it.label) }, onSelected = onOutputResolutionChange)
+            ChipRow(items = listOf(24, 30, 60), selected = safeOutputFps, label = { Text("${it} FPS") }, onSelected = onOutputFpsChange)
             ChipRow(items = Mp4Quality.entries.toList(), selected = mp4Quality, label = { Text(mp4QualityLabel(it)) }, onSelected = onMp4QualityChange)
           }
           SliderRow(label = stringResource(R.string.editor_context_filters_strength), value = filterStrength, valueLabel = String.format(java.util.Locale.US, "%.0f%%", filterStrength * 100f), onValueChange = onFilterStrengthChange, valueRange = 0f..1f)
@@ -3495,7 +3740,7 @@ private fun TimelineTrackLane(
 }
 
 @Composable
-private fun AudioWaveformTrack(
+private fun AudioTrack(
   modifier: Modifier = Modifier,
   samples: List<com.nantcompany.clipy.model.WaveformSampleUiModel>,
   segments: List<AudioSegmentUi>,
@@ -3872,7 +4117,83 @@ private fun exportSummary(state: AppSnapshot): String {
   return if (draft.exportFormat == ExportFormat.Gif) {
     "GIF • ${draft.cropRatio.label} • ${draft.gifFps} FPS • ${draft.gifResolution}"
   } else {
-    "MP4 • ${draft.cropRatio.label} • ${mp4QualitySummaryLabel(draft.mp4Quality)}"
+    "${draft.outputFormat.label} • ${draft.outputResolution.label} • ${draft.outputFps} FPS • ${draft.cropRatio.label} • ${mp4QualitySummaryLabel(draft.mp4Quality)}"
+  }
+}
+
+@androidx.annotation.OptIn(UnstableApi::class)
+@Composable
+private fun VideoPlayer(
+  modifier: Modifier = Modifier,
+  player: ExoPlayer,
+  previewFill: Boolean,
+  previewZoom: Float,
+  onTransform: (panX: Float, zoom: Float) -> Unit,
+) {
+  AndroidView(
+    modifier = modifier.pointerInput(previewFill, previewZoom) {
+      detectTransformGestures { _, pan, zoom, _ ->
+        onTransform(pan.x, zoom)
+      }
+    },
+    factory = { viewContext ->
+      PlayerView(viewContext).apply {
+        useController = false
+        resizeMode = if (previewFill) AspectRatioFrameLayout.RESIZE_MODE_FILL else AspectRatioFrameLayout.RESIZE_MODE_FIT
+        this.player = player
+      }
+    },
+    update = {
+      it.player = player
+      it.resizeMode = if (previewFill) AspectRatioFrameLayout.RESIZE_MODE_FILL else AspectRatioFrameLayout.RESIZE_MODE_FIT
+      it.scaleX = previewZoom
+      it.scaleY = previewZoom
+    },
+  )
+}
+
+@Composable
+private fun OverlayLayer(
+  modifier: Modifier = Modifier,
+  textLabel: String?,
+  stickerLabel: String?,
+  positionX: Float,
+  positionY: Float,
+  scale: Float,
+  rotationDeg: Float,
+  visible: Boolean,
+  onTransform: (panX: Float, panY: Float, zoom: Float, rotation: Float) -> Unit,
+) {
+  if (!visible) return
+  Box(
+    modifier = modifier.pointerInput(textLabel, stickerLabel) {
+      detectTransformGestures { _, pan, zoom, rotation ->
+        onTransform(pan.x, pan.y, zoom, rotation)
+      }
+    },
+  ) {
+    val overlayText = listOfNotNull(textLabel, stickerLabel).joinToString("  •  ")
+    Box(
+      modifier = Modifier
+        .align(Alignment.TopStart)
+        .offset {
+          IntOffset(
+            (positionX * 1000f).roundToInt(),
+            (positionY * 1200f).roundToInt(),
+          )
+        }
+        .clip(RoundedCornerShape(12.dp))
+        .background(Color.Black.copy(alpha = 0.5f))
+        .border(1.dp, ClipyAccent.copy(alpha = 0.8f), RoundedCornerShape(12.dp))
+        .padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+      Text(
+        text = overlayText,
+        color = Color.White,
+        style = MaterialTheme.typography.labelMedium,
+        modifier = Modifier.scale(scale),
+      )
+    }
   }
 }
 
