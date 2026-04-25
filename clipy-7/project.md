@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 10:31 UTC
+- Last updated: 2026-04-25 10:37 UTC
 - App: Clipy Studio
 - Slug: clipy
 - Tagline: A premium offline-friendly Android video editor for fast, polished social videos.
 - Target users: General users
-- Design direction: Incremental motion-system refinement for the existing compact Compose editor. Keep the current visual language stable while adding clear, transient feedback for timeline inertia, interrupted scroll ownership, auto-scroll zones, trim scrubbing, snap settling, invalid drop recovery, and gesture-state safety. The experience should feel physical and precise: motion is smooth and clamped, snap feedback is subtle, invalid movement shows resistance rather than abrupt failure, and selection remains visually stable throughout active manipulation.
+- Design direction: Incremental gesture-polish pass for the existing compact dark Compose editor. Preserve the current timeline-first workspace, dark surfaces, small-screen density, transient chips/guides, and magnetic snap feedback. New design emphasis is responsive-but-controlled preview seeking, clearer editing lock states during playback, safer touch isolation between timeline and tool panels, and more forgiving invisible hit areas without adding persistent controls or changing the app architecture.
 - Core constraints: android only, MVP first, offline-friendly where possible
 Design style must align with: modern minimal premium
 Typography should align with: clean geometric sans
@@ -496,6 +496,37 @@ Function: selected clip/overlay must remain selected during drag/trim/scale/rota
 
 30. GESTURE DEBUG SAFETY:
 Function: internally separate gesture state into Idle, Scrolling, Flinging, DraggingClip, TrimmingClip, ScalingOverlay, RotatingOverlay, MovingOverlay, Playing to avoid conflicting updates.
+Additional follow-up requirement: GESTURE PHYSICS + SCROLL INERTIA PART 4:
+
+31. PREVIEW SCRUB FEEL:
+Function: timeline scrubbing must feel instant; when user scrolls timeline, preview seeks with throttled but responsive updates, avoids over-seeking, and always lands on exact final frame after scroll stops.
+
+32. SEEK THROTTLING:
+Function: during fast timeline scroll, throttle preview seek requests to avoid ExoPlayer overload, but update final seek immediately when user stops.
+
+33. FRAME ACCURACY:
+Function: when user releases scroll/trim, calculate exact currentTimeMs and seek preview to accurate frame based on timeline mapping.
+
+34. PLAYBACK LOCK:
+Function: when playback is running, disable clip drag/trim gestures or pause playback automatically before editing, matching CapCut-style behavior.
+
+35. TOOL PANEL GESTURE ISOLATION:
+Function: gestures inside bottom panels must not accidentally scroll timeline; timeline pointer input only active inside timeline bounds.
+
+36. HANDLE TOUCH TARGET:
+Function: trim/resize handles must have larger invisible touch target than visual size to make editing easy on mobile.
+
+37. MINIMUM MOVEMENT THRESHOLD:
+Function: small accidental finger movement after tap should not start drag; use touch slop threshold before entering drag state.
+
+38. LAYER HIT PRIORITY:
+Function: when multiple overlays overlap in preview, select the topmost visible layer by zIndex at touch point.
+
+39. OVERLAY OUTSIDE CANVAS:
+Function: allow overlay to move partially outside canvas but keep enough selectable area; show boundary guides and prevent losing item completely.
+
+40. STRICT:
+Function: gestures must be stable across small screens, large screens, landscape/portrait, high refresh rate devices, and low-end Android devices.
 
 ### Core Features
 - Splash -> onboarding/intro -> main app flow
@@ -521,13 +552,14 @@ Function: internally separate gesture state into Idle, Scrolling, Flinging, Drag
 - Performance foundations including lazy thumbnail loading, background rendering/export, media proxy strategies for large files, memory-aware preview, and responsive Compose UI
 
 ### Main Screens
-- Timeline Inertia Surface
-- Timeline Clip Drag Surface
-- Timeline Trim Surface
-- Gesture State Debug Layer
+- Timeline Scrub Surface
+- Timeline Editing Surface
+- Bottom Tool Panels
+- Preview Overlay Surface
+- Gesture Robustness Layer
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Keep existing timeline, project, overlay, playback, export, undo, redo, autosave, and repository persistence unchanged unless an existing commit path is already used for a successful drag or trim release. Add timeline decay, auto-scroll, boundary resistance, snap resolution, settle animation, invalid recovery, trim preview scrub, and explicit gesture mode as in-memory editor interaction state owned by MainScreenViewModel or the existing interaction state holder. Compose should use pointerInput and animation primitives for low-latency gesture capture, decay, interruption, and settle animation while dispatching lightweight intents to the ViewModel. Pure timeline math for scroll clamping, time-to-pixel mapping, magnetic snap priority, boundary resistance, valid drop checks, auto-scroll velocity, and release settle targets should live in testable Kotlin helpers. Pointer-frame updates must avoid repository writes, thumbnail reloads, export diagnostics, and other expensive work; only final valid drag or trim releases should use the existing timeline mutation path.
+- storage: Keep existing project, timeline, clip, overlay, playback, export, undo, redo, autosave, repository, and final edit commit paths unchanged. Add preview seek throttling, exact final frame seek, playback edit lock decisions, pointer bounds checks, panel gesture isolation, handle touch target expansion, touch slop gating, zIndex overlay hit testing, and overlay canvas boundary math as in-memory interaction state owned by MainScreenViewModel or the existing editor interaction state holder. Compose should use measured layout bounds, density-aware touch targets, pointerInput consumption, and existing gesture modes for low-latency interaction. Pure math for seek throttling intervals, exact scroll-to-time mapping, touch slop gates, handle hit bounds, overlay zIndex hit priority, and off-canvas boundary preservation should live in testable Kotlin helpers. Pointer-frame updates must remain lightweight and must not write repositories, reload thumbnails, run export diagnostics, or trigger autosave; only final valid clip, trim, or overlay edits should use existing commit paths.
 <!-- AUTO-GENERATED:CORE_END -->

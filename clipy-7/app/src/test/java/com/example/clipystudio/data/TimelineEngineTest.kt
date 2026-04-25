@@ -350,6 +350,94 @@ class TimelineEngineTest {
     assertEquals(0.92f, composition.text.first().opacity, 0.001f)
   }
 
+  @Test
+  fun previewSeekThrottle_limitsIntermediateSeeksButForcesFinalFrame() {
+    val initial = PreviewSeekThrottleState(minIntervalMs = 48L)
+    val first = TimelineEngine.previewSeekDecision(initial, 1_000L, nowMs = 0L, PreviewSeekSource.TIMELINE_SCROLL)
+    val throttled = TimelineEngine.previewSeekDecision(first.state, 1_080L, nowMs = 16L, PreviewSeekSource.TIMELINE_SCROLL)
+    val final = TimelineEngine.previewSeekDecision(throttled.state, 1_120L, nowMs = 24L, PreviewSeekSource.TIMELINE_SCROLL, forceFinalSeek = true)
+
+    assertEquals(1_000L, first.seekTimeMs)
+    assertNull(throttled.seekTimeMs)
+    assertEquals(1_080L, throttled.state.pendingSeekMs)
+    assertEquals(1_120L, final.seekTimeMs)
+    assertTrue(final.shouldSeekImmediately)
+  }
+
+  @Test
+  fun exactFrameSeek_mapsClampedScrollStartMiddleAndEnd() {
+    val middle = TimelineEngine.exactFrameSeekFromScroll(72f, 1f, 72f, 3_000L, 72f, TimelineGestureMode.SCROLLING, true)
+    val start = TimelineEngine.exactFrameSeekFromScroll(-200f, 1f, 72f, 3_000L, 72f, TimelineGestureMode.SCROLLING, true)
+    val end = TimelineEngine.exactFrameSeekFromScroll(999f, 1f, 72f, 3_000L, 72f, TimelineGestureMode.FLINGING, true)
+
+    assertEquals(1_500L, middle.currentTimeMs)
+    assertEquals(500L, start.currentTimeMs)
+    assertEquals(3_000L, end.currentTimeMs)
+    assertTrue(end.shouldSeekImmediately)
+  }
+
+  @Test
+  fun playbackEditLock_pausesBeforeDirectManipulation() {
+    val lock = TimelineEngine.resolvePlaybackEditLock(true, TimelineGestureMode.TRIMMING_CLIP)
+
+    assertTrue(lock.shouldPauseBeforeEdit)
+    assertFalse(lock.shouldBlockEditGesture)
+    assertEquals("Playback paused", lock.lockReason)
+  }
+
+  @Test
+  fun timelinePointerBounds_rejectsTouchesOutsideTimeline() {
+    val inside = TimelineEngine.timelinePointerBounds(10f, 20f, 210f, 120f, 80f, 60f)
+    val outside = TimelineEngine.timelinePointerBounds(10f, 20f, 210f, 120f, 8f, 60f)
+
+    assertTrue(inside.shouldAcceptTimelineGesture)
+    assertFalse(outside.shouldAcceptTimelineGesture)
+  }
+
+  @Test
+  fun handleTouchTarget_expandsInvisibleBoundsAndResolvesOverlap() {
+    val left = TimelineEngine.handleTouchTarget("v1", TrimHandle.Left, 0f, 4f, pointerXpx = -12f, minimumTouchTargetPx = 44f)
+    val right = TimelineEngine.handleTouchTarget("v1", TrimHandle.Right, 20f, 24f, pointerXpx = 18f, minimumTouchTargetPx = 44f)
+
+    assertTrue(left.isPointerInsideTouchTarget)
+    assertEquals(TrimHandle.Right, TimelineEngine.resolveOverlappingHandle(left, right, 18f))
+  }
+
+  @Test
+  fun touchSlop_keepsSmallMovementAsTapUntilThreshold() {
+    val tap = TimelineEngine.touchSlopGate(0f, 0f, 3f, 4f, 8f, TimelineGestureMode.DRAGGING_CLIP)
+    val drag = TimelineEngine.touchSlopGate(0f, 0f, 8f, 1f, 8f, TimelineGestureMode.DRAGGING_CLIP)
+
+    assertFalse(tap.hasExceededTouchSlop)
+    assertEquals(TimelineGestureMode.IDLE, tap.confirmedGestureMode)
+    assertTrue(drag.hasExceededTouchSlop)
+    assertEquals(TimelineGestureMode.DRAGGING_CLIP, drag.confirmedGestureMode)
+  }
+
+  @Test
+  fun overlayHitTesting_selectsHighestVisibleZIndexWithStableTieBreak() {
+    val clips = listOf(
+      TimelineClip("low", clipType = ClipType.Text, title = "Low", startMs = 0, durationMs = 1_000, zIndex = 1),
+      TimelineClip("top", clipType = ClipType.Text, title = "Top", startMs = 0, durationMs = 1_000, zIndex = 4),
+      TimelineClip("hidden", clipType = ClipType.Text, title = "Hidden", startMs = 0, durationMs = 1_000, zIndex = 9, transform = TransformState(opacity = 0f)),
+    )
+    val result = TimelineEngine.overlayHitTest(TimelineEngine.overlayHitTargets(clips, 50f, 50f, 100f, 100f), 50f, 50f)
+
+    assertEquals("top", result.selectedOverlayId)
+  }
+
+  @Test
+  fun overlayBoundary_allowsPartialOutsideButPreservesSelectableArea() {
+    val partial = TimelineEngine.resolveOverlayCanvasBoundary("txt", -20f, 50f, 112f, 48f, 1f, 0f, 200f, 120f)
+    val clamped = TimelineEngine.resolveOverlayCanvasBoundary("txt", -300f, -300f, 112f, 48f, 1f, 0f, 200f, 120f)
+
+    assertTrue(partial.showBoundaryGuide)
+    assertTrue(partial.isSelectableAreaPreserved)
+    assertTrue(clamped.isSelectableAreaPreserved)
+    assertTrue(clamped.resolvedCenterX > -300f)
+    assertTrue(clamped.resolvedCenterY > -300f)
+  }
+
   private fun sampleTimeline() = Timeline(
     durationMs = 3_000,
     tracks = listOf(

@@ -263,6 +263,119 @@ data class TrimPreviewScrubState(
   val isScrubbingPreview: Boolean,
 )
 
+enum class PreviewSeekSource { TIMELINE_SCROLL, TIMELINE_FLING, CLIP_TRIM_LEFT, CLIP_TRIM_RIGHT, PLAYBACK, PROGRAMMATIC }
+
+data class PreviewSeekThrottleState(
+  val isScrubbing: Boolean = false,
+  val lastRequestedSeekMs: Long? = null,
+  val lastSeekRequestUptimeMs: Long? = null,
+  val pendingSeekMs: Long? = null,
+  val minIntervalMs: Long = 48L,
+  val forceFinalSeek: Boolean = false,
+  val source: PreviewSeekSource = PreviewSeekSource.PROGRAMMATIC,
+)
+
+data class PreviewSeekDecision(
+  val state: PreviewSeekThrottleState,
+  val seekTimeMs: Long?,
+  val shouldSeekImmediately: Boolean,
+)
+
+data class ExactFrameSeekState(
+  val currentTimeMs: Long,
+  val mappedScrollOffsetPx: Float,
+  val timelineScalePxPerMs: Float,
+  val isFinalFrame: Boolean,
+  val sourceGestureMode: TimelineGestureMode,
+  val shouldSeekImmediately: Boolean,
+)
+
+enum class PlaybackEditLockPolicy { PAUSE_BEFORE_EDIT, BLOCK_EDIT_WHILE_PLAYING }
+
+data class PlaybackEditLockState(
+  val isPlaybackRunning: Boolean,
+  val requestedEditMode: TimelineGestureMode,
+  val policy: PlaybackEditLockPolicy,
+  val shouldPauseBeforeEdit: Boolean,
+  val shouldBlockEditGesture: Boolean,
+  val lockReason: String? = null,
+)
+
+data class TimelinePointerBoundsState(
+  val timelineBoundsLeftPx: Float,
+  val timelineBoundsTopPx: Float,
+  val timelineBoundsRightPx: Float,
+  val timelineBoundsBottomPx: Float,
+  val isPointerInsideTimeline: Boolean,
+  val activePointerId: Long? = null,
+  val shouldAcceptTimelineGesture: Boolean,
+)
+
+data class PanelGestureIsolationState(
+  val activePanelId: String? = null,
+  val isPanelGestureActive: Boolean = false,
+  val consumesPointerInput: Boolean = false,
+  val blockedTimelineGestureMode: TimelineGestureMode? = null,
+)
+
+data class HandleTouchTargetState(
+  val clipId: String,
+  val handle: TrimHandle,
+  val visualLeftPx: Float,
+  val visualRightPx: Float,
+  val touchLeftPx: Float,
+  val touchRightPx: Float,
+  val minimumTouchTargetPx: Float,
+  val isPointerInsideTouchTarget: Boolean,
+)
+
+data class TouchSlopGateState(
+  val pointerDownX: Float,
+  val pointerDownY: Float,
+  val currentX: Float,
+  val currentY: Float,
+  val touchSlopPx: Float,
+  val hasExceededTouchSlop: Boolean,
+  val pendingGestureMode: TimelineGestureMode,
+  val confirmedGestureMode: TimelineGestureMode,
+)
+
+data class OverlayHitTarget(
+  val overlayId: String,
+  val zIndex: Float,
+  val boundsPx: OverlayBoundingBox,
+  val isVisible: Boolean,
+  val containsTouchPoint: Boolean,
+  val selectionTieBreaker: Int,
+)
+
+data class OverlayHitTestResult(
+  val touchX: Float,
+  val touchY: Float,
+  val candidates: List<OverlayHitTarget>,
+  val selectedOverlayId: String?,
+  val selectionReason: String,
+)
+
+data class OverlayCanvasBoundaryState(
+  val overlayId: String,
+  val proposedBoundsPx: OverlayBoundingBox,
+  val canvasLeftPx: Float,
+  val canvasTopPx: Float,
+  val canvasRightPx: Float,
+  val canvasBottomPx: Float,
+  val minimumVisibleWidthPx: Float,
+  val minimumVisibleHeightPx: Float,
+  val visibleAreaPx: Float,
+  val isPartiallyOutsideCanvas: Boolean,
+  val isSelectableAreaPreserved: Boolean,
+  val resistanceOffsetX: Float,
+  val resistanceOffsetY: Float,
+  val resolvedCenterX: Float,
+  val resolvedCenterY: Float,
+  val showBoundaryGuide: Boolean,
+)
+
 data class MagneticSnapTarget(
   val id: String,
   val type: MagneticSnapTargetType,
@@ -449,6 +562,92 @@ object TimelineEngine {
     )
   }
 
+  fun previewSeekDecision(state: PreviewSeekThrottleState, requestedSeekMs: Long, nowMs: Long, source: PreviewSeekSource, forceFinalSeek: Boolean = false): PreviewSeekDecision {
+    val request = requestedSeekMs.coerceAtLeast(0L)
+    val lastAt = state.lastSeekRequestUptimeMs
+    val shouldSeek = forceFinalSeek || source == PreviewSeekSource.PLAYBACK || lastAt == null || nowMs - lastAt >= state.minIntervalMs
+    val nextState = if (shouldSeek) {
+      state.copy(
+        isScrubbing = !forceFinalSeek,
+        lastRequestedSeekMs = request,
+        lastSeekRequestUptimeMs = nowMs,
+        pendingSeekMs = null,
+        forceFinalSeek = forceFinalSeek,
+        source = source,
+      )
+    } else {
+      state.copy(
+        isScrubbing = true,
+        pendingSeekMs = request,
+        forceFinalSeek = false,
+        source = source,
+      )
+    }
+    return PreviewSeekDecision(nextState, request.takeIf { shouldSeek }, shouldSeek)
+  }
+
+  fun exactFrameSeekFromScroll(scrollOffsetPx: Float, zoomScale: Float, pixelsPerSecond: Float, durationMs: Long, viewportWidthPx: Float, sourceGestureMode: TimelineGestureMode, finalFrame: Boolean): ExactFrameSeekState {
+    val mappedOffset = clampScrollOffset(scrollOffsetPx, durationMs, zoomScale, pixelsPerSecond, viewportWidthPx)
+    return ExactFrameSeekState(
+      currentTimeMs = timeFromScroll(mappedOffset, zoomScale, pixelsPerSecond, durationMs, viewportWidthPx),
+      mappedScrollOffsetPx = mappedOffset,
+      timelineScalePxPerMs = pixelsPerMs(zoomScale, pixelsPerSecond),
+      isFinalFrame = finalFrame,
+      sourceGestureMode = sourceGestureMode,
+      shouldSeekImmediately = finalFrame,
+    )
+  }
+
+  fun resolvePlaybackEditLock(isPlaybackRunning: Boolean, requestedEditMode: TimelineGestureMode, policy: PlaybackEditLockPolicy = PlaybackEditLockPolicy.PAUSE_BEFORE_EDIT): PlaybackEditLockState {
+    val editMode = requestedEditMode == TimelineGestureMode.DRAGGING_CLIP || requestedEditMode == TimelineGestureMode.TRIMMING_CLIP || requestedEditMode == TimelineGestureMode.MOVING_OVERLAY || requestedEditMode == TimelineGestureMode.SCALING_OVERLAY || requestedEditMode == TimelineGestureMode.ROTATING_OVERLAY
+    val pause = isPlaybackRunning && editMode && policy == PlaybackEditLockPolicy.PAUSE_BEFORE_EDIT
+    val block = isPlaybackRunning && editMode && policy == PlaybackEditLockPolicy.BLOCK_EDIT_WHILE_PLAYING
+    return PlaybackEditLockState(
+      isPlaybackRunning = isPlaybackRunning,
+      requestedEditMode = requestedEditMode,
+      policy = policy,
+      shouldPauseBeforeEdit = pause,
+      shouldBlockEditGesture = block,
+      lockReason = when {
+        pause -> "Playback paused"
+        block -> "Locked during playback"
+        else -> null
+      },
+    )
+  }
+
+  fun timelinePointerBounds(leftPx: Float, topPx: Float, rightPx: Float, bottomPx: Float, pointerXpx: Float, pointerYpx: Float, activePointerId: Long? = null): TimelinePointerBoundsState {
+    val l = min(leftPx, rightPx)
+    val r = max(leftPx, rightPx)
+    val t = min(topPx, bottomPx)
+    val b = max(topPx, bottomPx)
+    val inside = pointerXpx in l..r && pointerYpx in t..b
+    return TimelinePointerBoundsState(l, t, r, b, inside, activePointerId, inside)
+  }
+
+  fun panelGestureIsolation(activePanelId: String?, isActive: Boolean, blockedMode: TimelineGestureMode? = null): PanelGestureIsolationState {
+    return PanelGestureIsolationState(activePanelId, isActive, consumesPointerInput = isActive, blockedTimelineGestureMode = blockedMode)
+  }
+
+  fun handleTouchTarget(clipId: String, handle: TrimHandle, visualLeftPx: Float, visualRightPx: Float, pointerXpx: Float, minimumTouchTargetPx: Float = 44f): HandleTouchTargetState {
+    val visualWidth = abs(visualRightPx - visualLeftPx)
+    val expansion = ((minimumTouchTargetPx - visualWidth).coerceAtLeast(0f) / 2f)
+    val left = min(visualLeftPx, visualRightPx) - expansion
+    val right = max(visualLeftPx, visualRightPx) + expansion
+    return HandleTouchTargetState(clipId, handle, min(visualLeftPx, visualRightPx), max(visualLeftPx, visualRightPx), left, right, minimumTouchTargetPx, pointerXpx in left..right)
+  }
+
+  fun resolveOverlappingHandle(left: HandleTouchTargetState, right: HandleTouchTargetState, pointerXpx: Float): TrimHandle {
+    val leftDistance = abs(pointerXpx - ((left.visualLeftPx + left.visualRightPx) / 2f))
+    val rightDistance = abs(pointerXpx - ((right.visualLeftPx + right.visualRightPx) / 2f))
+    return if (leftDistance <= rightDistance) TrimHandle.Left else TrimHandle.Right
+  }
+
+  fun touchSlopGate(pointerDownX: Float, pointerDownY: Float, currentX: Float, currentY: Float, touchSlopPx: Float, pendingGestureMode: TimelineGestureMode): TouchSlopGateState {
+    val exceeded = kotlin.math.hypot((currentX - pointerDownX).toDouble(), (currentY - pointerDownY).toDouble()).toFloat() >= touchSlopPx.coerceAtLeast(0f)
+    return TouchSlopGateState(pointerDownX, pointerDownY, currentX, currentY, touchSlopPx, exceeded, pendingGestureMode, if (exceeded) pendingGestureMode else TimelineGestureMode.IDLE)
+  }
+
   fun resolveOverlayDrag(
     overlayId: String,
     startCenterX: Float,
@@ -464,15 +663,89 @@ object TimelineEngine {
     val rawX = startCenterX + (pointerX - pointerStartX)
     val rawY = startCenterY + (pointerY - pointerStartY)
     val snap = resolveOverlayCenterSnap(rawX, rawY, previewWidthPx, previewHeightPx, config)
+    val snappedX = snap.snappedCenterX ?: rawX
+    val snappedY = snap.snappedCenterY ?: rawY
+    val bounds = resolveOverlayCanvasBoundary(
+      overlayId = overlayId,
+      centerX = snappedX,
+      centerY = snappedY,
+      baseWidthPx = 112f,
+      baseHeightPx = 48f,
+      scale = 1f,
+      rotationDegrees = 0f,
+      canvasWidthPx = previewWidthPx,
+      canvasHeightPx = previewHeightPx,
+    )
     return OverlayDragSnapshot(
       overlayId = overlayId,
       startCenterX = startCenterX,
       startCenterY = startCenterY,
       pointerStartX = pointerStartX,
       pointerStartY = pointerStartY,
-      resolvedCenterX = (snap.snappedCenterX ?: rawX).coerceIn(0f, previewWidthPx.coerceAtLeast(1f)),
-      resolvedCenterY = (snap.snappedCenterY ?: rawY).coerceIn(0f, previewHeightPx.coerceAtLeast(1f)),
+      resolvedCenterX = bounds.resolvedCenterX,
+      resolvedCenterY = bounds.resolvedCenterY,
       snapResolution = snap,
+    )
+  }
+
+  fun overlayHitTest(targets: List<OverlayHitTarget>, touchX: Float, touchY: Float): OverlayHitTestResult {
+    val candidates = targets.filter { it.isVisible && it.containsTouchPoint }
+      .sortedWith(compareByDescending<OverlayHitTarget> { it.zIndex }.thenByDescending { it.selectionTieBreaker })
+    val selected = candidates.firstOrNull()
+    return OverlayHitTestResult(touchX, touchY, candidates, selected?.overlayId, if (selected == null) "none" else "zIndex")
+  }
+
+  fun overlayHitTargets(clips: List<TimelineClip>, touchX: Float, touchY: Float, previewWidthPx: Float, previewHeightPx: Float, baseWidthPx: Float = 112f, baseHeightPx: Float = 48f): List<OverlayHitTarget> {
+    return clips.mapIndexed { index, clip ->
+      val box = overlayBoundingBox(clip.transform.positionX * previewWidthPx, clip.transform.positionY * previewHeightPx, baseWidthPx, baseHeightPx, clip.transform.scale, clip.transform.rotationDegrees)
+      val visible = clip.transform.opacity > 0.01f
+      OverlayHitTarget(
+        overlayId = clip.id,
+        zIndex = clip.zIndex.toFloat(),
+        boundsPx = box,
+        isVisible = visible,
+        containsTouchPoint = touchX in box.left..box.right && touchY in box.top..box.bottom,
+        selectionTieBreaker = index,
+      )
+    }
+  }
+
+  fun resolveOverlayCanvasBoundary(overlayId: String, centerX: Float, centerY: Float, baseWidthPx: Float, baseHeightPx: Float, scale: Float, rotationDegrees: Float, canvasWidthPx: Float, canvasHeightPx: Float, minimumVisibleWidthPx: Float = 28f, minimumVisibleHeightPx: Float = 20f): OverlayCanvasBoundaryState {
+    val canvasRight = canvasWidthPx.coerceAtLeast(1f)
+    val canvasBottom = canvasHeightPx.coerceAtLeast(1f)
+    val proposed = overlayBoundingBox(centerX, centerY, baseWidthPx, baseHeightPx, scale, rotationDegrees)
+    val resolvedX = when {
+      proposed.right < minimumVisibleWidthPx -> centerX + (minimumVisibleWidthPx - proposed.right)
+      proposed.left > canvasRight - minimumVisibleWidthPx -> centerX - (proposed.left - (canvasRight - minimumVisibleWidthPx))
+      else -> centerX
+    }
+    val resolvedY = when {
+      proposed.bottom < minimumVisibleHeightPx -> centerY + (minimumVisibleHeightPx - proposed.bottom)
+      proposed.top > canvasBottom - minimumVisibleHeightPx -> centerY - (proposed.top - (canvasBottom - minimumVisibleHeightPx))
+      else -> centerY
+    }
+    val resolved = overlayBoundingBox(resolvedX, resolvedY, baseWidthPx, baseHeightPx, scale, rotationDegrees)
+    val visibleW = (min(resolved.right, canvasRight) - max(resolved.left, 0f)).coerceAtLeast(0f)
+    val visibleH = (min(resolved.bottom, canvasBottom) - max(resolved.top, 0f)).coerceAtLeast(0f)
+    val outside = resolved.left < 0f || resolved.top < 0f || resolved.right > canvasRight || resolved.bottom > canvasBottom
+    val nearEdge = resolved.left < minimumVisibleWidthPx || resolved.top < minimumVisibleHeightPx || resolved.right > canvasRight - minimumVisibleWidthPx || resolved.bottom > canvasBottom - minimumVisibleHeightPx
+    return OverlayCanvasBoundaryState(
+      overlayId = overlayId,
+      proposedBoundsPx = resolved,
+      canvasLeftPx = 0f,
+      canvasTopPx = 0f,
+      canvasRightPx = canvasRight,
+      canvasBottomPx = canvasBottom,
+      minimumVisibleWidthPx = minimumVisibleWidthPx,
+      minimumVisibleHeightPx = minimumVisibleHeightPx,
+      visibleAreaPx = visibleW * visibleH,
+      isPartiallyOutsideCanvas = outside,
+      isSelectableAreaPreserved = visibleW >= minimumVisibleWidthPx && visibleH >= minimumVisibleHeightPx,
+      resistanceOffsetX = resolvedX - centerX,
+      resistanceOffsetY = resolvedY - centerY,
+      resolvedCenterX = resolvedX,
+      resolvedCenterY = resolvedY,
+      showBoundaryGuide = outside || nearEdge,
     )
   }
 
