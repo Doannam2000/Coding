@@ -4,6 +4,8 @@ import android.content.Context
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.UUID
 
 interface DataRepository {
@@ -16,7 +18,7 @@ interface DataRepository {
   fun duplicateProject(projectId: String)
   fun deleteProject(projectId: String)
   fun openProject(projectId: String)
-  fun addImportedAsset(type: MediaType)
+  fun addImportedAsset(type: MediaType, uri: String? = null, displayName: String? = null, sizeBytes: Long? = null)
   fun removeImportedAsset(assetId: String)
   fun addImportsToProject()
   fun selectClip(clipId: String)
@@ -83,19 +85,19 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
 
   override fun openProject(projectId: String) = persistUpdate { it.copy(activeProjectId = projectId) }
 
-  override fun addImportedAsset(type: MediaType) = persistUpdate { app ->
+  override fun addImportedAsset(type: MediaType, uri: String?, displayName: String?, sizeBytes: Long?) = persistUpdate { app ->
     val index = app.selectedImports.count { it.type == type } + 1
     val asset = MediaAsset(
       id = UUID.randomUUID().toString(),
-      uri = "local://${type.name.lowercase()}/$index",
+      uri = uri ?: "local://${type.name.lowercase()}/$index",
       type = type,
-      displayName = "${type.label} sample $index",
+      displayName = displayName?.ifBlank { null } ?: "${type.label} sample $index",
       durationMs = when (type) {
         MediaType.Image -> 4_000
         MediaType.Video -> 8_000
         MediaType.Audio -> 12_000
       },
-      sizeBytes = when (type) {
+      sizeBytes = sizeBytes ?: when (type) {
         MediaType.Image -> 2_400_000
         MediaType.Video -> 48_000_000
         MediaType.Audio -> 6_800_000
@@ -253,7 +255,9 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
   private fun loadInitialState(): AppState = AppState(
     languageCode = LanguageCode.valueOf(preferences?.getString("language", LanguageCode.En.name) ?: LanguageCode.En.name),
     hasCompletedIntro = preferences?.getBoolean("intro", false) ?: false,
+    projects = loadProjects(),
     activeProjectId = preferences?.getString("lastProjectId", null),
+    defaultExportSettings = loadExportSettings(),
     cacheUsageMb = preferences?.getInt("cacheUsageMb", 128) ?: 128,
   )
 
@@ -265,7 +269,22 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
       ?.putBoolean("intro", appState.hasCompletedIntro)
       ?.putString("lastProjectId", appState.activeProjectId)
       ?.putInt("cacheUsageMb", appState.cacheUsageMb)
+      ?.putString("exportSettings", appState.defaultExportSettings.toJson().toString())
+      ?.putString("projects", JSONArray(appState.projects.map { it.toJson() }).toString())
       ?.apply()
+  }
+
+  private fun loadProjects(): List<Project> {
+    val raw = preferences?.getString("projects", null) ?: return emptyList()
+    return runCatching {
+      val array = JSONArray(raw)
+      List(array.length()) { index -> array.getJSONObject(index).toProject() }
+    }.getOrDefault(emptyList())
+  }
+
+  private fun loadExportSettings(): ExportSettings {
+    val raw = preferences?.getString("exportSettings", null) ?: return ExportSettings()
+    return runCatching { JSONObject(raw).toExportSettings() }.getOrDefault(ExportSettings())
   }
 
   private fun mapSelectedClip(project: Project, transform: (TimelineClip) -> TimelineClip): Project {
@@ -279,6 +298,138 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
 
   private fun sampleAsset(type: MediaType, index: Int) = MediaAsset(UUID.randomUUID().toString(), "local://sample/$index", type, "Starter ${type.label.lowercase()}", if (type == MediaType.Audio) 10_000 else 6_000, 3_000_000)
 }
+
+private fun Project.toJson() = JSONObject()
+  .put("id", id)
+  .put("name", name)
+  .put("createdAt", createdAt)
+  .put("updatedAt", updatedAt)
+  .put("thumbnailUri", thumbnailUri)
+  .put("durationMs", durationMs)
+  .put("canvasRatio", canvasRatio.name)
+  .put("timeline", timeline.toJson())
+  .put("importedAssets", JSONArray(importedAssets.map { it.toJson() }))
+  .put("lastPlaybackPositionMs", lastPlaybackPositionMs)
+  .put("autosaveVersion", autosaveVersion)
+
+private fun JSONObject.toProject() = Project(
+  id = getString("id"),
+  name = getString("name"),
+  createdAt = optLong("createdAt"),
+  updatedAt = optLong("updatedAt"),
+  thumbnailUri = optNullableString("thumbnailUri"),
+  durationMs = optLong("durationMs"),
+  canvasRatio = enumValueOf(optString("canvasRatio", CanvasRatio.Portrait.name)),
+  timeline = getJSONObject("timeline").toTimeline(),
+  importedAssets = optJSONArray("importedAssets").toList { it.toMediaAsset() },
+  lastPlaybackPositionMs = optLong("lastPlaybackPositionMs"),
+  autosaveVersion = optLong("autosaveVersion", 1L),
+)
+
+private fun MediaAsset.toJson() = JSONObject()
+  .put("id", id)
+  .put("uri", uri)
+  .put("type", type.name)
+  .put("displayName", displayName)
+  .put("durationMs", durationMs)
+  .put("sizeBytes", sizeBytes)
+
+private fun JSONObject.toMediaAsset() = MediaAsset(
+  id = getString("id"),
+  uri = getString("uri"),
+  type = enumValueOf(getString("type")),
+  displayName = getString("displayName"),
+  durationMs = optLong("durationMs"),
+  sizeBytes = optLong("sizeBytes"),
+)
+
+private fun Timeline.toJson() = JSONObject()
+  .put("durationMs", durationMs)
+  .put("tracks", JSONArray(tracks.map { it.toJson() }))
+  .put("playheadMs", playheadMs)
+  .put("zoomLevel", zoomLevel.toDouble())
+  .put("selectedClipId", selectedClipId)
+  .put("selectedTool", selectedTool.name)
+  .put("isPlaying", isPlaying)
+
+private fun JSONObject.toTimeline() = Timeline(
+  durationMs = optLong("durationMs"),
+  tracks = optJSONArray("tracks").toList { it.toTimelineTrack() },
+  playheadMs = optLong("playheadMs"),
+  zoomLevel = optDouble("zoomLevel", 1.0).toFloat(),
+  selectedClipId = optNullableString("selectedClipId"),
+  selectedTool = enumValueOf(optString("selectedTool", EditorTool.Edit.name)),
+  isPlaying = optBoolean("isPlaying"),
+)
+
+private fun TimelineTrack.toJson() = JSONObject()
+  .put("id", id)
+  .put("type", type.name)
+  .put("name", name)
+  .put("orderIndex", orderIndex)
+  .put("clips", JSONArray(clips.map { it.toJson() }))
+  .put("isMuted", isMuted)
+  .put("isLocked", isLocked)
+
+private fun JSONObject.toTimelineTrack() = TimelineTrack(
+  id = getString("id"),
+  type = enumValueOf(getString("type")),
+  name = getString("name"),
+  orderIndex = optInt("orderIndex"),
+  clips = optJSONArray("clips").toList { it.toTimelineClip() },
+  isMuted = optBoolean("isMuted"),
+  isLocked = optBoolean("isLocked"),
+)
+
+private fun TimelineClip.toJson() = JSONObject()
+  .put("id", id)
+  .put("assetId", assetId)
+  .put("clipType", clipType.name)
+  .put("title", title)
+  .put("startMs", startMs)
+  .put("durationMs", durationMs)
+  .put("sourceInMs", sourceInMs)
+  .put("zIndex", zIndex)
+  .put("transform", transform.toJson())
+  .put("videoProperties", videoProperties.toJson())
+  .put("audioProperties", audioProperties.toJson())
+  .put("textProperties", textProperties.toJson())
+  .put("filterAdjustments", filterAdjustments.toJson())
+  .put("keyframes", JSONArray(keyframes.map { it.toJson() }))
+
+private fun JSONObject.toTimelineClip() = TimelineClip(
+  id = getString("id"),
+  assetId = optNullableString("assetId"),
+  clipType = enumValueOf(getString("clipType")),
+  title = getString("title"),
+  startMs = optLong("startMs"),
+  durationMs = optLong("durationMs"),
+  sourceInMs = optLong("sourceInMs"),
+  zIndex = optInt("zIndex"),
+  transform = optJSONObject("transform")?.toTransformState() ?: TransformState(),
+  videoProperties = optJSONObject("videoProperties")?.toVideoProperties() ?: VideoProperties(),
+  audioProperties = optJSONObject("audioProperties")?.toAudioProperties() ?: AudioProperties(),
+  textProperties = optJSONObject("textProperties")?.toTextProperties() ?: TextProperties(),
+  filterAdjustments = optJSONObject("filterAdjustments")?.toFilterAdjustmentSet() ?: FilterAdjustmentSet(),
+  keyframes = optJSONArray("keyframes").toList { it.toKeyframe() },
+)
+
+private fun TransformState.toJson() = JSONObject().put("positionX", positionX.toDouble()).put("positionY", positionY.toDouble()).put("scale", scale.toDouble()).put("rotationDegrees", rotationDegrees.toDouble()).put("opacity", opacity.toDouble()).put("flipHorizontal", flipHorizontal).put("flipVertical", flipVertical)
+private fun JSONObject.toTransformState() = TransformState(optDouble("positionX", 0.5).toFloat(), optDouble("positionY", 0.5).toFloat(), optDouble("scale", 1.0).toFloat(), optDouble("rotationDegrees").toFloat(), optDouble("opacity", 1.0).toFloat(), optBoolean("flipHorizontal"), optBoolean("flipVertical"))
+private fun VideoProperties.toJson() = JSONObject().put("speed", speed.toDouble()).put("isFreezeFrame", isFreezeFrame).put("sourceAudioMuted", sourceAudioMuted)
+private fun JSONObject.toVideoProperties() = VideoProperties(optDouble("speed", 1.0).toFloat(), optBoolean("isFreezeFrame"), optBoolean("sourceAudioMuted"))
+private fun AudioProperties.toJson() = JSONObject().put("volume", volume.toDouble()).put("fadeInMs", fadeInMs).put("fadeOutMs", fadeOutMs).put("loopEnabled", loopEnabled)
+private fun JSONObject.toAudioProperties() = AudioProperties(optDouble("volume", 1.0).toFloat(), optLong("fadeInMs"), optLong("fadeOutMs"), optBoolean("loopEnabled"))
+private fun TextProperties.toJson() = JSONObject().put("content", content).put("fontSizeSp", fontSizeSp.toDouble()).put("color", color).put("backgroundColor", backgroundColor).put("alignment", alignment).put("animation", animation)
+private fun JSONObject.toTextProperties() = TextProperties(optString("content", "Clipy Studio"), optDouble("fontSizeSp", 28.0).toFloat(), optString("color", "#F4F6FF"), optNullableString("backgroundColor"), optString("alignment", "Center"), optString("animation", "Fade"))
+private fun FilterAdjustmentSet.toJson() = JSONObject().put("filterId", filterId).put("brightness", brightness.toDouble()).put("contrast", contrast.toDouble()).put("saturation", saturation.toDouble()).put("exposure", exposure.toDouble()).put("temperature", temperature.toDouble()).put("sharpness", sharpness.toDouble()).put("vignette", vignette.toDouble())
+private fun JSONObject.toFilterAdjustmentSet() = FilterAdjustmentSet(optNullableString("filterId"), optDouble("brightness", 1.0).toFloat(), optDouble("contrast", 1.0).toFloat(), optDouble("saturation", 1.0).toFloat(), optDouble("exposure").toFloat(), optDouble("temperature").toFloat(), optDouble("sharpness").toFloat(), optDouble("vignette").toFloat())
+private fun Keyframe.toJson() = JSONObject().put("id", id).put("timeMs", timeMs).put("property", property.name).put("value", value.toDouble())
+private fun JSONObject.toKeyframe() = Keyframe(optString("id", UUID.randomUUID().toString()), optLong("timeMs"), enumValueOf(optString("property", KeyframeProperty.Opacity.name)), optDouble("value").toFloat())
+private fun ExportSettings.toJson() = JSONObject().put("format", format).put("resolution", resolution.name).put("fps", fps).put("bitrateMbps", bitrateMbps.toDouble()).put("qualityPreset", qualityPreset.name).put("saveToGallery", saveToGallery)
+private fun JSONObject.toExportSettings() = ExportSettings(optString("format", "MP4"), enumValueOf(optString("resolution", ExportResolution.P1080.name)), optInt("fps", 30), optDouble("bitrateMbps", 12.0).toFloat(), enumValueOf(optString("qualityPreset", QualityPreset.Balanced.name)), optBoolean("saveToGallery", true))
+private fun JSONObject.optNullableString(name: String): String? = if (isNull(name)) null else optString(name)
+private fun <T> JSONArray?.toList(transform: (JSONObject) -> T): List<T> = if (this == null) emptyList() else List(length()) { transform(getJSONObject(it)) }
 
 data class AppState(
   val languageCode: LanguageCode = LanguageCode.En,

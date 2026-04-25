@@ -32,7 +32,7 @@ private class FakeClipyRepository : DataRepository {
   override fun duplicateProject(projectId: String) = Unit
   override fun deleteProject(projectId: String) = Unit
   override fun openProject(projectId: String) = Unit
-  override fun addImportedAsset(type: MediaType) = Unit
+  override fun addImportedAsset(type: MediaType, uri: String?, displayName: String?, sizeBytes: Long?) = Unit
   override fun removeImportedAsset(assetId: String) = Unit
   override fun addImportsToProject() = Unit
   override fun selectClip(clipId: String) = Unit

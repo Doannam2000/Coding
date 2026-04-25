@@ -1,5 +1,8 @@
 package com.example.clipystudio.ui.main
 
+import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -188,7 +191,7 @@ private fun ClipyStudioApp(appState: AppState, viewModel: MainScreenViewModel, m
           appState = appState,
           copy = copy,
           onBack = { screen = Screen.Dashboard },
-          onAddSample = viewModel::addImportedAsset,
+          onAddAsset = viewModel::addImportedAsset,
           onRemove = viewModel::removeImportedAsset,
           onAddToProject = { viewModel.addImportsToProject(); screen = Screen.Editor },
         )
@@ -348,11 +351,20 @@ private fun ProjectCard(project: Project, onOpen: (String) -> Unit, onRename: (S
 }
 
 @Composable
-private fun ImportScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onAddSample: (MediaType) -> Unit, onRemove: (String) -> Unit, onAddToProject: () -> Unit) {
+private fun ImportScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onAddAsset: (MediaType, String?, String?, Long?) -> Unit, onRemove: (String) -> Unit, onAddToProject: () -> Unit) {
+  val context = LocalContext.current
   val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
-    uris.forEachIndexed { index, _ -> onAddSample(if (index % 2 == 0) MediaType.Video else MediaType.Image) }
+    uris.forEach { uri ->
+      val metadata = context.readUriMetadata(uri)
+      onAddAsset(if (metadata.mimeType?.startsWith("image") == true) MediaType.Image else MediaType.Video, uri.toString(), metadata.displayName, metadata.sizeBytes)
+    }
   }
-  val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> uris.forEach { _ -> onAddSample(MediaType.Audio) } }
+  val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+    uris.forEach { uri ->
+      val metadata = context.readUriMetadata(uri)
+      onAddAsset(MediaType.Audio, uri.toString(), metadata.displayName, metadata.sizeBytes)
+    }
+  }
   StudioScreen {
     TopStrip(title = copy.import, onBack = onBack)
     Text("Android system pickers are wired for visual/audio selection. Selected URIs are represented as autosaved local metadata in this MVP.", color = StudioTextMuted)
@@ -360,7 +372,7 @@ private fun ImportScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onA
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
       Button(onClick = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }, shape = RoundedCornerShape(999.dp)) { Text("Import Images/Videos") }
       Button(onClick = { audioPicker.launch(arrayOf("audio/*")) }, shape = RoundedCornerShape(999.dp)) { Text("Import Audio") }
-      MediaType.entries.forEach { type -> OutlinedButton(onClick = { onAddSample(type) }, shape = RoundedCornerShape(999.dp)) { Text("Sample ${type.label}") } }
+      MediaType.entries.forEach { type -> OutlinedButton(onClick = { onAddAsset(type, null, null, null) }, shape = RoundedCornerShape(999.dp)) { Text("Sample ${type.label}") } }
     }
     Spacer(Modifier.height(18.dp))
     Text("Selected (${appState.selectedImports.size})", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -659,6 +671,22 @@ private fun Copy.onboardingPages() = if (language == "Ngon ngu") {
     IntroPage("Sync every edit", "A centered playhead keeps preview, clips, overlays, and timecode aligned.", StudioSecondary),
     IntroPage("Export and share", "Render MP4 presets for Shorts, Reels, TikTok, and personal clips.", StudioAccent),
   )
+}
+
+private data class UriMetadata(val displayName: String?, val sizeBytes: Long?, val mimeType: String?)
+
+private fun Context.readUriMetadata(uri: Uri): UriMetadata {
+  var displayName: String? = null
+  var sizeBytes: Long? = null
+  contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+    if (cursor.moveToFirst()) {
+      if (nameIndex >= 0) displayName = cursor.getString(nameIndex)
+      if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) sizeBytes = cursor.getLong(sizeIndex)
+    }
+  }
+  return UriMetadata(displayName = displayName, sizeBytes = sizeBytes, mimeType = contentResolver.getType(uri))
 }
 
 @Preview(showBackground = true)
