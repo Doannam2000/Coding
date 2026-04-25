@@ -84,11 +84,15 @@ data class TimelineGestureState(
 data class TimelinePhysicsConfig(
   val decelerationRate: Float = 0.92f,
   val edgeResistanceFactor: Float = 0.22f,
+  val clipBoundaryResistanceFactor: Float = 0.28f,
   val overscrollLimitPx: Float = 116f,
   val minFlingVelocityPxPerSec: Float = 140f,
   val stopVelocityThresholdPxPerSec: Float = 24f,
   val settleSpringStiffness: Float = 0.18f,
   val settleSpringDampingRatio: Float = 0.82f,
+  val autoScrollEdgeZonePx: Float = 48f,
+  val maxAutoScrollVelocityPxPerSec: Float = 180f,
+  val snapSettleDurationMs: Int = 110,
 )
 
 data class TimelineScrollSnapshot(
@@ -187,6 +191,128 @@ data class TimelineSettleFrame(
 
 enum class GestureOwner { NONE, PREVIEW_TAP, OVERLAY_DRAG, OVERLAY_TRANSFORM, TIMELINE_SCROLL, TIMELINE_PINCH_ZOOM, CLIP_TAP, CLIP_REORDER, TRIM_HANDLE, TEXT_DOUBLE_TAP }
 enum class HapticEvent { SNAP, SPLIT, DELETE, SUCCESSFUL_DROP, INVALID_ACTION }
+
+enum class TimelineGestureMode { IDLE, SCROLLING, FLINGING, DRAGGING_CLIP, TRIMMING_CLIP, SCALING_OVERLAY, ROTATING_OVERLAY, MOVING_OVERLAY, PLAYING }
+enum class AutoScrollDirection { NONE, LEFT, RIGHT }
+enum class MagneticSnapTargetType { PLAYHEAD, NEIGHBOR_CLIP_EDGE, TRANSITION_BOUNDARY, BEAT_MARKER, TIMELINE_START, TIMELINE_END }
+
+data class TimelineDecayState(
+  val isFlinging: Boolean,
+  val initialVelocityPxPerSecond: Float,
+  val currentVelocityPxPerSecond: Float,
+  val scrollOffsetPx: Float,
+  val minScrollOffsetPx: Float,
+  val maxScrollOffsetPx: Float,
+  val currentTimeMs: Long,
+  val startedAtMs: Long,
+  val lastFrameTimeMs: Long? = null,
+)
+
+data class TimelineScrollJobState(
+  val activeMode: TimelineGestureMode = TimelineGestureMode.IDLE,
+  val hasRunningDecayJob: Boolean = false,
+  val hasRunningAutoScrollJob: Boolean = false,
+  val hasRunningSettleJob: Boolean = false,
+  val cancelReason: String? = null,
+  val lastStableScrollOffsetPx: Float = 0f,
+  val lastStableCurrentTimeMs: Long = 0L,
+)
+
+data class TouchInterruptionState(
+  val interruptedMode: TimelineGestureMode,
+  val touchDownX: Float,
+  val touchDownTimeMs: Long,
+  val scrollOffsetAtTouchDownPx: Float,
+  val currentTimeAtTouchDownMs: Long,
+  val shouldCancelScrollJob: Boolean,
+  val shouldPreserveFingerAnchor: Boolean,
+)
+
+data class TimelineAutoScrollState(
+  val isAutoScrolling: Boolean,
+  val direction: AutoScrollDirection,
+  val edgeZoneWidthPx: Float,
+  val distanceIntoEdgeZonePx: Float,
+  val velocityPxPerSecond: Float,
+  val draggedClipId: String? = null,
+  val fingerAnchorTimelineMs: Long = 0L,
+  val lastFrameTimeMs: Long? = null,
+)
+
+data class ClipDragBoundaryState(
+  val clipId: String,
+  val proposedStartMs: Long,
+  val proposedEndMs: Long,
+  val lastValidStartMs: Long,
+  val lastValidEndMs: Long,
+  val minStartMs: Long,
+  val maxEndMs: Long,
+  val isBeyondStart: Boolean,
+  val isBeyondEnd: Boolean,
+  val isInvalidPlacement: Boolean,
+  val resistanceOffsetPx: Float,
+)
+
+data class TrimPreviewScrubState(
+  val clipId: String,
+  val activeHandle: TrimHandle,
+  val proposedBoundaryMs: Long,
+  val previewTimeMs: Long,
+  val lastValidStartMs: Long,
+  val lastValidEndMs: Long,
+  val isScrubbingPreview: Boolean,
+)
+
+data class MagneticSnapTarget(
+  val id: String,
+  val type: MagneticSnapTargetType,
+  val timeMs: Long,
+  val priority: Int,
+  val distancePx: Float,
+  val sourceClipId: String? = null,
+  val isValid: Boolean = true,
+)
+
+data class MagneticSnapResolution(
+  val target: MagneticSnapTarget?,
+  val resolvedTimeMs: Long,
+  val resolvedOffsetPx: Float,
+  val priorityOrder: List<MagneticSnapTargetType>,
+  val shouldShowSnapGuide: Boolean,
+  val shouldEmitHaptic: Boolean,
+)
+
+data class SnapReleaseSettleState(
+  val isSettling: Boolean,
+  val clipId: String? = null,
+  val trimHandle: TrimHandle? = null,
+  val fromTimeMs: Long,
+  val toTimeMs: Long,
+  val durationMs: Int,
+  val target: MagneticSnapTarget? = null,
+  val startedAtMs: Long,
+)
+
+data class InvalidDropRecoveryState(
+  val clipId: String,
+  val fromStartMs: Long,
+  val fromEndMs: Long,
+  val lastValidStartMs: Long,
+  val lastValidEndMs: Long,
+  val durationMs: Int,
+  val showInvalidFeedback: Boolean,
+  val shouldCommitTimelineState: Boolean,
+)
+
+data class SelectionStabilityState(
+  val selectedClipId: String? = null,
+  val selectedOverlayId: String? = null,
+  val selectionOwnerMode: TimelineGestureMode = TimelineGestureMode.IDLE,
+  val clearSelectionRequested: Boolean = false,
+  val pendingSelectedClipId: String? = null,
+  val pendingSelectedOverlayId: String? = null,
+  val canClearSelection: Boolean = true,
+)
 
 data class OverlayTransformConfig(
   val minScale: Float = 0.35f,
@@ -296,6 +422,31 @@ object TimelineEngine {
   fun resolveGestureOwner(current: GesturePriorityState, requested: GestureOwner, pointerCount: Int): GesturePriorityState {
     if (current.activeOwner != GestureOwner.NONE && current.activeOwner != requested) return current.copy(activePointerCount = pointerCount)
     return current.copy(activeOwner = requested, activePointerCount = pointerCount, startedAtMs = current.startedAtMs.takeIf { it > 0 } ?: System.currentTimeMillis())
+  }
+
+  fun canStartGestureMode(current: TimelineGestureMode, requested: TimelineGestureMode): Boolean {
+    return current == TimelineGestureMode.IDLE || current == requested || current == TimelineGestureMode.FLINGING || current == TimelineGestureMode.PLAYING
+  }
+
+  fun resolveGestureMode(current: TimelineGestureMode, requested: TimelineGestureMode): TimelineGestureMode {
+    return if (canStartGestureMode(current, requested)) requested else current
+  }
+
+  fun interruptTimelineGesture(mode: TimelineGestureMode, touchDownX: Float, scrollOffsetPx: Float, currentTimeMs: Long, nowMs: Long = System.currentTimeMillis()): TouchInterruptionState {
+    val shouldCancel = mode == TimelineGestureMode.FLINGING || mode == TimelineGestureMode.PLAYING || mode == TimelineGestureMode.DRAGGING_CLIP || mode == TimelineGestureMode.TRIMMING_CLIP
+    return TouchInterruptionState(mode, touchDownX, nowMs, scrollOffsetPx, currentTimeMs, shouldCancel, shouldCancel)
+  }
+
+  fun scrollJobAfterInterruption(state: TimelineScrollJobState, interruption: TouchInterruptionState): TimelineScrollJobState {
+    return state.copy(
+      activeMode = TimelineGestureMode.IDLE,
+      hasRunningDecayJob = false,
+      hasRunningAutoScrollJob = false,
+      hasRunningSettleJob = false,
+      cancelReason = "touch",
+      lastStableScrollOffsetPx = interruption.scrollOffsetAtTouchDownPx,
+      lastStableCurrentTimeMs = interruption.currentTimeAtTouchDownMs,
+    )
   }
 
   fun resolveOverlayDrag(
@@ -529,14 +680,25 @@ object TimelineEngine {
   fun advanceFling(scrollOffsetPx: Float, velocityPxPerSec: Float, frameDeltaMs: Long, durationMs: Long, zoomScale: Float, pixelsPerSecond: Float, viewportWidthPx: Float = DefaultViewportWidthPx, physics: TimelinePhysicsConfig = DefaultPhysics): TimelineFlingFrame {
     val frameSeconds = frameDeltaMs.coerceAtLeast(1L) / 1_000f
     val rawOffset = scrollOffsetPx + (velocityPxPerSec * frameSeconds)
-    val nextOffset = applyEdgeResistance(rawOffset, durationMs, zoomScale, pixelsPerSecond, viewportWidthPx, physics)
-    val resistance = resistanceFraction(nextOffset, durationMs, zoomScale, pixelsPerSecond, viewportWidthPx, physics)
-    val nextVelocity = decayVelocity(velocityPxPerSec, frameDeltaMs, physics) * (1f - resistance * 0.35f)
+    val clampedOffset = clampScrollOffset(rawOffset, durationMs, zoomScale, pixelsPerSecond, viewportWidthPx)
+    val hitBoundary = clampedOffset != rawOffset
+    val nextVelocity = if (hitBoundary) 0f else decayVelocity(velocityPxPerSec, frameDeltaMs, physics)
     return TimelineFlingFrame(
-      nextOffsetPx = nextOffset,
+      nextOffsetPx = clampedOffset,
       nextVelocityPxPerSec = nextVelocity,
-      resistanceFraction = resistance,
-      isFinished = abs(nextVelocity) <= physics.stopVelocityThresholdPxPerSec,
+      resistanceFraction = 0f,
+      isFinished = hitBoundary || abs(nextVelocity) <= physics.stopVelocityThresholdPxPerSec,
+    )
+  }
+
+  fun decayStateFrame(state: TimelineDecayState, frameDeltaMs: Long, durationMs: Long, zoomScale: Float, pixelsPerSecond: Float, viewportWidthPx: Float = DefaultViewportWidthPx, physics: TimelinePhysicsConfig = DefaultPhysics): TimelineDecayState {
+    val frame = advanceFling(state.scrollOffsetPx, state.currentVelocityPxPerSecond, frameDeltaMs, durationMs, zoomScale, pixelsPerSecond, viewportWidthPx, physics)
+    return state.copy(
+      isFlinging = !frame.isFinished,
+      currentVelocityPxPerSecond = frame.nextVelocityPxPerSec,
+      scrollOffsetPx = frame.nextOffsetPx,
+      currentTimeMs = timeFromScroll(frame.nextOffsetPx, zoomScale, pixelsPerSecond, durationMs, viewportWidthPx),
+      lastFrameTimeMs = (state.lastFrameTimeMs ?: state.startedAtMs) + frameDeltaMs.coerceAtLeast(1L),
     )
   }
 
@@ -686,11 +848,62 @@ object TimelineEngine {
 
   fun resolveDraggedClip(timeline: Timeline, clipId: String, proposedStartMs: Long): ClipGestureResolution {
     val located = timeline.locateClip(clipId) ?: return ClipGestureResolution(proposedStartMs, proposedStartMs, SnapResolution(), false)
-    val proposed = proposedStartMs.coerceIn(0L, timeline.durationMs.coerceAtLeast(located.clip.durationMs))
+    val maxStart = timeline.durationMs.coerceAtLeast(located.clip.durationMs) - located.clip.durationMs
+    val proposed = proposedStartMs.coerceIn(0L, maxStart.coerceAtLeast(0L))
     val snap = resolveSnapResolution(timeline, located.track.type, clipId, proposed)
-    val resolved = (snap.snappedTimeMs ?: proposed).coerceAtLeast(0L)
-    val isValid = located.track.type != TrackType.Video || !hasVideoOverlap(timeline, clipId, resolved, located.clip.durationMs)
+    val resolved = (snap.snappedTimeMs ?: proposed).coerceIn(0L, maxStart.coerceAtLeast(0L))
+    val outOfBounds = proposedStartMs < 0L || proposedStartMs + located.clip.durationMs > timeline.durationMs.coerceAtLeast(located.clip.durationMs)
+    val isValid = !outOfBounds && (located.track.type != TrackType.Video || !hasVideoOverlap(timeline, clipId, resolved, located.clip.durationMs))
     return ClipGestureResolution(proposed, resolved, snap, isValid)
+  }
+
+  fun resolveClipBoundaryState(timeline: Timeline, clipId: String, proposedStartMs: Long, lastValidStartMs: Long, pixelsPerSecond: Float = timeline.pixelsPerSecond, zoomScale: Float = timeline.zoomLevel, physics: TimelinePhysicsConfig = DefaultPhysics): ClipDragBoundaryState {
+    val located = timeline.locateClip(clipId)
+    val clip = located?.clip
+    val duration = clip?.durationMs ?: 0L
+    val minStart = 0L
+    val maxStart = (timeline.durationMs.coerceAtLeast(duration) - duration).coerceAtLeast(0L)
+    val proposedEnd = proposedStartMs + duration
+    val resolved = resolveDraggedClip(timeline, clipId, proposedStartMs)
+    val boundaryDeltaMs = when {
+      proposedStartMs < minStart -> proposedStartMs - minStart
+      proposedStartMs > maxStart -> proposedStartMs - maxStart
+      else -> 0L
+    }
+    return ClipDragBoundaryState(
+      clipId = clipId,
+      proposedStartMs = proposedStartMs,
+      proposedEndMs = proposedEnd,
+      lastValidStartMs = lastValidStartMs.coerceIn(minStart, maxStart),
+      lastValidEndMs = (lastValidStartMs.coerceIn(minStart, maxStart) + duration).coerceAtLeast(duration),
+      minStartMs = minStart,
+      maxEndMs = maxStart + duration,
+      isBeyondStart = proposedStartMs < minStart,
+      isBeyondEnd = proposedStartMs > maxStart,
+      isInvalidPlacement = !resolved.isValid,
+      resistanceOffsetPx = boundaryDeltaMs * pixelsPerMs(zoomScale, pixelsPerSecond) * physics.clipBoundaryResistanceFactor,
+    )
+  }
+
+  fun resolveAutoScroll(fingerXpx: Float, viewportWidthPx: Float, draggedClipId: String?, fingerAnchorTimelineMs: Long, physics: TimelinePhysicsConfig = DefaultPhysics): TimelineAutoScrollState {
+    val edge = physics.autoScrollEdgeZonePx.coerceAtLeast(1f)
+    val width = viewportWidthPx.coerceAtLeast(edge * 2f)
+    val leftDistance = (edge - fingerXpx).coerceIn(0f, edge)
+    val rightDistance = (fingerXpx - (width - edge)).coerceIn(0f, edge)
+    val direction = when {
+      leftDistance > 0f -> AutoScrollDirection.LEFT
+      rightDistance > 0f -> AutoScrollDirection.RIGHT
+      else -> AutoScrollDirection.NONE
+    }
+    val distance = max(leftDistance, rightDistance)
+    val velocity = if (direction == AutoScrollDirection.NONE) 0f else (distance / edge) * physics.maxAutoScrollVelocityPxPerSec * if (direction == AutoScrollDirection.LEFT) -1f else 1f
+    return TimelineAutoScrollState(direction != AutoScrollDirection.NONE, direction, edge, distance, velocity, draggedClipId, fingerAnchorTimelineMs)
+  }
+
+  fun advanceAutoScroll(scrollOffsetPx: Float, autoScroll: TimelineAutoScrollState, frameDeltaMs: Long, durationMs: Long, zoomScale: Float, pixelsPerSecond: Float, viewportWidthPx: Float = DefaultViewportWidthPx): TimelineDragUpdate {
+    val delta = autoScroll.velocityPxPerSecond * (frameDeltaMs.coerceAtLeast(1L) / 1_000f)
+    val nextOffset = clampScrollOffset(scrollOffsetPx + delta, durationMs, zoomScale, pixelsPerSecond, viewportWidthPx)
+    return TimelineDragUpdate(nextOffset, timeFromScroll(nextOffset, zoomScale, pixelsPerSecond, durationMs, viewportWidthPx), 0f)
   }
 
   fun resolveTrimGesture(timeline: Timeline, clipId: String, handle: TrimHandle, proposedTimeMs: Long): TrimGestureResolution {
@@ -707,6 +920,15 @@ object TimelineEngine {
     }
     val nextClip = resolveTrimmedClip(timeline, clipId, handle, resolved)
     return TrimGestureResolution(rawTime, resolved, snap, nextClip != null)
+  }
+
+  fun resolveTrimPreviewScrub(timeline: Timeline, clipId: String, handle: TrimHandle, proposedTimeMs: Long): TrimPreviewScrubState {
+    val located = timeline.locateClip(clipId)
+    val clip = located?.clip
+    val resolution = resolveTrimGesture(timeline, clipId, handle, proposedTimeMs)
+    val start = if (handle == TrimHandle.Left) resolution.resolvedTimeMs else clip?.startMs ?: resolution.resolvedTimeMs
+    val end = if (handle == TrimHandle.Right) resolution.resolvedTimeMs else (clip?.startMs ?: 0L) + (clip?.durationMs ?: 0L)
+    return TrimPreviewScrubState(clipId, handle, resolution.resolvedTimeMs, resolution.resolvedTimeMs.coerceIn(0L, timeline.durationMs), start, end, true)
   }
 
   fun resolveTrimmedClip(timeline: Timeline, clipId: String, handle: TrimHandle, proposedTimeMs: Long): TimelineClip? {
@@ -861,7 +1083,7 @@ object TimelineEngine {
   fun resolveSnapResolution(timeline: Timeline, trackType: TrackType, clipId: String, proposed: Long, snapConfig: TimelineSnapConfig = DefaultSnapConfig): SnapResolution {
     val best = collectSnapCandidates(timeline, trackType, clipId, proposed, snapConfig)
       .filter { it.distancePx <= snapConfig.baseThresholdPx.coerceAtLeast(snapConfig.maxInfluencePx) || it.distancePx <= snapConfig.maxInfluencePx }
-      .maxWithOrNull(compareBy<SnapCandidateTarget> { it.strength }.thenBy { -it.distancePx })
+      .minWithOrNull(compareBy<SnapCandidateTarget> { snapPriority(it.type) }.thenBy { it.distancePx })
       ?: return SnapResolution()
     val snappedTime = best.timeMs
     val pxPerMs = pixelsPerMs(timeline.zoomLevel, timeline.pixelsPerSecond)
@@ -871,6 +1093,81 @@ object TimelineEngine {
       appliedOffsetPx = (snappedTime - proposed) * pxPerMs,
       feedbackIntensity = best.strength,
     )
+  }
+
+  fun resolveMagneticSnap(timeline: Timeline, trackType: TrackType, clipId: String, proposed: Long, snapConfig: TimelineSnapConfig = DefaultSnapConfig): MagneticSnapResolution {
+    val priorityOrder = listOf(MagneticSnapTargetType.PLAYHEAD, MagneticSnapTargetType.NEIGHBOR_CLIP_EDGE, MagneticSnapTargetType.TRANSITION_BOUNDARY, MagneticSnapTargetType.BEAT_MARKER, MagneticSnapTargetType.TIMELINE_START, MagneticSnapTargetType.TIMELINE_END)
+    val target = collectSnapCandidates(timeline, trackType, clipId, proposed, snapConfig)
+      .filter { it.distancePx <= snapConfig.maxInfluencePx }
+      .map { candidate ->
+        val type = magneticType(candidate.type)
+        MagneticSnapTarget(
+          id = "${type.name}:${candidate.timeMs}",
+          type = type,
+          timeMs = candidate.timeMs,
+          priority = priorityOrder.indexOf(type).takeIf { it >= 0 } ?: Int.MAX_VALUE,
+          distancePx = candidate.distancePx,
+          sourceClipId = clipId,
+          isValid = true,
+        )
+      }
+      .minWithOrNull(compareBy<MagneticSnapTarget> { it.priority }.thenBy { it.distancePx })
+    val resolvedTime = target?.timeMs ?: proposed
+    return MagneticSnapResolution(
+      target = target,
+      resolvedTimeMs = resolvedTime,
+      resolvedOffsetPx = (resolvedTime - proposed) * pixelsPerMs(timeline.zoomLevel, timeline.pixelsPerSecond),
+      priorityOrder = priorityOrder,
+      shouldShowSnapGuide = target != null,
+      shouldEmitHaptic = target != null && target.distancePx <= snapConfig.strongThresholdPx,
+    )
+  }
+
+  fun resolveSnapReleaseSettle(clipId: String?, trimHandle: TrimHandle?, fromTimeMs: Long, snap: MagneticSnapResolution, nowMs: Long = System.currentTimeMillis(), physics: TimelinePhysicsConfig = DefaultPhysics): SnapReleaseSettleState {
+    return SnapReleaseSettleState(
+      isSettling = snap.target != null && snap.resolvedTimeMs != fromTimeMs,
+      clipId = clipId,
+      trimHandle = trimHandle,
+      fromTimeMs = fromTimeMs,
+      toTimeMs = snap.resolvedTimeMs,
+      durationMs = physics.snapSettleDurationMs.coerceIn(80, 140),
+      target = snap.target,
+      startedAtMs = nowMs,
+    )
+  }
+
+  fun settleTimeAt(fromTimeMs: Long, toTimeMs: Long, elapsedMs: Long, durationMs: Int): Long {
+    val progress = (elapsedMs.toFloat() / durationMs.coerceAtLeast(1)).coerceIn(0f, 1f)
+    val eased = 1f - (1f - progress) * (1f - progress)
+    return (fromTimeMs + (toTimeMs - fromTimeMs) * eased).roundToLong()
+  }
+
+  fun invalidDropRecovery(clipId: String, fromStartMs: Long, fromEndMs: Long, lastValidStartMs: Long, lastValidEndMs: Long, physics: TimelinePhysicsConfig = DefaultPhysics): InvalidDropRecoveryState {
+    return InvalidDropRecoveryState(clipId, fromStartMs, fromEndMs, lastValidStartMs, lastValidEndMs, physics.snapSettleDurationMs.coerceIn(80, 140), showInvalidFeedback = true, shouldCommitTimelineState = false)
+  }
+
+  fun selectionAfterGesture(state: SelectionStabilityState, mode: TimelineGestureMode, emptyTap: Boolean = false, selectedClipId: String? = null, selectedOverlayId: String? = null): SelectionStabilityState {
+    if (selectedClipId != null || selectedOverlayId != null) return state.copy(selectedClipId = selectedClipId ?: state.selectedClipId, selectedOverlayId = selectedOverlayId ?: state.selectedOverlayId, selectionOwnerMode = mode, clearSelectionRequested = false, canClearSelection = false)
+    val canClear = mode == TimelineGestureMode.IDLE
+    return if (emptyTap && canClear) state.copy(selectedClipId = null, selectedOverlayId = null, selectionOwnerMode = mode, clearSelectionRequested = true, canClearSelection = true) else state.copy(selectionOwnerMode = mode, clearSelectionRequested = emptyTap, canClearSelection = canClear)
+  }
+
+  private fun snapPriority(type: SnapTargetType): Int = when (type) {
+    SnapTargetType.Playhead -> 0
+    SnapTargetType.ClipStart, SnapTargetType.ClipEnd -> 1
+    SnapTargetType.TransitionStart, SnapTargetType.TransitionEnd -> 2
+    SnapTargetType.Marker -> 3
+    SnapTargetType.TimelineStart, SnapTargetType.TimelineEnd -> 4
+    SnapTargetType.None -> Int.MAX_VALUE
+  }
+
+  private fun magneticType(type: SnapTargetType): MagneticSnapTargetType = when (type) {
+    SnapTargetType.Playhead -> MagneticSnapTargetType.PLAYHEAD
+    SnapTargetType.ClipStart, SnapTargetType.ClipEnd -> MagneticSnapTargetType.NEIGHBOR_CLIP_EDGE
+    SnapTargetType.TransitionStart, SnapTargetType.TransitionEnd -> MagneticSnapTargetType.TRANSITION_BOUNDARY
+    SnapTargetType.Marker -> MagneticSnapTargetType.BEAT_MARKER
+    SnapTargetType.TimelineStart -> MagneticSnapTargetType.TIMELINE_START
+    SnapTargetType.TimelineEnd, SnapTargetType.None -> MagneticSnapTargetType.TIMELINE_END
   }
 
   fun resolveSnap(timeline: Timeline, trackType: TrackType, clipId: String, proposed: Long): TimelineSnapResult {

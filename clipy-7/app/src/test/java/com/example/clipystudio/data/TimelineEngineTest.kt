@@ -221,6 +221,94 @@ class TimelineEngineTest {
   }
 
   @Test
+  fun magneticSnapPriority_usesFixedPriorityBeforeDistance() {
+    val timeline = sampleTimeline().copy(playheadMs = 1_450, markers = listOf(TimelineMarker(id = "m1", timeMs = 1_420, label = "Beat")))
+
+    val playheadBeatsCloserMarker = TimelineEngine.resolveMagneticSnap(timeline, TrackType.Audio, "a1", 1_421)
+    val transitionTimeline = timeline.copy(transitions = listOf(Transition("t1", TransitionType.Fade, "v1", "v2", 1_000, 400)))
+    val edgeBeatsTransition = TimelineEngine.resolveMagneticSnap(transitionTimeline, TrackType.Video, "v2", 1_010)
+
+    assertEquals(MagneticSnapTargetType.PLAYHEAD, playheadBeatsCloserMarker.target?.type)
+    assertEquals(MagneticSnapTargetType.NEIGHBOR_CLIP_EDGE, edgeBeatsTransition.target?.type)
+  }
+
+  @Test
+  fun decayStateFrame_clampsAndUpdatesCurrentTime() {
+    val state = TimelineDecayState(true, 4_000f, 4_000f, TimelineEngine.maxScrollOffsetPx(3_000, 1f, 72f, 360f) - 2f, 0f, 36f, 0L, 0L)
+
+    val frame = TimelineEngine.decayStateFrame(state, 16, 3_000, 1f, 72f, 360f)
+
+    assertEquals(TimelineEngine.maxScrollOffsetPx(3_000, 1f, 72f, 360f), frame.scrollOffsetPx, 0.001f)
+    assertEquals(3_000L, frame.currentTimeMs)
+    assertFalse(frame.isFlinging)
+  }
+
+  @Test
+  fun touchInterruption_cancelsRunningModesWithoutJump() {
+    val interruption = TimelineEngine.interruptTimelineGesture(TimelineGestureMode.FLINGING, 120f, 80f, 1_250L, nowMs = 2L)
+    val state = TimelineEngine.scrollJobAfterInterruption(TimelineScrollJobState(activeMode = TimelineGestureMode.FLINGING, hasRunningDecayJob = true), interruption)
+
+    assertTrue(interruption.shouldCancelScrollJob)
+    assertEquals(80f, state.lastStableScrollOffsetPx)
+    assertEquals(1_250L, state.lastStableCurrentTimeMs)
+    assertFalse(state.hasRunningDecayJob)
+  }
+
+  @Test
+  fun autoScrollDirectionAndVelocity_areCappedByEdgeZone() {
+    val left = TimelineEngine.resolveAutoScroll(4f, 320f, "v1", 0L)
+    val none = TimelineEngine.resolveAutoScroll(160f, 320f, "v1", 0L)
+
+    assertEquals(AutoScrollDirection.LEFT, left.direction)
+    assertTrue(kotlin.math.abs(left.velocityPxPerSecond) <= TimelineEngine.DefaultPhysics.maxAutoScrollVelocityPxPerSec)
+    assertFalse(none.isAutoScrolling)
+  }
+
+  @Test
+  fun clipBoundaryResistance_rejectsOutsideProject() {
+    val timeline = sampleTimeline()
+    val beforeStart = TimelineEngine.resolveClipBoundaryState(timeline, "a1", -250, 0)
+    val beyondEnd = TimelineEngine.resolveClipBoundaryState(timeline, "a1", timeline.durationMs + 1_000, 0)
+
+    assertTrue(beforeStart.isBeyondStart)
+    assertTrue(beyondEnd.isBeyondEnd)
+    assertFalse(TimelineEngine.resolveDraggedClip(timeline, "a1", -250).isValid)
+  }
+
+  @Test
+  fun trimPreviewScrub_usesActiveBoundaryTime() {
+    val timeline = sampleTimeline()
+    val left = TimelineEngine.resolveTrimPreviewScrub(timeline, "v1", TrimHandle.Left, 300)
+    val right = TimelineEngine.resolveTrimPreviewScrub(timeline, "v1", TrimHandle.Right, 900)
+
+    assertEquals(left.proposedBoundaryMs, left.previewTimeMs)
+    assertEquals(right.proposedBoundaryMs, right.previewTimeMs)
+  }
+
+  @Test
+  fun snapSettleAndInvalidRecovery_areNonOvershootingAndNonCommitting() {
+    val timeline = sampleTimeline().copy(playheadMs = 1_450)
+    val snap = TimelineEngine.resolveMagneticSnap(timeline, TrackType.Audio, "a1", 1_430)
+    val settle = TimelineEngine.resolveSnapReleaseSettle("a1", null, 1_430, snap, nowMs = 0L)
+    val midway = TimelineEngine.settleTimeAt(settle.fromTimeMs, settle.toTimeMs, elapsedMs = 55L, durationMs = settle.durationMs)
+    val recovery = TimelineEngine.invalidDropRecovery("a1", -200, 800, 0, 1_000)
+
+    assertTrue(settle.durationMs in 80..140)
+    assertTrue(midway in settle.fromTimeMs..settle.toTimeMs)
+    assertFalse(recovery.shouldCommitTimelineState)
+  }
+
+  @Test
+  fun selectionStability_clearsOnlyWhenIdle() {
+    val selected = SelectionStabilityState(selectedClipId = "v1")
+    val draggingTap = TimelineEngine.selectionAfterGesture(selected, TimelineGestureMode.DRAGGING_CLIP, emptyTap = true)
+    val idleTap = TimelineEngine.selectionAfterGesture(selected, TimelineGestureMode.IDLE, emptyTap = true)
+
+    assertEquals("v1", draggingTap.selectedClipId)
+    assertNull(idleTap.selectedClipId)
+  }
+
+  @Test
   fun resolveDraggedClip_returnsSnappedPreviewAndValidity() {
     val timeline = sampleTimeline().copy(playheadMs = 1_450)
 
