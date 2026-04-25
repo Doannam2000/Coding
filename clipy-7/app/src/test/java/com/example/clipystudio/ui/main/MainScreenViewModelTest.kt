@@ -20,6 +20,7 @@ import com.example.clipystudio.data.Timeline
 import com.example.clipystudio.data.TransitionType
 import com.example.clipystudio.data.TrimHandle
 import junit.framework.TestCase.assertEquals
+import junit.framework.TestCase.assertNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
@@ -54,6 +55,34 @@ class MainScreenViewModelTest {
     viewModel.prepareRenderPipeline(appState)
 
     assertEquals(RenderPipelineStatus.ERROR, viewModel.renderPipelineState.value.status)
+  }
+
+  @Test
+  fun requestShare_isDisabledBeforeExportOutputExists() = runTest {
+    val project = Project("p1", "Share", 0, 0, timeline = Timeline.defaultTimeline())
+    val appState = AppState(hasCompletedIntro = true, projects = listOf(project), activeProjectId = project.id)
+    val viewModel = MainScreenViewModel(FakeClipyRepository(appState))
+
+    viewModel.requestShare()
+    viewModel.prepareRenderPipeline(appState)
+    viewModel.requestShare()
+
+    assertNull(viewModel.renderExportState.value.output)
+    assertNull(viewModel.shareEvent.value)
+  }
+
+  @Test
+  fun cancelExport_withoutRunningExportKeepsShareDisabled() = runTest {
+    val project = Project("p1", "Cancel", 0, 0, timeline = Timeline.defaultTimeline())
+    val appState = AppState(hasCompletedIntro = true, projects = listOf(project), activeProjectId = project.id)
+    val viewModel = MainScreenViewModel(FakeClipyRepository(appState))
+
+    viewModel.prepareRenderPipeline(appState)
+    viewModel.cancelExport()
+    viewModel.requestShare()
+
+    assertNull(viewModel.renderExportState.value.output)
+    assertNull(viewModel.shareEvent.value)
   }
 }
 

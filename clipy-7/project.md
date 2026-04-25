@@ -13,12 +13,12 @@ New editor-facing code should prefer stable models under `editor.model` (`Projec
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 10:51 UTC
+- Last updated: 2026-04-25 10:55 UTC
 - App: Clipy Studio
 - Slug: clipy
 - Tagline: A premium offline-friendly Android video editor for fast, polished social videos.
 - Target users: General users
-- Design direction: Incremental quality pass that preserves the current compact studio interface while making broken flows visibly reliable. Emphasize clear state ownership, deterministic feedback, and non-overlapping controls rather than a redesign. The editor should feel like a stable mobile video workspace: media import, timeline edits, preview playback, autosave, export, save, and share all expose honest loading, disabled, error, recovery, and success states.
+- Design direction: Incremental testing-state design updates for Clipy Studio that preserve the existing editor architecture and visual language. Focus the UI guidance on observable states, validation feedback, disabled/enabled affordances, recovery paths, and testable readiness indicators across media, editing, export, sharing, and error scenarios.
 - Core constraints: android only, MVP first, offline-friendly where possible
 Design style must align with: modern minimal premium
 Typography should align with: clean geometric sans
@@ -540,6 +540,7 @@ Function: allow overlay to move partially outside canvas but keep enough selecta
 Function: gestures must be stable across small screens, large screens, landscape/portrait, high refresh rate devices, and low-end Android devices.
 Additional follow-up requirement: PROJECT ARCHITECTURE FINALIZATION: Split app into clear modules: ui, editor, timeline, media, render, data, design-system. Create stable models Project, Track, Clip, Overlay, AudioClip, TextClip, StickerClip, EffectClip, Transition, Keyframe, ExportSettings. Ensure every screen uses ViewModel + StateFlow and no business logic is hidden inside Composable.
 Additional follow-up requirement: QUALITY + BUGFIX PASS: Review the entire app and fix all broken flows: media import, editor open, timeline sync, preview playback, add audio/text/sticker, trim/split/delete, undo/redo, autosave, export, save/share. Remove all placeholder buttons, fake logic, unused code, broken navigation, UI overlap, clipped text, and laggy gestures.
+Additional follow-up requirement: TESTING SCENARIOS: Add manual and automated test cases for: image-only project, video-only project, mixed image/video, add music, extract audio, add text, add sticker, apply filter/effect, transition, trim, split, reorder, undo/redo, reopen draft, export 720p/1080p, cancel export, share video, permission denied, missing file, low storage.
 
 ### Core Features
 - Splash -> onboarding/intro -> main app flow
@@ -565,17 +566,12 @@ Additional follow-up requirement: QUALITY + BUGFIX PASS: Review the entire app a
 - Performance foundations including lazy thumbnail loading, background rendering/export, media proxy strategies for large files, memory-aware preview, and responsive Compose UI
 
 ### Main Screens
-- Project Entry And Editor Open
 - Main Editor Screen
-- Media Import Flow
-- Timeline Editing Components
-- Preview Playback Surface
-- Add Audio Text And Sticker Panels
-- Undo Redo And Autosave
-- Export Save And Share Flow
+- Export And Share UI
+- Error And Edge Case States
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Keep the existing single-module Android project and package-level boundaries. Repair flows by wiring UI controls to existing ViewModel, editor, timeline, media, render, and data boundaries rather than introducing broad new modules or rewrites. The UI layer should render immutable StateFlow state and emit callbacks only. The editor/ViewModel layer should own action dispatch, selection, undo/redo, autosave scheduling, playback edit locks, export settings edits, and user-visible error state. The timeline layer should own timeline math, trim, split positioning, scroll/drag/snap helpers, and gesture finalization. The media layer should own picker result interpretation, metadata lookup, preview player coordination, and seek synchronization. The render layer should own export execution and output artifact reporting. The data layer should preserve saved-project compatibility and handle repository writes, autosave, and persistence mapping. Remove placeholder buttons or fake logic by either implementing the real integration path or disabling/removing controls that cannot be honestly supported in this pass.
+- storage: Keep the existing single-module Android project, MVVM boundaries, and repository-compatible storage models. Add tests around current ViewModel, timeline, media import, export, persistence mapping, and UI-state behavior. Prefer fixture builders and fake repository/media/export collaborators inside test sources instead of production rewrites. If a requested scenario targets a feature that is intentionally unavailable in the current app, test that the UI is disabled or reports unavailable state rather than adding fake behavior.
 <!-- AUTO-GENERATED:CORE_END -->
