@@ -1,6 +1,7 @@
 package com.example.clipystudio.ui.main
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.BackHandler
@@ -93,14 +94,17 @@ import com.example.clipystudio.data.EffectCategory
 import com.example.clipystudio.data.EffectLibrary
 import com.example.clipystudio.data.EffectPreset
 import com.example.clipystudio.data.ExportResolution
-import com.example.clipystudio.data.ExportStatus
 import com.example.clipystudio.data.FilterAdjustmentSet
 import com.example.clipystudio.data.LanguageCode
 import com.example.clipystudio.data.MediaAsset
 import com.example.clipystudio.data.MediaType
 import com.example.clipystudio.data.Project
+import com.example.clipystudio.data.RenderExportState
+import com.example.clipystudio.data.RenderExportStatus
 import com.example.clipystudio.data.RenderPipelineState
 import com.example.clipystudio.data.RenderPipelineStatus
+import com.example.clipystudio.data.RenderStageStatus
+import com.example.clipystudio.data.StageState
 import com.example.clipystudio.data.QualityPreset
 import com.example.clipystudio.data.StickerAsset
 import com.example.clipystudio.data.StickerCategory
@@ -167,13 +171,22 @@ private fun ClipyStudioApp(appState: AppState, viewModel: MainScreenViewModel, m
   val snackbarHostState = remember { SnackbarHostState() }
   val context = LocalContext.current
   val copy = copyFor(appState.languageCode)
+  val shareEvent by viewModel.shareEvent.collectAsStateWithLifecycle()
 
   LaunchedEffect(Unit) {
     delay(550)
     screen = if (appState.hasCompletedIntro) Screen.Dashboard else Screen.Intro
   }
-  LaunchedEffect(appState.exportJob?.status) {
-    if (appState.exportJob?.status == ExportStatus.Complete) snackbarHostState.showSnackbar("Export complete: ${appState.exportJob.outputUri}")
+  LaunchedEffect(shareEvent) {
+    val event = shareEvent ?: return@LaunchedEffect
+    context.startActivity(
+      Intent(Intent.ACTION_SEND).apply {
+        type = event.mimeType
+        putExtra(Intent.EXTRA_STREAM, Uri.parse(event.uri))
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      },
+    )
+    viewModel.consumeShareEvent()
   }
 
   BackHandler(screen != Screen.Dashboard && screen != Screen.Intro) {
@@ -504,23 +517,18 @@ private fun EditorTopBar(title: String, version: Long, canUndo: Boolean, canRedo
 private fun ExportScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onDashboard: () -> Unit, viewModel: MainScreenViewModel) {
   val settings = appState.defaultExportSettings
   val renderState by viewModel.renderPipelineState.collectAsStateWithLifecycle()
-  LaunchedEffect(appState.exportJob?.status) {
-    if (appState.exportJob?.status == ExportStatus.Running) {
-      delay(900)
-      viewModel.completeExport()
-    }
-  }
+  val exportState by viewModel.renderExportState.collectAsStateWithLifecycle()
   LaunchedEffect(settings, appState.activeProject?.timeline?.version, appState.activeProjectId) {
     viewModel.prepareRenderPipeline(appState)
   }
   StudioScreen {
     TopStrip(title = if (appState.languageCode == LanguageCode.Vi) "Xuat video" else "Export Video", onBack = onBack)
-    if (appState.exportJob?.status == ExportStatus.Complete) {
-      ExportSuccessPanel(appState, onBack, onDashboard)
+    if (exportState.status == RenderExportStatus.COMPLETED) {
+      ExportSuccessPanel(exportState, onBack, onDashboard, viewModel)
       return@StudioScreen
     }
-    if (appState.exportJob?.status == ExportStatus.Running || appState.exportJob?.status == ExportStatus.Cancelled || appState.exportJob?.status == ExportStatus.Failed) {
-      ExportProgressPanel(appState, viewModel, onBack)
+    if (exportState.status in setOf(RenderExportStatus.PREPARING, RenderExportStatus.RUNNING, RenderExportStatus.CANCELLING, RenderExportStatus.CANCELLED, RenderExportStatus.FAILED)) {
+      ExportProgressPanel(exportState, viewModel, onBack)
       return@StudioScreen
     }
     ExportOptionCard("Format", settings.format, "MP4 is the MVP target for Android compatibility.")
@@ -543,14 +551,14 @@ private fun ExportScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onD
     Spacer(Modifier.height(18.dp))
     ExportOptionCard("Estimated output", "${settings.bitrateMbps.toInt()} Mbps", "Snapshot includes timeline clips, overlays, text, stickers, effects, transitions, speed, canvas, and audio state.")
     Spacer(Modifier.height(12.dp))
-    RenderPipelineSummary(renderState, appState.activeProject?.timeline?.durationMs ?: 0L)
+    RenderPipelineSummary(renderState, exportState, appState.activeProject?.timeline?.durationMs ?: 0L)
     Spacer(Modifier.weight(1f))
     Button(onClick = viewModel::startExport, enabled = renderState.status == RenderPipelineStatus.READY, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(999.dp)) { Text(if (appState.languageCode == LanguageCode.Vi) "Bat dau xuat" else "Start Export") }
   }
 }
 
 @Composable
-private fun RenderPipelineSummary(renderState: RenderPipelineState, durationMs: Long) {
+private fun RenderPipelineSummary(renderState: RenderPipelineState, exportState: RenderExportState, durationMs: Long) {
   val graph = renderState.graph
   val encoder = renderState.encoderConfig
   Card(colors = CardDefaults.cardColors(containerColor = StudioSurfaceHigh), shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Render pipeline readiness summary" }) {
@@ -564,10 +572,30 @@ private fun RenderPipelineSummary(renderState: RenderPipelineState, durationMs: 
       } else {
         Text("${durationMs.asTimecode()} · ${renderState.totalFrames} frames · ${encoder?.fps ?: 0} FPS", color = StudioTextMuted, fontSize = 13.sp)
         Text("Encoder ${encoder?.width ?: 0}x${encoder?.height ?: 0} · ${encoder?.videoMimeType ?: "pending"} · ${((encoder?.videoBitrate ?: 0) / 1_000_000f).let { "%.1f".format(it) }} Mbps", color = StudioTextMuted, fontSize = 13.sp)
+        exportState.codecStrategy?.let { codec ->
+          Text("Codec ${codec.selected.name.replace('_', ' ')}${codec.requiresFallbackReason?.let { reason -> " · $reason" } ?: ""}", color = StudioTextMuted, fontSize = 13.sp)
+        }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
           StatusPill("Layers ${graph?.layers?.size ?: 0}", StudioPrimary)
           StatusPill("Audio ${graph?.audio?.size ?: 0}", StudioSecondary)
           StatusPill("Transitions ${graph?.transitions?.size ?: 0}", StudioAccent)
+        }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          exportState.diagnostics.stages.ifEmpty {
+            listOf(
+              RenderStageStatus("Canvas", StageState.PENDING),
+              RenderStageStatus("Keyframes", StageState.PENDING),
+              RenderStageStatus("Stickers", StageState.PENDING),
+              RenderStageStatus("Filters", StageState.PENDING),
+              RenderStageStatus("Effects", StageState.PENDING),
+              RenderStageStatus("Audio Mix", StageState.PENDING),
+              RenderStageStatus("Audio Sync", StageState.PENDING),
+              RenderStageStatus("Codec", StageState.PENDING),
+              RenderStageStatus("Temp Files", StageState.PENDING),
+              RenderStageStatus("Save", StageState.PENDING),
+              RenderStageStatus("Share", StageState.PENDING),
+            )
+          }.forEach { stage -> StatusPill(stage.label, stageColor(stage.state)) }
         }
         graph?.layers?.take(5)?.let { nodes ->
           Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -588,19 +616,40 @@ private fun StatusPill(label: String, color: Color) {
   }
 }
 
+private fun stageColor(state: StageState): Color = when (state) {
+  StageState.PENDING -> StudioSurface
+  StageState.ACTIVE -> StudioSecondary
+  StageState.COMPLETE -> StudioPrimary
+  StageState.WARNING -> StudioAccent
+  StageState.FAILED -> StudioDanger
+  StageState.CANCELLED -> StudioTextMuted
+}
+
 @Composable
-private fun ExportProgressPanel(appState: AppState, viewModel: MainScreenViewModel, onBack: () -> Unit) {
-  val job = appState.exportJob ?: return
+private fun ExportProgressPanel(exportState: RenderExportState, viewModel: MainScreenViewModel, onBack: () -> Unit) {
   Card(colors = CardDefaults.cardColors(containerColor = StudioSurfaceHigh), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
     Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
       Text("Export progress", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-      Text(job.stageLabel, color = StudioTextMuted)
-      LinearProgressIndicator(progress = { job.progressPercent / 100f }, modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp).height(10.dp), color = StudioSecondary)
-      Text("${job.progressPercent}% · ${job.status}", color = if (job.status == ExportStatus.Failed) StudioDanger else StudioSecondary, fontWeight = FontWeight.Bold)
-      job.errorMessage?.let { Text(it, color = StudioDanger, fontSize = 13.sp) }
+      Text(exportState.progress.message ?: exportState.phase.name.replace('_', ' '), color = StudioTextMuted, textAlign = TextAlign.Center)
+      LinearProgressIndicator(progress = { (exportState.progress.percent / 100f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp).height(10.dp), color = StudioSecondary)
+      Text("${exportState.progress.percent.roundToInt()}% · ${exportState.status.name.lowercase().replaceFirstChar { it.uppercase() }}", color = if (exportState.status == RenderExportStatus.FAILED) StudioDanger else StudioSecondary, fontWeight = FontWeight.Bold)
+      Text("Frame ${exportState.progress.renderedFrames} of ${exportState.progress.totalFrames} · ${exportState.progress.currentTimeMs.asTimecode()}", color = StudioTextMuted, fontSize = 13.sp)
+      exportState.codecStrategy?.let { Text("${it.selected.name.replace('_', ' ')} · ${it.videoMimeType}", color = StudioTextMuted, fontSize = 13.sp) }
+      exportState.tempWorkspace?.let { Text(if (it.isCleaned) "Temp files cleaned" else "Temp workspace active", color = StudioTextMuted, fontSize = 13.sp) }
+      exportState.diagnostics.audioSync?.let { Text("Audio sync drift ${it.driftMs} ms", color = if (it.withinTolerance) StudioTextMuted else StudioAccent, fontSize = 13.sp) }
+      exportState.error?.let { Text(it.message, color = StudioDanger, fontSize = 13.sp) }
+      Column(Modifier.fillMaxWidth().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        exportState.diagnostics.stages.forEach { stage ->
+          Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text(stage.label, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            StatusPill(stage.state.name.lowercase().replaceFirstChar { it.uppercase() }, stageColor(stage.state))
+          }
+          stage.detail?.takeIf { it.isNotBlank() }?.let { Text(it, color = StudioTextMuted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth()) }
+        }
+      }
       Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (job.status == ExportStatus.Running) OutlinedButton(onClick = viewModel::cancelExport) { Text("Cancel", color = StudioDanger) }
-        if (job.status == ExportStatus.Cancelled || job.status == ExportStatus.Failed) Button(onClick = viewModel::startExport) { Text("Retry") }
+        if (exportState.canCancel) OutlinedButton(onClick = viewModel::cancelExport, modifier = Modifier.height(48.dp)) { Text("Cancel", color = StudioDanger) }
+        if (exportState.canRetry) Button(onClick = viewModel::retryExport, modifier = Modifier.height(48.dp)) { Text("Retry") }
         OutlinedButton(onClick = onBack) { Text("Return to editor") }
       }
     }
@@ -608,19 +657,20 @@ private fun ExportProgressPanel(appState: AppState, viewModel: MainScreenViewMod
 }
 
 @Composable
-private fun ExportSuccessPanel(appState: AppState, onBack: () -> Unit, onDashboard: () -> Unit) {
-  val job = appState.exportJob ?: return
+private fun ExportSuccessPanel(exportState: RenderExportState, onBack: () -> Unit, onDashboard: () -> Unit, viewModel: MainScreenViewModel) {
+  val output = exportState.output ?: return
   Card(colors = CardDefaults.cardColors(containerColor = StudioSurfaceHigh), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
     Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
       Box(Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(20.dp)).background(Brush.linearGradient(listOf(StudioPrimary.copy(alpha = 0.45f), StudioSecondary.copy(alpha = 0.22f)))), contentAlignment = Alignment.Center) {
-        Text("Final video preview\n${job.outputUri.orEmpty()}", textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
+        Text("Saved video\n${output.displayName}", textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
       }
       Spacer(Modifier.height(14.dp))
       Text("Export complete", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-      Text("${job.settings.format} · ${job.settings.resolution.label} · ${job.settings.fps} FPS · ${job.settings.qualityPreset.label}", color = StudioTextMuted)
+      Text("${output.width}x${output.height} · ${output.fps} FPS · ${output.durationMs.asTimecode()} · ${output.sizeBytes.asSizeLabel()}", color = StudioTextMuted, textAlign = TextAlign.Center)
+      exportState.codecStrategy?.let { Text("${it.selected.name.replace('_', ' ')} save path ready for sharing", color = StudioTextMuted, fontSize = 13.sp, textAlign = TextAlign.Center) }
       Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = {}) { Text("Save to gallery") }
-        Button(onClick = {}) { Text("Share") }
+        Button(onClick = viewModel::requestShare, modifier = Modifier.height(48.dp)) { Text("Share") }
+        Button(onClick = viewModel::clearExportResult, modifier = Modifier.height(48.dp)) { Text("New Export") }
         OutlinedButton(onClick = onBack) { Text("Return to editor") }
         OutlinedButton(onClick = onDashboard) { Text("Dashboard") }
       }

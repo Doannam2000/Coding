@@ -2,12 +2,12 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 07:35 UTC
+- Last updated: 2026-04-25 07:42 UTC
 - App: Clipy Studio
 - Slug: clipy
 - Tagline: A premium offline-friendly Android video editor for fast, polished social videos.
 - Target users: General users
-- Design direction: Incremental render-pipeline design update for the existing dark Clipy Studio editor shell. Keep the timeline-first workspace, compact status pills, thumbnail placeholders, guide overlays, and subdued technical visual language. Add export/render states as non-disruptive feedback surfaces: a render readiness summary, encoder settings confirmation, frame scheduling progress, layer-stack diagnostics, and per-layer render badges without redesigning core editing screens.
+- Design direction: Incremental export experience updates for Render Pipeline Part 2: keep the existing Clipy Studio visual language stable while expanding the export flow from readiness diagnostics into an active, trustworthy render session. The UI should communicate exact preview-matching render behavior, background processing, progress, cancellation, retry, output save, and share states without introducing a new screen family or unrelated redesign.
 - Core constraints: android only, MVP first, offline-friendly where possible
 Design style must align with: modern minimal premium
 Typography should align with: clean geometric sans
@@ -357,6 +357,52 @@ Function: render overlays above main layer with transform and opacity.
 
 10. TEXT RENDER:
 Function: draw text with style, animation, and timing.
+Additional follow-up requirement: RENDER PIPELINE PART 2:
+
+11. STICKER RENDER:
+Function: render sticker layers including animated support if available.
+
+12. FILTER RENDER:
+Function: apply filters and adjustments per frame.
+
+13. EFFECT RENDER:
+Function: apply timeline-based visual effects only during active duration.
+
+14. KEYFRAME RENDER:
+Function: interpolate animated properties per frame.
+
+15. CANVAS RENDER:
+Function: apply aspect ratio, background color, and blur.
+
+16. AUDIO MIXING:
+Function: mix all audio tracks with volume, fade, and sync.
+
+17. AUDIO SYNC:
+Function: align audio playback with timeline and video frames.
+
+18. CODEC STRATEGY:
+Function: use MediaCodec primarily, fallback to FFmpeg when needed.
+
+19. TEMP FILE MANAGEMENT:
+Function: handle temp files safely and clean up after export.
+
+20. PROGRESS + CANCEL:
+Function: emit progress states and support cancel with safe cleanup.
+
+21. ERROR HANDLING:
+Function: detect and report render errors with retry support.
+
+22. OUTPUT SAVE:
+Function: save final video via MediaStore and expose URI.
+
+23. SHARE:
+Function: share output via system intent.
+
+24. PERFORMANCE:
+Function: run in background, avoid UI blocking, prevent OOM.
+
+25. STRICT:
+Function: exported video must match preview exactly, no fake rendering.
 
 ### Core Features
 - Splash -> onboarding/intro -> main app flow
@@ -382,12 +428,12 @@ Function: draw text with style, animation, and timing.
 - Performance foundations including lazy thumbnail loading, background rendering/export, media proxy strategies for large files, memory-aware preview, and responsive Compose UI
 
 ### Main Screens
-- Export Settings Entry Point
-- Render Pipeline Status Surface
-- Render Graph Debug Coverage
+- Export Progress Surface
+- Export Completion Actions
+- Render Diagnostics Debug Surface
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Continue using the existing SharedPreferences-backed DataRepository for ProjectTimeline persistence. Add render/export planning as deterministic Kotlin engine code, likely in a new RenderPipelineEngine or TimelineRenderEngine file under the data/domain layer, with MainScreenViewModel collecting current EditorUiState.timeline and export options. Compose should only display export settings and render preparation status, never decode video frames or build frame data directly. EncoderConfig mapping, render graph construction, frame scheduling, active layer resolution, transition frame planning, and text/overlay frame planning should be pure functions with unit tests. Platform MediaCodec, MediaExtractor, bitmap decoding, and final file writing can be added behind the same graph and frame plan boundary in a later render pipeline part.
+- storage: Continue using the existing SharedPreferences-backed DataRepository only for ProjectTimeline persistence. Add executable export orchestration as a separate render/export layer that consumes RenderPipelineState, RenderGraph, FrameRenderPlan, and EncoderConfig without mutating persisted timeline state. MainScreenViewModel should own RenderExportState and one-shot share events, while long-running work runs in ViewModel scope or an injected export executor on background dispatchers. Android MediaCodec, MediaMuxer, MediaExtractor, MediaStore, and Intent sharing should be isolated behind interfaces so pure render planning, frame composition planning, audio mix planning, progress state, cancellation, temp cleanup, and error classification remain unit-testable. Compose should only display state and dispatch intents; it must not decode, composite, encode, mix audio, access temp files directly, or perform bitmap-heavy work.
 <!-- AUTO-GENERATED:CORE_END -->
