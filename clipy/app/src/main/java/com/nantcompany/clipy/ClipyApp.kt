@@ -1145,6 +1145,8 @@ private fun EditorScreen(
   val context = LocalContext.current
   val draft = state.draft
   val isVideoSource = draft.sourceMediaType.equals("video", ignoreCase = true)
+  val hasSupportedSourceUri = isSupportedMediaSourceUri(draft.sourceUri)
+  val isUsableVideoSource = isVideoSource && hasSupportedSourceUri
   val player = remember { ExoPlayer.Builder(context).build() }
   val timeline = remember(draft) { draft.timelineSnapshot() }
   var selectedControlTab by rememberSaveable { mutableStateOf(EditorControlTab.Frame) }
@@ -1272,8 +1274,8 @@ private fun EditorScreen(
     )
   }
 
-  LaunchedEffect(draft.sourceUri, isVideoSource) {
-    if (draft.sourceUri.isBlank() || !isVideoSource) {
+  LaunchedEffect(draft.sourceUri, isUsableVideoSource) {
+    if (draft.sourceUri.isBlank() || !isUsableVideoSource) {
       player.stop()
       player.clearMediaItems()
     } else {
@@ -1289,9 +1291,9 @@ private fun EditorScreen(
     }
   }
 
-  LaunchedEffect(draft.playheadMs, draft.sourceUri, isVideoSource) {
+  LaunchedEffect(draft.playheadMs, draft.sourceUri, isUsableVideoSource) {
     if (
-      isVideoSource &&
+      isUsableVideoSource &&
       draft.sourceUri.isNotBlank() &&
       !timelineInteracting &&
       abs(player.currentPosition - draft.playheadMs) > timelineFrameStepMs(draft.sourceDurationMs)
@@ -1300,10 +1302,10 @@ private fun EditorScreen(
     }
   }
 
-  LaunchedEffect(player, draft.trimStartMs, draft.trimEndMs, draft.sourceUri, isVideoSource) {
+  LaunchedEffect(player, draft.trimStartMs, draft.trimEndMs, draft.sourceUri, isUsableVideoSource) {
     while (isActive) {
       delay(66)
-      if (draft.sourceUri.isBlank() || !isVideoSource) {
+      if (draft.sourceUri.isBlank() || !isUsableVideoSource) {
         isPlaying = false
         continue
       }
@@ -1384,6 +1386,8 @@ private fun EditorScreen(
           }
           if (draft.sourceUri.isBlank()) {
             Text(stringResource(R.string.editor_video_required), color = MaterialTheme.colorScheme.error)
+          } else if (!hasSupportedSourceUri) {
+            Text(stringResource(R.string.editor_video_required), color = MaterialTheme.colorScheme.error)
           } else if (!isVideoSource) {
             Text(stringResource(R.string.editor_image_not_supported_hint), color = MaterialTheme.colorScheme.error)
           }
@@ -1391,7 +1395,7 @@ private fun EditorScreen(
             onClick = onExport,
             modifier = Modifier.fillMaxWidth().height(56.dp),
             colors = ButtonDefaults.buttonColors(containerColor = ClipyPrimary),
-            enabled = draft.sourceUri.isNotBlank() && isVideoSource,
+            enabled = draft.sourceUri.isNotBlank() && isUsableVideoSource,
           ) {
             Text(stringResource(if (draft.exportFormat == ExportFormat.Gif) R.string.editor_export_gif else R.string.editor_export_mp4))
           }
@@ -1492,6 +1496,21 @@ private fun EditorScreen(
                     Text(draft.displayName, color = ClipyOnDark, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
                     Text(
                       stringResource(R.string.editor_image_not_supported_hint),
+                      color = ClipyMuted,
+                      style = MaterialTheme.typography.bodyMedium,
+                      textAlign = TextAlign.Center,
+                    )
+                  }
+                } else if (!hasSupportedSourceUri) {
+                  Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                  ) {
+                    Icon(Icons.Rounded.FitScreen, contentDescription = null, modifier = Modifier.size(52.dp), tint = ClipyAccent)
+                    Text(draft.displayName, color = ClipyOnDark, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+                    Text(
+                      stringResource(R.string.editor_video_required),
                       color = ClipyMuted,
                       style = MaterialTheme.typography.bodyMedium,
                       textAlign = TextAlign.Center,
@@ -1767,7 +1786,7 @@ private fun EditorScreen(
                     )
                     TimelineEditor(
                       sourceUri = draft.sourceUri,
-                      canLoadVideoFrames = shouldLoadVideoTimelineFrames(draft.sourceUri, isVideoSource),
+                      canLoadVideoFrames = shouldLoadVideoTimelineFrames(draft.sourceUri, isUsableVideoSource),
                       timeline = timeline,
                       selectedTrack = selectedTrack,
                       selectedTool = selectedTimelineTool,

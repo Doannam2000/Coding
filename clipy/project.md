@@ -2,7 +2,7 @@
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 01:03 UTC
+- Last updated: 2026-04-25 01:47 UTC
 - App: Clipy
 - Slug: clipy
 - Tagline: Fast social-ready video edits and GIF exports in seconds.
@@ -678,6 +678,7 @@ Expected result:
 - Work on Android 10, 11, 12, 13, 14, 15+
 Additional follow-up requirement: [fixbug] crash when select video/image and continue
 Additional follow-up requirement: [fixbug] crash when select video/image and continue
+Additional follow-up requirement: [fixbug] Crash when select video/image
 Additional follow-up requirement: [fixbug] Crash when select video/image
 Additional follow-up requirement: [fixbug] Crash when select video/image
 
