@@ -1055,9 +1055,10 @@ object TimelineEngine {
     return timeline.tracks.flatMap { track ->
       track.clips.filter { it.clipType in visibleTypes && it.startMs < visibleRange.endTimeMs && it.startMs + it.durationMs > visibleRange.startTimeMs }.mapNotNull { clip ->
         val sourceTime = (visibleRange.startTimeMs - clip.startMs).coerceIn(0L, clip.durationMs) + clip.sourceInMs
-        val key = listOf(clip.id, clip.assetId.orEmpty(), sourceTime / 500L, cellWidthPx, heightPx, timeline.version).joinToString(":")
+        val mediaRef = clip.mediaUri ?: clip.assetId.orEmpty()
+        val key = listOf(clip.id, mediaRef, sourceTime / 500L, cellWidthPx, heightPx, timeline.version).joinToString(":")
         val state = cached[key]
-        if (state?.status == ThumbnailStatus.Ready || state?.status == ThumbnailStatus.Loading) null else TimelineThumbnailRequest(clip.id, clip.assetId ?: "local://${clip.clipType.name.lowercase()}/${clip.id}", clip.startMs, clip.durationMs, sourceTime, cellWidthPx, heightPx, key)
+        if (state?.status == ThumbnailStatus.Ready || state?.status == ThumbnailStatus.Loading) null else TimelineThumbnailRequest(clip.id, clip.mediaUri ?: "local://${clip.clipType.name.lowercase()}/${clip.id}", clip.startMs, clip.durationMs, sourceTime, cellWidthPx, heightPx, key)
       }
     }
   }
@@ -1314,7 +1315,7 @@ object TimelineEngine {
     ProjectTimelineClip(
       id = clip.id,
       type = clip.clipType,
-      mediaUri = clip.assetId,
+      mediaUri = clip.mediaUri,
       startTimeMs = clip.startMs,
       durationMs = clip.durationMs,
       trimStartMs = clip.sourceInMs,

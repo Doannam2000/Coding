@@ -24,6 +24,7 @@ Muc dich: ghi lai cac chuc nang va thay doi quan trong cua Android Telegram Agen
 - `fixed`: Live CLI log khong con cat JSON event qua som truoc khi format, nen Telegram khong con hien raw `tool_use`/`tool_result` metadata.
 - `changed`: Live CLI log cho `codex`/`opencode` nay chi tom tat phan can thiet (tool, status, command, output/error) va bo qua noise nhu `sessionID`, `timestamp`, `callID`, reasoning.
 - `changed`: Live CLI log gui gan het gioi han 4096 ky tu cua Telegram thay vi tu cat ngan quanh 320 ky tu.
+- `changed`: `/setrepo` va `/pushgit` nay uu tien repo root hien co cua workspace; voi setup hien tai co the set remote va push toan bo `D:\Code`.
 
 ### 2026-04-22
 

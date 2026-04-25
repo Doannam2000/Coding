@@ -346,6 +346,16 @@ def run_git(workspace: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *args], cwd=workspace, capture_output=True, text=True, check=False)
 
 
+def git_repo_root(workspace: Path) -> Path | None:
+    result = run_git(workspace, "rev-parse", "--show-toplevel")
+    if result.returncode != 0:
+        return None
+    root_text = (result.stdout or "").strip()
+    if not root_text:
+        return None
+    return Path(root_text)
+
+
 def human_app_name(text: str) -> str:
     words = re.sub(r"[^a-zA-Z0-9]+", " ", text).split()
     if not words:
@@ -1229,6 +1239,13 @@ class JobRunner:
             "summary": "Initialized git repository for generated Android project",
         }
 
+    def _resolve_git_target_root(self, job: dict[str, Any], workspace: Path) -> Path:
+        repo_root = git_repo_root(workspace)
+        if repo_root is not None:
+            return repo_root
+        self._ensure_workspace_git(job, workspace)
+        return workspace
+
     def _commit_workspace_changes(
         self,
         job: dict[str, Any],
@@ -1959,19 +1976,19 @@ class CommandRouter:
 
         workspace = Path(job["workspace_path"])
         try:
-            self.worker._ensure_workspace_git(job, workspace)
-            existing = run_git(workspace, "remote", "get-url", "origin")
+            git_root = self.worker._resolve_git_target_root(job, workspace)
+            existing = run_git(git_root, "remote", "get-url", "origin")
             if existing.returncode == 0:
-                result = run_git(workspace, "remote", "set-url", "origin", repo_url)
+                result = run_git(git_root, "remote", "set-url", "origin", repo_url)
             else:
-                result = run_git(workspace, "remote", "add", "origin", repo_url)
+                result = run_git(git_root, "remote", "add", "origin", repo_url)
             if result.returncode != 0:
                 raise RuntimeError((result.stderr or result.stdout).strip() or "git remote update failed")
         except Exception as exc:  # noqa: BLE001
             self.telegram.send_message(chat_id, f"setrepo failed for job #{job['id']}\n{exc}")
             return
 
-        self.telegram.send_message(chat_id, f"Repo linked for job #{job['id']}\norigin: `{repo_url}`")
+        self.telegram.send_message(chat_id, f"Repo linked for job #{job['id']}\nroot: `{git_root}`\norigin: `{repo_url}`")
 
     def _push_git(self, chat_id: int, text: str) -> None:
         parts = text.split(" ", 1)
@@ -2002,48 +2019,40 @@ class CommandRouter:
 
         workspace = Path(job["workspace_path"])
         try:
-            self.worker._ensure_workspace_git(job, workspace)
-            remote = run_git(workspace, "remote", "get-url", "origin")
+            git_root = self.worker._resolve_git_target_root(job, workspace)
+            remote = run_git(git_root, "remote", "get-url", "origin")
             if remote.returncode != 0:
                 self.telegram.send_message(chat_id, "No remote origin found. Run /setrepo <job_id>|<repo_url> first.")
                 return
 
-            repo_root = run_git(workspace, "rev-parse", "--show-toplevel")
-            if repo_root.returncode != 0:
-                raise RuntimeError((repo_root.stderr or repo_root.stdout).strip() or "git repo root check failed")
-            resolved_root = Path((repo_root.stdout or "").strip())
-            if resolved_root.resolve() != workspace.resolve():
-                raise RuntimeError(
-                    f"Workspace {workspace} is using parent repo {resolved_root}. Initialize a dedicated repo in the workspace before /pushgit."
-                )
-            status = run_git(workspace, "status", "--short")
+            status = run_git(git_root, "status", "--short")
             if status.returncode != 0:
                 raise RuntimeError((status.stderr or status.stdout).strip() or "git status failed")
             changed_lines = [line.strip() for line in (status.stdout or "").splitlines() if line.strip()]
             if not changed_lines:
-                self.telegram.send_message(chat_id, f"No local changes to commit for job #{job['id']}.")
+                self.telegram.send_message(chat_id, f"No local changes to commit for job #{job['id']}\nroot: `{git_root}`")
                 return
 
-            add_result = run_git(workspace, "add", ".")
+            add_result = run_git(git_root, "add", ".")
             if add_result.returncode != 0:
                 raise RuntimeError((add_result.stderr or add_result.stdout).strip() or "git add failed")
 
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             message = f"{timestamp} | {summary}"
-            commit_result = run_git(workspace, "commit", "-m", message)
+            commit_result = run_git(git_root, "commit", "-m", message)
             if commit_result.returncode != 0:
                 raise RuntimeError((commit_result.stderr or commit_result.stdout).strip() or "git commit failed")
 
-            branch_result = run_git(workspace, "branch", "--show-current")
+            branch_result = run_git(git_root, "branch", "--show-current")
             if branch_result.returncode != 0:
                 raise RuntimeError((branch_result.stderr or branch_result.stdout).strip() or "git branch failed")
             branch = (branch_result.stdout or "").strip() or f"job-{job['id']}"
 
-            push_result = run_git(workspace, "push", "-u", "origin", branch)
+            push_result = run_git(git_root, "push", "-u", "origin", branch)
             if push_result.returncode != 0:
                 raise RuntimeError((push_result.stderr or push_result.stdout).strip() or "git push failed")
 
-            head_result = run_git(workspace, "rev-parse", "HEAD")
+            head_result = run_git(git_root, "rev-parse", "HEAD")
             commit_hash = (head_result.stdout or "").strip() if head_result.returncode == 0 else ""
         except Exception as exc:  # noqa: BLE001
             self.telegram.send_message(chat_id, f"pushgit failed for job #{job['id']}\n{exc}")
@@ -2052,6 +2061,7 @@ class CommandRouter:
         self.telegram.send_message(
             chat_id,
             f"pushgit done for job #{job['id']}\n"
+            f"Root: `{git_root}`\n"
             f"Branch: `{branch}`\n"
             f"Commit: `{commit_hash or 'created'}`\n"
             f"Message: `{message}`",

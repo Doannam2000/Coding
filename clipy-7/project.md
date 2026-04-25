@@ -13,7 +13,7 @@ New editor-facing code should prefer stable models under `editor.model` (`Projec
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 16:31 UTC
+- Last updated: 2026-04-25 16:49 UTC
 - App: Clipy Studio
 - Slug: clipy
 - Tagline: A premium offline-friendly Android video editor for fast, polished social videos.
@@ -542,6 +542,28 @@ Additional follow-up requirement: PROJECT ARCHITECTURE FINALIZATION: Split app i
 Additional follow-up requirement: QUALITY + BUGFIX PASS: Review the entire app and fix all broken flows: media import, editor open, timeline sync, preview playback, add audio/text/sticker, trim/split/delete, undo/redo, autosave, export, save/share. Remove all placeholder buttons, fake logic, unused code, broken navigation, UI overlap, clipped text, and laggy gestures.
 Additional follow-up requirement: TESTING SCENARIOS: Add manual and automated test cases for: image-only project, video-only project, mixed image/video, add music, extract audio, add text, add sticker, apply filter/effect, transition, trim, split, reorder, undo/redo, reopen draft, export 720p/1080p, cancel export, share video, permission denied, missing file, low storage.
 Additional follow-up requirement: RELEASE HARDENING: Prepare app for production release. Optimize memory, clear temp cache, handle Android permissions correctly, support Android 13+ media permissions, fix crashes, add friendly error messages, add app icon/name, privacy-safe storage behavior, ProGuard/R8 safe rules if needed, and ensure release build compiles without lint/manifest errors.
+Additional follow-up requirement: [fixbug] FIX EDITOR SCREEN BROKEN FEATURES:
+
+1. Preview must show selected image/video correctly, no blank preview.
+2. Pass selected media URIs from MediaPicker to EditorScreen correctly.
+3. Create real timeline clips from imported images/videos.
+4. Timeline must show real thumbnails, not empty blocks.
+5. Video preview must use Media3/ExoPlayer with play/pause/seek.
+6. Image preview must display with correct duration.
+7. Timeline scroll must sync currentTimeMs and preview frame.
+8. Play/Pause must update preview and timeline position.
+9. Tap clip must select it and show highlight border.
+10. Selected clip must show edit panel.
+11. Trim handles must work and update clip duration.
+12. Split button must cut clip at playhead.
+13. Delete button must remove selected clip.
+14. Duplicate button must copy selected clip.
+15. Drag/long press must reorder or move clip.
+16. Image clips default to 3 seconds and can be edited.
+17. Video clips preserve original duration and support trim/split.
+18. Add empty/error states: no media, invalid URI, load failed.
+19. Save editor state after every edit and support undo/redo.
+20. Final test: import media → preview works → timeline thumbnails show → select/trim/split/delete/duplicate/play all work.
 
 ### Core Features
 - Splash -> onboarding/intro -> main app flow

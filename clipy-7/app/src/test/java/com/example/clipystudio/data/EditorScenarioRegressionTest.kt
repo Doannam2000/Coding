@@ -22,7 +22,7 @@ class EditorScenarioRegressionTest {
 
     assertEquals(1, imageClips.size)
     assertEquals(ClipType.Image, imageClips.first().clipType)
-    assertEquals(4_000L, afterImage.durationMs)
+    assertEquals(3_000L, afterImage.durationMs)
     assertTrue(afterImage.durationMs > 0L)
 
     repository.addImportedAsset(MediaType.Image, uri = "", displayName = "Denied", sizeBytes = 1_000)
@@ -73,7 +73,7 @@ class EditorScenarioRegressionTest {
     var timeline = repository.appState.first().activeProject!!.timeline
     val visualClips = timeline.track(TrackType.Video).clips
     assertEquals(listOf(ClipType.Image, ClipType.Video), visualClips.map { it.clipType })
-    assertEquals(12_000L, timeline.durationMs)
+    assertEquals(11_000L, timeline.durationMs)
 
     repository.selectClip(visualClips.last().id)
     repository.reorderSelectedVideoClip(0)

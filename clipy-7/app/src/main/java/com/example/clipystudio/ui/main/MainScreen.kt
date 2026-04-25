@@ -2,6 +2,9 @@ package com.example.clipystudio.ui.main
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.core.content.FileProvider
@@ -44,6 +47,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.Image
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -62,10 +66,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -76,6 +82,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -91,12 +98,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
+import coil.compose.AsyncImage
 import com.example.clipystudio.data.AppState
 import com.example.clipystudio.data.AudioSource
 import com.example.clipystudio.data.CanvasBackground
@@ -236,6 +249,10 @@ private data class ImportPermissionNotice(
 )
 
 private data class IntroPage(val title: String, val body: String, val color: Color)
+
+private data class ThumbnailFrame(val clipId: String, val bitmap: Bitmap?)
+
+private data class UriMetadata(val displayName: String?, val sizeBytes: Long?, val mimeType: String?, val durationMs: Long?)
 
 @Composable
 fun MainScreen(
@@ -522,7 +539,7 @@ private fun ProjectCard(project: Project, onOpen: (String) -> Unit, onRename: (S
 }
 
 @Composable
-private fun ImportScreen(appState: AppState, copy: Copy, snackbarHostState: SnackbarHostState, onBack: () -> Unit, onAddAsset: (MediaType, String?, String?, Long?) -> Unit, onRemove: (String) -> Unit, onAddToProject: () -> Unit) {
+private fun ImportScreen(appState: AppState, copy: Copy, snackbarHostState: SnackbarHostState, onBack: () -> Unit, onAddAsset: (MediaType, String?, String?, Long?, Long?) -> Unit, onRemove: (String) -> Unit, onAddToProject: () -> Unit) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
   var pendingPicker by remember { mutableStateOf<MediaType?>(null) }
@@ -551,7 +568,7 @@ private fun ImportScreen(appState: AppState, copy: Copy, snackbarHostState: Snac
       } else if ((metadata.sizeBytes ?: 0L) > largeFileLimitBytes) {
         scope.launch { snackbarHostState.showSnackbar(importMessage("This file is too large to import safely in this MVP build.", "Tep qua lon de nhap an toan trong ban MVP.")) }
       } else {
-        onAddAsset(if (metadata.mimeType?.startsWith("image") == true) MediaType.Image else MediaType.Video, uri.toString(), metadata.displayName, metadata.sizeBytes)
+        onAddAsset(if (metadata.mimeType?.startsWith("image") == true) MediaType.Image else MediaType.Video, uri.toString(), metadata.displayName, metadata.sizeBytes, metadata.durationMs)
       }
     }
   }
@@ -575,7 +592,7 @@ private fun ImportScreen(appState: AppState, copy: Copy, snackbarHostState: Snac
       } else if ((metadata.sizeBytes ?: 0L) > largeFileLimitBytes) {
         scope.launch { snackbarHostState.showSnackbar(importMessage("This audio file is too large to import safely.", "Tep am thanh qua lon de nhap an toan.")) }
       } else {
-        onAddAsset(MediaType.Audio, uri.toString(), metadata.displayName, metadata.sizeBytes)
+        onAddAsset(MediaType.Audio, uri.toString(), metadata.displayName, metadata.sizeBytes, metadata.durationMs)
       }
     }
   }
@@ -957,6 +974,7 @@ private fun PreviewCanvas(ratio: CanvasRatio, timeline: Timeline, onSelect: (Str
   val activeIds = buildSet { composition.video?.let { add(it.clipId) }; addAll(composition.audio.map { it.clipId }); addAll(composition.text.map { it.clipId }); addAll(composition.stickers.map { it.clipId }); addAll(composition.overlays.map { it.clipId }); addAll(composition.effects.map { it.clipId }) }
   val activeClips = timeline.tracks.flatMap { it.clips }.filter { it.id in activeIds }.sortedBy { it.zIndex }
   val selectedClip = activeClips.firstOrNull { it.id == timeline.selectedClipId }
+  val primaryVisualClip = composition.video?.let { active -> timeline.tracks.flatMap { track -> track.clips }.firstOrNull { it.id == active.clipId } }
   var feedback by remember { mutableStateOf(PreviewGestureFeedback()) }
   val haptic = LocalHapticFeedback.current
   val density = LocalDensity.current
@@ -1021,6 +1039,7 @@ private fun PreviewCanvas(ratio: CanvasRatio, timeline: Timeline, onSelect: (Str
           )
         }
       }) {
+        PreviewMediaSurface(primaryVisualClip, timeline.isPlaying, timeline.playheadMs, onSeek)
         Canvas(Modifier.fillMaxSize()) {
           drawRect(Color.White.copy(alpha = 0.06f), style = Stroke(width = 2.dp.toPx()))
           drawCircle(StudioSecondary.copy(alpha = glow), radius = 18.dp.toPx(), center = center)
@@ -1043,7 +1062,7 @@ private fun PreviewCanvas(ratio: CanvasRatio, timeline: Timeline, onSelect: (Str
           Text("${transition.type.label} transition", modifier = Modifier.align(Alignment.Center).clip(RoundedCornerShape(999.dp)).background(StudioBackground.copy(alpha = 0.72f)).padding(horizontal = 12.dp, vertical = 8.dp), color = StudioSecondary, fontWeight = FontWeight.Bold)
         }
         Text("Preview ${timeline.playheadMs.asTimecode()}", modifier = Modifier.align(Alignment.TopCenter).padding(10.dp), fontWeight = FontWeight.Bold)
-        Text("Tap overlays, drag/pinch/rotate selected layer", modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp), color = StudioTextMuted, fontSize = 12.sp)
+        Text(if (primaryVisualClip == null) "Import media to preview the current frame" else "Tap clips, drag trim handles, and keep playhead synced", modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp), color = StudioTextMuted, fontSize = 12.sp)
       }
     }
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1069,6 +1088,87 @@ private fun PreviewLayerChip(clip: TimelineClip, selected: Boolean, previewWidth
 }
 
 @Composable
+private fun PreviewMediaSurface(clip: TimelineClip?, isPlaying: Boolean, playheadMs: Long, onSeek: (Long) -> Unit) {
+  when {
+    clip == null -> {
+      Box(Modifier.fillMaxSize().padding(18.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+        Text("No media available", color = StudioTextMuted, fontWeight = FontWeight.Medium)
+      }
+    }
+    clip.clipType == ClipType.Image || clip.clipType == ClipType.Overlay -> {
+      val model = clip.mediaUri ?: clip.assetId
+      if (model.isNullOrBlank()) {
+        Box(Modifier.fillMaxSize().padding(18.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+          Text("Image unavailable", color = StudioDanger, fontWeight = FontWeight.Medium)
+        }
+      } else {
+        AsyncImage(
+          model = model,
+          contentDescription = clip.title,
+          modifier = Modifier.fillMaxSize(),
+        )
+      }
+    }
+    clip.clipType == ClipType.Video -> VideoPreviewPlayer(clip = clip, isPlaying = isPlaying, playheadMs = playheadMs, onSeek = onSeek)
+    else -> {
+      Box(Modifier.fillMaxSize().padding(18.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+        Text(clip.title, color = StudioTextMuted, fontWeight = FontWeight.Medium)
+      }
+    }
+  }
+}
+
+@Composable
+private fun VideoPreviewPlayer(clip: TimelineClip, isPlaying: Boolean, playheadMs: Long, onSeek: (Long) -> Unit) {
+  val context = LocalContext.current
+  val mediaUri = clip.mediaUri
+  if (mediaUri.isNullOrBlank()) {
+    Box(Modifier.fillMaxSize().padding(18.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+      Text("Video unavailable", color = StudioDanger, fontWeight = FontWeight.Medium)
+    }
+    return
+  }
+  val player = remember(mediaUri) {
+    ExoPlayer.Builder(context).build().apply {
+      repeatMode = Player.REPEAT_MODE_OFF
+      setMediaItem(MediaItem.fromUri(mediaUri))
+      prepare()
+    }
+  }
+  DisposableEffect(player) {
+    onDispose { player.release() }
+  }
+  LaunchedEffect(isPlaying, mediaUri) {
+    player.playWhenReady = isPlaying
+    if (!isPlaying) player.pause()
+  }
+  LaunchedEffect(playheadMs, mediaUri) {
+    val targetPosition = (clip.sourceInMs + (playheadMs - clip.startMs).coerceAtLeast(0L) * clip.videoProperties.speed).toLong().coerceAtLeast(0L)
+    if (kotlin.math.abs(player.currentPosition - targetPosition) > 250L) {
+      player.seekTo(targetPosition)
+    }
+  }
+  DisposableEffect(player, onSeek) {
+    val listener = object : Player.Listener {
+      override fun onIsPlayingChanged(playing: Boolean) {
+        if (!playing && isPlaying) onSeek(playheadMs)
+      }
+    }
+    player.addListener(listener)
+    onDispose { player.removeListener(listener) }
+  }
+  AndroidView(
+    factory = {
+      PlayerView(it).apply {
+        useController = false
+        this.player = player
+      }
+    },
+    modifier = Modifier.fillMaxSize(),
+  )
+}
+
+@Composable
 private fun PlaybackControls(timeline: Timeline, onPlay: () -> Unit, onSeek: (Long) -> Unit) {
   val hasContent = timeline.durationMs > 0L
   Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
@@ -1091,10 +1191,12 @@ private fun TimelineView(timeline: Timeline, onSelect: (String) -> Unit, onSeek:
   val activeIds = remember(activeComposition) { buildSet { activeComposition.video?.let { add(it.clipId) }; addAll(activeComposition.audio.map { it.clipId }); addAll(activeComposition.text.map { it.clipId }); addAll(activeComposition.stickers.map { it.clipId }); addAll(activeComposition.overlays.map { it.clipId }); addAll(activeComposition.effects.map { it.clipId }) } }
   var viewportWidthPx by remember { mutableStateOf(TimelineEngine.DefaultViewportWidthPx) }
   val scope = rememberCoroutineScope()
-  val thumbnailCache = remember { TimelineThumbnailCache(maxEntries = 72) }
+  val context = LocalContext.current
   val visibleRange = remember(timeline.scrollOffsetPx, timeline.zoomLevel, timeline.version) { TimelineEngine.visibleRange(timeline, viewportWidthPx) }
-  val thumbnailRequests = remember(visibleRange, timeline.version) { TimelineEngine.planThumbnailRequests(timeline, visibleRange, thumbnailCache.snapshot()) }
-  LaunchedEffect(thumbnailRequests) { thumbnailRequests.forEach { thumbnailCache.put(com.example.clipystudio.data.TimelineThumbnailState(it.clipId, it.cacheKey, com.example.clipystudio.data.ThumbnailStatus.Ready, System.currentTimeMillis(), System.currentTimeMillis())) } }
+  val thumbnailRequests = remember(visibleRange, timeline.version) { TimelineEngine.planThumbnailRequests(timeline, visibleRange) }
+  val thumbnailFrames by produceState(initialValue = emptyMap<String, Bitmap?>(), thumbnailRequests, context) {
+    value = thumbnailRequests.associate { request -> request.clipId to context.loadThumbnailBitmap(request.mediaUri, request.thumbnailTimeMs, request.widthPx, request.heightPx) }
+  }
   var gestureOverlay by remember { mutableStateOf(TimelineGestureOverlayState()) }
   var activePreview by remember { mutableStateOf<TimelineClipPreviewState?>(null) }
   var isEditGestureActive by remember { mutableStateOf(false) }
@@ -1236,7 +1338,7 @@ private fun TimelineView(timeline: Timeline, onSelect: (String) -> Unit, onSeek:
         },
       )
       timeline.tracks.sortedBy { it.orderIndex }.forEach { track ->
-        EngineTrackLane(projectTimeline, timeline, track, contentWidth, viewportWidthPx, activeIds, touchSlopPx, onSelect, onTrim, { delta ->
+        EngineTrackLane(projectTimeline, timeline, track, contentWidth, viewportWidthPx, activeIds, touchSlopPx, thumbnailFrames, onSelect, onTrim, { delta ->
           val lock = TimelineEngine.resolvePlaybackEditLock(timeline.isPlaying, TimelineGestureMode.DRAGGING_CLIP)
           if (lock.shouldPauseBeforeEdit) onSeek(timeline.playheadMs)
           if (!lock.shouldBlockEditGesture) onMove(delta)
@@ -1274,7 +1376,7 @@ private fun TimelineView(timeline: Timeline, onSelect: (String) -> Unit, onSeek:
     AutoScrollEdgeMask(gestureOverlay.autoScrollDirection)
     gestureOverlay.snapLabel?.let { Text(it, modifier = Modifier.align(Alignment.TopCenter).padding(top = 30.dp).clip(RoundedCornerShape(999.dp)).background(StudioSurface.copy(alpha = 0.90f)).padding(horizontal = 9.dp, vertical = 3.dp), color = StudioAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
     TimelineGestureReadout(gestureTimecode ?: timeline.playheadMs.asTimecode(), gestureOverlay.zoomLabel, gestureOverlay.snapLabel, gestureOverlay.resistanceFraction)
-    Text("${(timeline.zoomLevel * 100).roundToInt()}% · ${thumbnailRequests.size} visible thumbs · Saved v${timeline.version}", modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).clip(RoundedCornerShape(999.dp)).background(StudioSurface.copy(alpha = 0.88f)).padding(horizontal = 8.dp, vertical = 3.dp), color = StudioTextMuted, fontSize = 10.sp)
+    Text("${(timeline.zoomLevel * 100).roundToInt()}% · ${thumbnailFrames.count { it.value != null }} thumbs · Saved v${timeline.version}", modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).clip(RoundedCornerShape(999.dp)).background(StudioSurface.copy(alpha = 0.88f)).padding(horizontal = 8.dp, vertical = 3.dp), color = StudioTextMuted, fontSize = 10.sp)
     Box(Modifier.align(Alignment.TopCenter).width(2.dp).fillMaxHeight().background(StudioSecondary))
     Column(Modifier.align(Alignment.TopCenter).padding(top = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
       Box(Modifier.size(13.dp).clip(CircleShape).background(StudioSecondary))
@@ -1392,13 +1494,13 @@ private fun AutoScrollEdgeMask(direction: com.example.clipystudio.data.AutoScrol
 }
 
 @Composable
-private fun EngineTrackLane(projectTimeline: com.example.clipystudio.data.ProjectTimeline, timeline: Timeline, track: TimelineTrack, contentWidth: Int, viewportWidthPx: Float, activeIds: Set<String>, touchSlopPx: Float, onSelect: (String) -> Unit, onTrim: (TrimHandle, Long) -> Unit, onMove: (Long) -> Unit, onSplit: () -> Unit, onReorder: (Int) -> Unit, activePreview: TimelineClipPreviewState?, onPreview: (TimelineClipPreviewState?) -> Unit, onAutoScroll: (Float, com.example.clipystudio.data.AutoScrollDirection) -> Unit, onPreviewSeek: (Long) -> Unit, onPreviewEnd: () -> Unit) {
+private fun EngineTrackLane(projectTimeline: com.example.clipystudio.data.ProjectTimeline, timeline: Timeline, track: TimelineTrack, contentWidth: Int, viewportWidthPx: Float, activeIds: Set<String>, touchSlopPx: Float, thumbnailFrames: Map<String, Bitmap?>, onSelect: (String) -> Unit, onTrim: (TrimHandle, Long) -> Unit, onMove: (Long) -> Unit, onSplit: () -> Unit, onReorder: (Int) -> Unit, activePreview: TimelineClipPreviewState?, onPreview: (TimelineClipPreviewState?) -> Unit, onAutoScroll: (Float, com.example.clipystudio.data.AutoScrollDirection) -> Unit, onPreviewSeek: (Long) -> Unit, onPreviewEnd: () -> Unit) {
   Row(Modifier.fillMaxWidth().height(38.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
     Text(track.type.label, modifier = Modifier.width(58.dp), fontSize = 12.sp, color = StudioTextMuted)
     Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(12.dp)).background(StudioSurface.copy(alpha = 0.55f))) {
       Box(Modifier.fillMaxWidth().fillMaxHeight()) {
         track.clips.sortedBy { it.startMs }.forEachIndexed { index, clip ->
-          EngineClipBlock(track.type, clip, index, selected = projectTimeline.selectedClipId == clip.id, active = clip.id in activeIds, zoom = projectTimeline.zoomScale, pixelsPerSecond = projectTimeline.pixelsPerSecond, scrollOffsetPx = timeline.scrollOffsetPx, transition = timeline.transitions.firstOrNull { it.fromClipId == clip.id || it.toClipId == clip.id }, timeline = timeline, viewportWidthPx = viewportWidthPx, touchSlopPx = touchSlopPx, preview = activePreview?.takeIf { it.clipId == clip.id }, onSelect = onSelect, onTrim = onTrim, onMove = onMove, onSplit = onSplit, onReorder = onReorder, onPreview = onPreview, onPreviewEnd = onPreviewEnd, onAutoScroll = onAutoScroll, onPreviewSeek = onPreviewSeek)
+          EngineClipBlock(track.type, clip, index, selected = projectTimeline.selectedClipId == clip.id, active = clip.id in activeIds, zoom = projectTimeline.zoomScale, pixelsPerSecond = projectTimeline.pixelsPerSecond, scrollOffsetPx = timeline.scrollOffsetPx, transition = timeline.transitions.firstOrNull { it.fromClipId == clip.id || it.toClipId == clip.id }, timeline = timeline, viewportWidthPx = viewportWidthPx, touchSlopPx = touchSlopPx, thumbnailBitmap = thumbnailFrames[clip.id], preview = activePreview?.takeIf { it.clipId == clip.id }, onSelect = onSelect, onTrim = onTrim, onMove = onMove, onSplit = onSplit, onReorder = onReorder, onPreview = onPreview, onPreviewEnd = onPreviewEnd, onAutoScroll = onAutoScroll, onPreviewSeek = onPreviewSeek)
         }
       }
     }
@@ -1406,7 +1508,7 @@ private fun EngineTrackLane(projectTimeline: com.example.clipystudio.data.Projec
 }
 
 @Composable
-private fun EngineClipBlock(trackType: TrackType, clip: TimelineClip, index: Int, selected: Boolean, active: Boolean, zoom: Float, pixelsPerSecond: Float, scrollOffsetPx: Float, transition: com.example.clipystudio.data.Transition?, timeline: Timeline, viewportWidthPx: Float, touchSlopPx: Float, preview: TimelineClipPreviewState?, onSelect: (String) -> Unit, onTrim: (TrimHandle, Long) -> Unit, onMove: (Long) -> Unit, onSplit: () -> Unit, onReorder: (Int) -> Unit, onPreview: (TimelineClipPreviewState?) -> Unit, onPreviewEnd: () -> Unit, onAutoScroll: (Float, com.example.clipystudio.data.AutoScrollDirection) -> Unit, onPreviewSeek: (Long) -> Unit) {
+private fun EngineClipBlock(trackType: TrackType, clip: TimelineClip, index: Int, selected: Boolean, active: Boolean, zoom: Float, pixelsPerSecond: Float, scrollOffsetPx: Float, transition: com.example.clipystudio.data.Transition?, timeline: Timeline, viewportWidthPx: Float, touchSlopPx: Float, thumbnailBitmap: Bitmap?, preview: TimelineClipPreviewState?, onSelect: (String) -> Unit, onTrim: (TrimHandle, Long) -> Unit, onMove: (Long) -> Unit, onSplit: () -> Unit, onReorder: (Int) -> Unit, onPreview: (TimelineClipPreviewState?) -> Unit, onPreviewEnd: () -> Unit, onAutoScroll: (Float, com.example.clipystudio.data.AutoScrollDirection) -> Unit, onPreviewSeek: (Long) -> Unit) {
   val color = when (trackType) { TrackType.Video -> StudioPrimary; TrackType.Audio -> StudioSecondary; TrackType.Text -> StudioAccent; TrackType.Sticker -> Color(0xFFFF65B3); TrackType.Effect -> Color(0xFF55A7FF); TrackType.Overlay -> Color(0xFF56E58A) }
   val selectedOutline by animateFloatAsState(if (selected) 1f else 0f, tween(140), label = "selectedOutline")
   val liftFraction by animateFloatAsState(if (preview != null) 1f else 0f, tween(120), label = "clipLift")
@@ -1492,7 +1594,9 @@ private fun EngineClipBlock(trackType: TrackType, clip: TimelineClip, index: Int
     }.semantics { contentDescription = "${clip.clipType} clip, ${trackType.label} track, starts at ${clip.startMs.asTimecode()}, duration ${clip.durationMs.asTimecode()}" },
     contentAlignment = Alignment.Center,
   ) {
-    if (trackType == TrackType.Video || trackType == TrackType.Overlay) {
+    if ((trackType == TrackType.Video || trackType == TrackType.Overlay) && thumbnailBitmap != null) {
+      Image(bitmap = thumbnailBitmap.asImageBitmap(), contentDescription = "${clip.title} thumbnail", modifier = Modifier.matchParentSize())
+    } else if (trackType == TrackType.Video || trackType == TrackType.Overlay || trackType == TrackType.Audio) {
       Row(Modifier.matchParentSize().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
         repeat((width / 44).coerceIn(1, 8)) { Box(Modifier.weight(1f).height(18.dp).clip(RoundedCornerShape(6.dp)).background(Brush.linearGradient(listOf(Color.White.copy(alpha = 0.18f), Color.Black.copy(alpha = 0.10f))))) }
       }
@@ -2021,8 +2125,6 @@ private fun Copy.onboardingPages() = if (language == "Ngon ngu") {
   )
 }
 
-private data class UriMetadata(val displayName: String?, val sizeBytes: Long?, val mimeType: String?)
-
 private fun Context.readUriMetadataSafely(uri: Uri): UriMetadata? = runCatching { readUriMetadata(uri) }.getOrNull()
 
 private fun Context.persistReadPermission(uri: Uri): Boolean {
@@ -2036,6 +2138,8 @@ private fun Context.persistReadPermission(uri: Uri): Boolean {
 private fun Context.readUriMetadata(uri: Uri): UriMetadata {
   var displayName: String? = null
   var sizeBytes: Long? = null
+  val mimeType = contentResolver.getType(uri)
+  val durationMs = readMediaDurationMs(uri, mimeType)
   requireNotNull(contentResolver.openInputStream(uri)) { "Selected media is not readable." }.use { }
   contentResolver.query(uri, null, null, null, null)?.use { cursor ->
     val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
@@ -2045,7 +2149,40 @@ private fun Context.readUriMetadata(uri: Uri): UriMetadata {
       if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) sizeBytes = cursor.getLong(sizeIndex)
     }
   }
-  return UriMetadata(displayName = displayName, sizeBytes = sizeBytes, mimeType = contentResolver.getType(uri))
+  return UriMetadata(displayName = displayName, sizeBytes = sizeBytes, mimeType = mimeType, durationMs = durationMs)
+}
+
+private fun Context.readMediaDurationMs(uri: Uri, mimeType: String?): Long? {
+  if (mimeType?.startsWith("image") == true) return 3_000L
+  if (mimeType?.startsWith("video") != true && mimeType?.startsWith("audio") != true) return null
+  return runCatching {
+    MediaMetadataRetriever().use { retriever ->
+      retriever.setDataSource(this, uri)
+      retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+    }
+  }.getOrNull()
+}
+
+private fun Context.loadThumbnailBitmap(mediaUri: String, thumbnailTimeMs: Long, widthPx: Int, heightPx: Int): Bitmap? {
+  if (mediaUri.startsWith("local://")) return null
+  val uri = Uri.parse(mediaUri)
+  return runCatching {
+    val mimeType = contentResolver.getType(uri)
+    when {
+      mimeType?.startsWith("image") == true -> {
+        contentResolver.openInputStream(uri)?.use { input ->
+          BitmapFactory.decodeStream(input)
+        }
+      }
+      mimeType?.startsWith("video") == true -> {
+        MediaMetadataRetriever().use { retriever ->
+          retriever.setDataSource(this, uri)
+          retriever.getFrameAtTime(thumbnailTimeMs * 1_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+        }
+      }
+      else -> null
+    }?.let { source -> Bitmap.createScaledBitmap(source, widthPx.coerceAtLeast(1), heightPx.coerceAtLeast(1), true) }
+  }.getOrNull()
 }
 
 @Preview(showBackground = true)

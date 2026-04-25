@@ -18,7 +18,7 @@ interface DataRepository {
   fun duplicateProject(projectId: String)
   fun deleteProject(projectId: String)
   fun openProject(projectId: String)
-  fun addImportedAsset(type: MediaType, uri: String? = null, displayName: String? = null, sizeBytes: Long? = null)
+  fun addImportedAsset(type: MediaType, uri: String? = null, displayName: String? = null, sizeBytes: Long? = null, durationMs: Long? = null)
   fun removeImportedAsset(assetId: String)
   fun addImportsToProject()
   fun selectClip(clipId: String)
@@ -116,7 +116,7 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
     if (app.projects.any { it.id == projectId }) app.copy(activeProjectId = projectId) else app
   }
 
-  override fun addImportedAsset(type: MediaType, uri: String?, displayName: String?, sizeBytes: Long?) = persistUpdate { app ->
+  override fun addImportedAsset(type: MediaType, uri: String?, displayName: String?, sizeBytes: Long?, durationMs: Long?) = persistUpdate { app ->
     val safeUri = uri?.takeIf { it.isNotBlank() } ?: return@persistUpdate app
     val index = app.selectedImports.count { it.type == type } + 1
     val asset = MediaAsset(
@@ -124,8 +124,8 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
       uri = safeUri,
       type = type,
       displayName = displayName?.ifBlank { null } ?: "${type.label} import $index",
-      durationMs = when (type) {
-        MediaType.Image -> 4_000
+      durationMs = durationMs ?: when (type) {
+        MediaType.Image -> 3_000
         MediaType.Video -> 8_000
         MediaType.Audio -> 12_000
       },
@@ -161,6 +161,7 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
             TimelineClip(
               id = UUID.randomUUID().toString(),
               assetId = asset.id,
+              mediaUri = asset.uri,
               clipType = if (asset.type == MediaType.Image) ClipType.Image else ClipType.Video,
               title = asset.displayName,
               startMs = videoCursor.also { videoCursor += asset.durationMs },
@@ -171,6 +172,7 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
             TimelineClip(
               id = UUID.randomUUID().toString(),
               assetId = asset.id,
+              mediaUri = asset.uri,
               clipType = ClipType.Audio,
               title = asset.displayName,
               startMs = audioCursor.also { audioCursor += asset.durationMs },
@@ -188,7 +190,7 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
     persistUpdate { it.copy(selectedImports = emptyList()) }
   }
 
-  override fun selectClip(clipId: String) = updateTimeline { it.copy(selectedClipId = clipId) }
+  override fun selectClip(clipId: String) = updateTimeline { it.copy(selectedClipId = clipId, selectedTool = EditorTool.Edit) }
   override fun clearSelection() = updateTimeline { it.copy(selectedClipId = null) }
 
   override fun togglePlayback() = updateTimeline { it.copy(isPlaying = !it.isPlaying, playheadMs = if (it.playheadMs >= it.durationMs) 0L else it.playheadMs).nextVersion() }
@@ -432,6 +434,7 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
     val clip = TimelineClip(
       id = UUID.randomUUID().toString(),
       assetId = asset.id,
+      mediaUri = asset.uri,
       clipType = ClipType.Overlay,
       title = asset.displayName,
       startMs = project.timeline.playheadMs,
@@ -668,6 +671,7 @@ private fun JSONObject.toTimelineTrack() = TimelineTrack(
 private fun TimelineClip.toJson() = JSONObject()
   .put("id", id)
   .put("assetId", assetId)
+  .put("mediaUri", mediaUri)
   .put("clipType", clipType.name)
   .put("title", title)
   .put("startMs", startMs)
@@ -684,6 +688,7 @@ private fun TimelineClip.toJson() = JSONObject()
 private fun JSONObject.toTimelineClip() = TimelineClip(
   id = getString("id"),
   assetId = optNullableString("assetId"),
+  mediaUri = optNullableString("mediaUri"),
   clipType = enumValueOf(getString("clipType")),
   title = getString("title"),
   startMs = optLong("startMs"),
@@ -836,6 +841,7 @@ data class TimelineTrack(val id: String, val type: TrackType, val name: String, 
 data class TimelineClip(
   val id: String,
   val assetId: String? = null,
+  val mediaUri: String? = null,
   val clipType: ClipType,
   val title: String,
   val startMs: Long = 0,

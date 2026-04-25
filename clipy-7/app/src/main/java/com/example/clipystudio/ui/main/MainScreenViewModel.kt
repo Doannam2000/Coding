@@ -88,7 +88,7 @@ class MainScreenViewModel(
   fun duplicateProject(projectId: String) = dataRepository.duplicateProject(projectId)
   fun deleteProject(projectId: String) = dataRepository.deleteProject(projectId)
   fun openProject(projectId: String) = dataRepository.openProject(projectId)
-  fun addImportedAsset(type: MediaType, uri: String? = null, displayName: String? = null, sizeBytes: Long? = null) = dataRepository.addImportedAsset(type, uri, displayName, sizeBytes)
+  fun addImportedAsset(type: MediaType, uri: String? = null, displayName: String? = null, sizeBytes: Long? = null, durationMs: Long? = null) = dataRepository.addImportedAsset(type, uri, displayName, sizeBytes, durationMs)
   fun removeImportedAsset(assetId: String) = dataRepository.removeImportedAsset(assetId)
   fun addImportsToProject() = dataRepository.addImportsToProject()
   fun selectClip(clipId: String) = dataRepository.selectClip(clipId)
