@@ -1,13 +1,24 @@
 # Project Notes
 
+## Architecture Boundaries
+- `com.example.clipystudio.ui`: Compose screens, navigation glue, immutable state rendering, and callback dispatch only.
+- `com.example.clipystudio.editor`: ViewModel-facing editor orchestration models, screen aggregate state, selection state, panel state, and adapters from app storage models.
+- `com.example.clipystudio.timeline`: timeline math, clip placement, snap, scroll, trim, touch slop, and gesture helper ownership. Existing `TimelineEngine` remains source-compatible and is exposed through this boundary for incremental migration.
+- `com.example.clipystudio.media`: playback, preview seek dispatch, media metadata, and player-facing abstractions.
+- `com.example.clipystudio.render`: export settings, render preparation, effect/transition render contracts, and export orchestration. Existing render engines remain source-compatible and are exposed through this boundary for incremental migration.
+- `com.example.clipystudio.data`: repositories, persistence DTOs, autosave, serializers, undo/redo storage, and mapping to stable editor models.
+- `com.example.clipystudio.designsystem`: colors, typography, spacing, touch targets, handles, guides, chips, panels, loading/empty/error primitives, and other stateless visual tokens.
+
+New editor-facing code should prefer stable models under `editor.model` (`Project`, `Track`, `Clip`, `Overlay`, `AudioClip`, `TextClip`, `StickerClip`, `EffectClip`, `Transition`, `Keyframe`, and `ExportSettings`). Existing persistence models in `data` are intentionally preserved for saved-project compatibility and mapped into the editor model layer before screen rendering.
+
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 10:37 UTC
+- Last updated: 2026-04-25 10:44 UTC
 - App: Clipy Studio
 - Slug: clipy
 - Tagline: A premium offline-friendly Android video editor for fast, polished social videos.
 - Target users: General users
-- Design direction: Incremental gesture-polish pass for the existing compact dark Compose editor. Preserve the current timeline-first workspace, dark surfaces, small-screen density, transient chips/guides, and magnetic snap feedback. New design emphasis is responsive-but-controlled preview seeking, clearer editing lock states during playback, safer touch isolation between timeline and tool panels, and more forgiving invisible hit areas without adding persistent controls or changing the app architecture.
+- Design direction: Preserve the existing compact dark Compose editor while clarifying architectural boundaries through consistent state-driven UI patterns. Visual changes should be minimal and only support the new module split: editor/timeline/media/render states surface as predictable loading, locked, dirty, exporting, and error states without introducing unrelated redesigns.
 - Core constraints: android only, MVP first, offline-friendly where possible
 Design style must align with: modern minimal premium
 Typography should align with: clean geometric sans
@@ -527,6 +538,7 @@ Function: allow overlay to move partially outside canvas but keep enough selecta
 
 40. STRICT:
 Function: gestures must be stable across small screens, large screens, landscape/portrait, high refresh rate devices, and low-end Android devices.
+Additional follow-up requirement: PROJECT ARCHITECTURE FINALIZATION: Split app into clear modules: ui, editor, timeline, media, render, data, design-system. Create stable models Project, Track, Clip, Overlay, AudioClip, TextClip, StickerClip, EffectClip, Transition, Keyframe, ExportSettings. Ensure every screen uses ViewModel + StateFlow and no business logic is hidden inside Composable.
 
 ### Core Features
 - Splash -> onboarding/intro -> main app flow
@@ -552,14 +564,15 @@ Function: gestures must be stable across small screens, large screens, landscape
 - Performance foundations including lazy thumbnail loading, background rendering/export, media proxy strategies for large files, memory-aware preview, and responsive Compose UI
 
 ### Main Screens
-- Timeline Scrub Surface
-- Timeline Editing Surface
-- Bottom Tool Panels
+- Main Editor Screen
+- Timeline Screen Components
 - Preview Overlay Surface
-- Gesture Robustness Layer
+- Media And Render Flow
+- Project Data Layer
+- Design System
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Keep existing project, timeline, clip, overlay, playback, export, undo, redo, autosave, repository, and final edit commit paths unchanged. Add preview seek throttling, exact final frame seek, playback edit lock decisions, pointer bounds checks, panel gesture isolation, handle touch target expansion, touch slop gating, zIndex overlay hit testing, and overlay canvas boundary math as in-memory interaction state owned by MainScreenViewModel or the existing editor interaction state holder. Compose should use measured layout bounds, density-aware touch targets, pointerInput consumption, and existing gesture modes for low-latency interaction. Pure math for seek throttling intervals, exact scroll-to-time mapping, touch slop gates, handle hit bounds, overlay zIndex hit priority, and off-canvas boundary preservation should live in testable Kotlin helpers. Pointer-frame updates must remain lightweight and must not write repositories, reload thumbnails, run export diagnostics, or trigger autosave; only final valid clip, trim, or overlay edits should use existing commit paths.
+- storage: Keep the existing Android app as a buildable Compose project while introducing clear module boundaries as Gradle modules if the current project structure supports it with minimal risk, otherwise use package-level boundaries first under ui, editor, timeline, media, render, data, and design-system. The ui layer contains only Composables, navigation glue, and screen collection of StateFlow. The editor layer owns editor orchestration, ViewModels, intents, reducers, gesture coordination, selection, undo/redo integration, and final edit commit decisions. The timeline layer owns timeline math, clip placement, trim, scroll, snap, touch slop, bounds, and pure interaction helpers. The media layer owns playback state, preview seek dispatch, media metadata, and ExoPlayer-facing abstractions. The render layer owns export settings, render preparation, effect/transition render contracts, and export orchestration. The data layer owns repositories, local persistence, serialization, project loading/saving, autosave, and mapping between persisted data and domain models. The design-system layer owns reusable Compose styling primitives and tokens only. Introduce stable domain models without forcing a storage rewrite unless existing persistence requires mapping updates; preserve behavior through mappers and adapters. Every screen should have a ViewModel exposing StateFlow UI state, and Composables should not contain business rules, repository access, timeline mutation logic, export orchestration, or media playback decisions.
 <!-- AUTO-GENERATED:CORE_END -->

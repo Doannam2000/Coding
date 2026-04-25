@@ -38,6 +38,8 @@ import com.example.clipystudio.data.StickerAsset
 import com.example.clipystudio.data.TempFileManager
 import com.example.clipystudio.data.TransitionType
 import com.example.clipystudio.data.TrimHandle
+import com.example.clipystudio.editor.model.EditorUiState
+import com.example.clipystudio.editor.model.toEditorUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -68,7 +70,7 @@ class MainScreenViewModel(
     dataRepository.appState
       .map {
         latestAppState = it
-        MainScreenUiState.Success(it) as MainScreenUiState
+        MainScreenUiState.Success(it, it.toEditorUiState()) as MainScreenUiState
       }
       .catch { emit(MainScreenUiState.Error(it)) }
       .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MainScreenUiState.Loading)
@@ -390,5 +392,5 @@ class MainScreenViewModel(
 sealed interface MainScreenUiState {
   data object Loading : MainScreenUiState
   data class Error(val throwable: Throwable) : MainScreenUiState
-  data class Success(val appState: AppState) : MainScreenUiState
+  data class Success(val appState: AppState, val editorUiState: EditorUiState) : MainScreenUiState
 }

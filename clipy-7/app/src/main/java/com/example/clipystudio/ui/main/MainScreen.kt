@@ -235,12 +235,12 @@ fun MainScreen(
   when (val state = uiState) {
     MainScreenUiState.Loading -> LoadingSurface(modifier)
     is MainScreenUiState.Error -> ErrorSurface(state.throwable.message.orEmpty(), modifier)
-    is MainScreenUiState.Success -> ClipyStudioApp(state.appState, viewModel, modifier)
+    is MainScreenUiState.Success -> ClipyStudioApp(state.appState, state.editorUiState, viewModel, modifier)
   }
 }
 
 @Composable
-private fun ClipyStudioApp(appState: AppState, viewModel: MainScreenViewModel, modifier: Modifier = Modifier) {
+private fun ClipyStudioApp(appState: AppState, editorUiState: com.example.clipystudio.editor.model.EditorUiState, viewModel: MainScreenViewModel, modifier: Modifier = Modifier) {
   var screen by remember { mutableStateOf(Screen.Splash) }
   var languageFromSettings by remember { mutableStateOf(false) }
   var exitRequested by remember { mutableStateOf(false) }
@@ -248,6 +248,7 @@ private fun ClipyStudioApp(appState: AppState, viewModel: MainScreenViewModel, m
   val context = LocalContext.current
   val copy = copyFor(appState.languageCode)
   val shareEvent by viewModel.shareEvent.collectAsStateWithLifecycle()
+  val isPlaybackLocked = editorUiState.panelState.isPlaybackLocked
 
   LaunchedEffect(Unit) {
     delay(550)
@@ -326,6 +327,7 @@ private fun ClipyStudioApp(appState: AppState, viewModel: MainScreenViewModel, m
           onImport = { screen = Screen.Import },
           onExport = { screen = Screen.Export },
           viewModel = viewModel,
+          isPlaybackLocked = isPlaybackLocked,
         )
         Screen.Export -> ExportScreen(
           appState = appState,
@@ -512,7 +514,7 @@ private fun ImportScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onA
 }
 
 @Composable
-private fun EditorScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onImport: () -> Unit, onExport: () -> Unit, viewModel: MainScreenViewModel) {
+private fun EditorScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onImport: () -> Unit, onExport: () -> Unit, viewModel: MainScreenViewModel, isPlaybackLocked: Boolean) {
   val project = appState.activeProject
   if (project == null) {
     StudioScreen { EmptyState(onCreate = onImport) }
@@ -534,6 +536,14 @@ private fun EditorScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onI
     )
     PreviewCanvas(project.canvasRatio, timeline, viewModel::selectClip, viewModel::clearSelection, viewModel::deleteSelectedClip, viewModel::transformSelectedClipAbsolute, viewModel::updateSelectedTool, viewModel::updateCanvasRatio, viewModel::seekTo)
     PlaybackControls(timeline, viewModel::togglePlayback, viewModel::seekBy)
+    if (isPlaybackLocked) {
+      Text(
+        if (appState.languageCode == LanguageCode.Vi) "Dang phat: cac thay doi truc tiep duoc khoa de giu dong bo preview." else "Playback lock: direct edits are held to keep preview and timeline synced.",
+        color = StudioTextMuted,
+        fontSize = 11.sp,
+        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Playback editing lock active" },
+      )
+    }
     LaunchedEffect(timeline.isPlaying) {
       while (timeline.isPlaying) {
         delay(250)
