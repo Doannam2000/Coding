@@ -1672,7 +1672,7 @@ private fun EditorScreen(
                 }
               }
 
-              if (isVideoSource) {
+              if (isUsableVideoSource) {
                 Row(
                   modifier = Modifier.fillMaxWidth(),
                   horizontalArrangement = Arrangement.spacedBy(8.dp),

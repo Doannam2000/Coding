@@ -331,10 +331,19 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
       return null
     }
 
+    val resolvedMediaType = resolveMediaTypeForUri(uri, payloadMediaType)
+    if (resolvedMediaType == null) {
+      mediaPickerState.value = mediaPickerState.value.copy(
+        isProcessingContinue = false,
+        validationError = ContinueValidationIssue.UnsupportedMediaType,
+      )
+      return null
+    }
+
     val didLoad = runCatching {
       repository.loadSelectedMedia(
         uri = uri,
-        mediaType = payloadMediaType,
+        mediaType = resolvedMediaType,
         displayNameHint = selectedItem.displayName,
       )
     }.onFailure {
@@ -351,7 +360,7 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
     mediaPickerState.value = mediaPickerState.value.copy(isProcessingContinue = false, validationError = null)
     return ContinuePayload(
       uris = listOf(selectedItem.uri),
-      primaryMediaType = payloadMediaType,
+      primaryMediaType = resolvedMediaType,
       source = "media_picker",
     )
   }
@@ -372,6 +381,19 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
     }.getOrElse {
       Log.w("ClipyMediaPicker", "Unable to open selected uri=$uri", it)
       false
+    }
+  }
+
+  private fun resolveMediaTypeForUri(uri: Uri, fallbackType: String): String? {
+    val normalizedFallback = fallbackType.trim().lowercase().takeIf { it == "video" || it == "image" }
+    val resolverMime = runCatching {
+      getApplication<Application>().contentResolver.getType(uri)
+    }.getOrNull()?.trim()?.lowercase()
+    return when {
+      resolverMime == null -> normalizedFallback
+      resolverMime.startsWith("video/") -> "video"
+      resolverMime.startsWith("image/") -> "image"
+      else -> null
     }
   }
 
