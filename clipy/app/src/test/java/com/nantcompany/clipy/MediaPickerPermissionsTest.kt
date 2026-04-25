@@ -126,11 +126,11 @@ class MediaPickerPermissionsTest {
       order = 1,
     )
 
-    assertTrue(validateContinueSelection(listOf(selected)) == ContinueValidationIssue.UnsupportedMediaType)
+    assertTrue(validateContinueSelection(listOf(selected)) == null)
   }
 
   @Test
-  fun continueSelectionState_reportsUnsupportedTypeForPhotoSelection() {
+  fun continueSelectionState_acceptsPhotoSelection() {
     val selected = SelectedMediaUiModel(
       id = "asset-photo",
       uri = "content://media/external/images/media/12",
@@ -144,8 +144,27 @@ class MediaPickerPermissionsTest {
 
     val resolution = resolveContinueSelectionState(selectedItems = listOf(selected))
 
-    assertTrue(resolution.issue == ContinueValidationIssue.UnsupportedMediaType)
+    assertTrue(resolution.issue == null)
     assertTrue(resolution.item?.type == "photo")
+  }
+
+  @Test
+  fun continueSelectionState_reportsUnsupportedTypeForUnknownSelection() {
+    val selected = SelectedMediaUiModel(
+      id = "asset-unknown",
+      uri = "content://media/external/file/99",
+      type = "document",
+      mimeType = "application/pdf",
+      displayName = "file.pdf",
+      thumbnailUri = "content://media/external/file/99",
+      durationMs = null,
+      order = 1,
+    )
+
+    val resolution = resolveContinueSelectionState(selectedItems = listOf(selected))
+
+    assertTrue(resolution.issue == ContinueValidationIssue.UnsupportedMediaType)
+    assertTrue(resolution.item?.type == "document")
   }
 
   @Test

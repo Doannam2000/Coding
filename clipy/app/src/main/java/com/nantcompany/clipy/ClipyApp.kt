@@ -233,7 +233,14 @@ private const val TIMELINE_PREVIEW_SEEK_THROTTLE_MS = 90L
 private const val TIMELINE_SETTLE_DELAY_MS = 48L
 
 internal fun shouldLoadVideoTimelineFrames(sourceUri: String, isVideoSource: Boolean): Boolean {
-  return sourceUri.isNotBlank() && isVideoSource
+  if (!isVideoSource) return false
+  return isSupportedMediaSourceUri(sourceUri)
+}
+
+private fun isSupportedMediaSourceUri(sourceUri: String): Boolean {
+  if (sourceUri.isBlank()) return false
+  val scheme = sourceUri.substringBefore(':', missingDelimiterValue = "").lowercase()
+  return scheme == "content" || scheme == "file"
 }
 
 private val timelineThumbnailCache = object : LruCache<String, Bitmap>(48) {}
@@ -1270,9 +1277,15 @@ private fun EditorScreen(
       player.stop()
       player.clearMediaItems()
     } else {
-      player.setMediaItem(MediaItem.fromUri(draft.sourceUri))
-      player.prepare()
-      player.seekTo(draft.playheadMs)
+      val didPrepare = runCatching {
+        player.setMediaItem(MediaItem.fromUri(draft.sourceUri))
+        player.prepare()
+        player.seekTo(draft.playheadMs)
+      }.isSuccess
+      if (!didPrepare) {
+        player.stop()
+        player.clearMediaItems()
+      }
     }
   }
 
@@ -2537,7 +2550,14 @@ private fun TimelineEditor(
       if (missingFrames.isEmpty()) return@withContext emptyList<Pair<TimelineStripCell, Bitmap>>()
       val retriever = MediaMetadataRetriever()
       try {
-        retriever.setDataSource(context, Uri.parse(sourceUri))
+        val sourceUriValue = runCatching { Uri.parse(sourceUri) }.getOrNull() ?: return@withContext emptyList()
+        val sourceReady = runCatching {
+          retriever.setDataSource(context, sourceUriValue)
+          true
+        }.getOrDefault(false)
+        if (!sourceReady) {
+          return@withContext emptyList()
+        }
         missingFrames.mapNotNull { (frame, cacheKey) ->
           val bitmap = runCatching {
             retriever.getFrameAtTime(frame.captureTimeMs * 1000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)

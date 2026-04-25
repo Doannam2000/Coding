@@ -254,7 +254,7 @@ internal fun resolveContinueSelectionState(
   if (resolvedItem.uri.isBlank()) {
     return ContinueSelectionResolution(item = resolvedItem, issue = ContinueValidationIssue.MissingUri)
   }
-  if (!resolvedItem.isVideoSelection()) {
+  if (resolvedItem.asResolvedContinueMediaType() == null) {
     return ContinueSelectionResolution(item = resolvedItem, issue = ContinueValidationIssue.UnsupportedMediaType)
   }
   return ContinueSelectionResolution(item = resolvedItem, issue = null)
@@ -288,9 +288,13 @@ internal fun validateContinueSelection(
   ).issue
 }
 
-private fun SelectedMediaUiModel.isVideoSelection(): Boolean {
+internal fun SelectedMediaUiModel.asResolvedContinueMediaType(): String? {
   val normalizedType = type.trim().lowercase()
-  return normalizedType == "video" || mimeType?.startsWith("video/") == true
+  return when {
+    normalizedType == "video" || mimeType?.startsWith("video/") == true -> "video"
+    normalizedType == "photo" || normalizedType == "image" || normalizedType == "live" || mimeType?.startsWith("image/") == true -> "image"
+    else -> null
+  }
 }
 
 private const val MEDIA_PAGE_SIZE = 60

@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.Locale
 
 class ClipyViewModel(application: Application) : AndroidViewModel(application) {
   private val repository = ClipyRepository.getInstance(application)
@@ -314,10 +313,17 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
       return null
     }
 
-    val payloadMediaType = selectedItem.type.asPayloadMediaType(selectedItem.mimeType)
+    val payloadMediaType = selectedItem.asResolvedContinueMediaType()
+    if (payloadMediaType == null) {
+      mediaPickerState.value = mediaPickerState.value.copy(
+        isProcessingContinue = false,
+        validationError = ContinueValidationIssue.UnsupportedMediaType,
+      )
+      return null
+    }
 
     val uri = runCatching { Uri.parse(selectedItem.uri) }.getOrNull()
-    if (uri == null || selectedItem.uri.isBlank() || !canOpenSelectedUri(uri)) {
+    if (uri == null || selectedItem.uri.isBlank() || uri.scheme != ContentResolver.SCHEME_CONTENT || !canOpenSelectedUri(uri)) {
       mediaPickerState.value = mediaPickerState.value.copy(
         isProcessingContinue = false,
         validationError = ContinueValidationIssue.UnreadableMedia,
@@ -348,15 +354,6 @@ class ClipyViewModel(application: Application) : AndroidViewModel(application) {
       primaryMediaType = payloadMediaType,
       source = "media_picker",
     )
-  }
-
-  private fun String.asPayloadMediaType(mimeType: String?): String {
-    val normalized = lowercase(Locale.getDefault())
-    return when {
-      normalized == "video" || mimeType?.startsWith("video/") == true -> "video"
-      normalized == "photo" || normalized == "image" || mimeType?.startsWith("image/") == true -> "image"
-      else -> normalized.ifBlank { "unknown" }
-    }
   }
 
   private fun rebuildSelectedItems() {
