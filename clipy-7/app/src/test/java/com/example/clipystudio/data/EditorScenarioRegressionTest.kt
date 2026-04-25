@@ -22,6 +22,8 @@ class EditorScenarioRegressionTest {
 
     assertEquals(1, imageClips.size)
     assertEquals(ClipType.Image, imageClips.first().clipType)
+    assertEquals(imageClips.first().id, afterImage.selectedClipId)
+    assertEquals("content://media/image/one", imageClips.first().mediaUri)
     assertEquals(3_000L, afterImage.durationMs)
     assertTrue(afterImage.durationMs > 0L)
 
@@ -38,6 +40,7 @@ class EditorScenarioRegressionTest {
     repository.addImportedAsset(MediaType.Video, uri = "content://media/video/main", displayName = "Main", sizeBytes = 48_000_000)
     repository.addImportsToProject()
     val imported = repository.appState.first().activeProject!!.timeline.track(TrackType.Video).clips.single()
+    assertEquals("content://media/video/main", imported.mediaUri)
 
     repository.selectClip(imported.id)
     repository.trimSelectedClipEdge(TrimHandle.Right, -1_000)
@@ -60,6 +63,45 @@ class EditorScenarioRegressionTest {
     val reopenedProjectId = repository.appState.first().activeProjectId!!
     repository.openProject(reopenedProjectId)
     assertEquals(2, repository.appState.first().activeProject!!.timeline.track(TrackType.Video).clips.size)
+  }
+
+  @Test
+  fun duplicateAndDeleteKeepSelectionOnRealMediaBackedClips() = runTest {
+    val repository = DefaultDataRepository()
+    repository.createProject(CanvasRatio.Portrait)
+    repository.addImportedAsset(MediaType.Image, uri = "content://media/image/hero", displayName = "Hero", sizeBytes = 2_000_000)
+    repository.addImportedAsset(MediaType.Video, uri = "content://media/video/broll", displayName = "B-roll", sizeBytes = 48_000_000, durationMs = 5_000)
+    repository.addImportsToProject()
+
+    var timeline = repository.appState.first().activeProject!!.timeline
+    val firstClip = timeline.track(TrackType.Video).clips.first()
+    assertEquals(firstClip.id, timeline.selectedClipId)
+
+    repository.duplicateSelectedClip()
+    timeline = repository.appState.first().activeProject!!.timeline
+    val clipsAfterDuplicate = timeline.track(TrackType.Video).clips
+    val duplicatedClip = clipsAfterDuplicate.last()
+    assertEquals(3, clipsAfterDuplicate.size)
+    assertEquals(duplicatedClip.id, timeline.selectedClipId)
+    assertEquals(firstClip.mediaUri, duplicatedClip.mediaUri)
+
+    repository.deleteSelectedClip()
+    timeline = repository.appState.first().activeProject!!.timeline
+    assertEquals(2, timeline.track(TrackType.Video).clips.size)
+    assertNotNull(timeline.selectedClipId)
+    assertFalse(timeline.track(TrackType.Video).clips.any { it.id == duplicatedClip.id })
+  }
+
+  @Test
+  fun importedVideoDurationMetadataIsPreservedIntoTimeline() = runTest {
+    val repository = DefaultDataRepository()
+    repository.createProject(CanvasRatio.Landscape)
+    repository.addImportedAsset(MediaType.Video, uri = "content://media/video/precise", displayName = "Precise", sizeBytes = 32_000_000, durationMs = 12_345)
+    repository.addImportsToProject()
+
+    val clip = repository.appState.first().activeProject!!.timeline.track(TrackType.Video).clips.single()
+    assertEquals(12_345L, clip.durationMs)
+    assertEquals("content://media/video/precise", clip.mediaUri)
   }
 
   @Test

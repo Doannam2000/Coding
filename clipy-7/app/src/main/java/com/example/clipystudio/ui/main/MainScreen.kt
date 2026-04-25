@@ -201,6 +201,14 @@ private data class PreviewGestureFeedback(
   val pendingHaptic: HapticEvent? = null,
 )
 
+private enum class PreviewSurfaceState {
+  NoMedia,
+  ImageReady,
+  VideoReady,
+  InvalidUri,
+  LoadFailed,
+}
+
 private suspend fun animateTimelineSettle(
   startOffsetPx: Float,
   timeline: Timeline,
@@ -972,9 +980,12 @@ private fun PreviewCanvas(ratio: CanvasRatio, timeline: Timeline, onSelect: (Str
   val glow by animateFloatAsState(if (timeline.isPlaying) 1f else 0.35f, label = "previewGlow")
   val composition = remember(timeline) { TimelineEngine.resolveActiveComposition(timeline) }
   val activeIds = buildSet { composition.video?.let { add(it.clipId) }; addAll(composition.audio.map { it.clipId }); addAll(composition.text.map { it.clipId }); addAll(composition.stickers.map { it.clipId }); addAll(composition.overlays.map { it.clipId }); addAll(composition.effects.map { it.clipId }) }
-  val activeClips = timeline.tracks.flatMap { it.clips }.filter { it.id in activeIds }.sortedBy { it.zIndex }
-  val selectedClip = activeClips.firstOrNull { it.id == timeline.selectedClipId }
-  val primaryVisualClip = composition.video?.let { active -> timeline.tracks.flatMap { track -> track.clips }.firstOrNull { it.id == active.clipId } }
+  val allClips = timeline.tracks.flatMap { it.clips }
+  val activeClips = allClips.filter { it.id in activeIds }.sortedBy { it.zIndex }
+  val selectedClip = allClips.firstOrNull { it.id == timeline.selectedClipId }
+  val selectedVisualClip = selectedClip?.takeIf { it.clipType in setOf(ClipType.Image, ClipType.Video, ClipType.Overlay) }
+  val primaryVisualClip = selectedVisualClip ?: composition.video?.let { active -> allClips.firstOrNull { it.id == active.clipId } }
+  val previewState = remember(primaryVisualClip?.id, primaryVisualClip?.mediaUri) { resolvePreviewSurfaceState(primaryVisualClip) }
   var feedback by remember { mutableStateOf(PreviewGestureFeedback()) }
   val haptic = LocalHapticFeedback.current
   val density = LocalDensity.current
@@ -1039,7 +1050,7 @@ private fun PreviewCanvas(ratio: CanvasRatio, timeline: Timeline, onSelect: (Str
           )
         }
       }) {
-        PreviewMediaSurface(primaryVisualClip, timeline.isPlaying, timeline.playheadMs, onSeek)
+        PreviewMediaSurface(primaryVisualClip, previewState, timeline.playheadMs, timeline.isPlaying, onSeek)
         Canvas(Modifier.fillMaxSize()) {
           drawRect(Color.White.copy(alpha = 0.06f), style = Stroke(width = 2.dp.toPx()))
           drawCircle(StudioSecondary.copy(alpha = glow), radius = 18.dp.toPx(), center = center)
@@ -1062,7 +1073,18 @@ private fun PreviewCanvas(ratio: CanvasRatio, timeline: Timeline, onSelect: (Str
           Text("${transition.type.label} transition", modifier = Modifier.align(Alignment.Center).clip(RoundedCornerShape(999.dp)).background(StudioBackground.copy(alpha = 0.72f)).padding(horizontal = 12.dp, vertical = 8.dp), color = StudioSecondary, fontWeight = FontWeight.Bold)
         }
         Text("Preview ${timeline.playheadMs.asTimecode()}", modifier = Modifier.align(Alignment.TopCenter).padding(10.dp), fontWeight = FontWeight.Bold)
-        Text(if (primaryVisualClip == null) "Import media to preview the current frame" else "Tap clips, drag trim handles, and keep playhead synced", modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp), color = StudioTextMuted, fontSize = 12.sp)
+        Text(
+          when (previewState) {
+            PreviewSurfaceState.NoMedia -> "Import media to preview the current frame"
+            PreviewSurfaceState.InvalidUri -> "Selected media link is invalid. Re-import the clip to recover preview."
+            PreviewSurfaceState.LoadFailed -> "Selected media could not load. Check file access and try again."
+            else -> "Tap clips, drag trim handles, and keep playhead synced"
+          },
+          modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
+          color = if (previewState == PreviewSurfaceState.LoadFailed || previewState == PreviewSurfaceState.InvalidUri) StudioDanger else StudioTextMuted,
+          fontSize = 12.sp,
+          textAlign = TextAlign.Center,
+        )
       }
     }
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1088,33 +1110,30 @@ private fun PreviewLayerChip(clip: TimelineClip, selected: Boolean, previewWidth
 }
 
 @Composable
-private fun PreviewMediaSurface(clip: TimelineClip?, isPlaying: Boolean, playheadMs: Long, onSeek: (Long) -> Unit) {
-  when {
-    clip == null -> {
-      Box(Modifier.fillMaxSize().padding(18.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
-        Text("No media available", color = StudioTextMuted, fontWeight = FontWeight.Medium)
-      }
-    }
-    clip.clipType == ClipType.Image || clip.clipType == ClipType.Overlay -> {
-      val model = clip.mediaUri ?: clip.assetId
-      if (model.isNullOrBlank()) {
-        Box(Modifier.fillMaxSize().padding(18.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
-          Text("Image unavailable", color = StudioDanger, fontWeight = FontWeight.Medium)
-        }
-      } else {
+private fun PreviewMediaSurface(clip: TimelineClip?, previewState: PreviewSurfaceState, playheadMs: Long, isPlaying: Boolean, onSeek: (Long) -> Unit) {
+  when (previewState) {
+    PreviewSurfaceState.NoMedia -> PreviewStatusCard("No media selected", "Import an image or video to start previewing and editing.", StudioTextMuted)
+    PreviewSurfaceState.InvalidUri -> PreviewStatusCard("Invalid media", "This clip does not have a usable URI.", StudioDanger)
+    PreviewSurfaceState.LoadFailed -> PreviewStatusCard("Media failed to load", "Clipy Studio could not open this file for preview.", StudioDanger)
+    PreviewSurfaceState.ImageReady -> {
+      val model = clip?.mediaUri ?: return PreviewStatusCard("Image unavailable", "The selected image is missing.", StudioDanger)
+      Box(Modifier.fillMaxSize()) {
         AsyncImage(
           model = model,
           contentDescription = clip.title,
           modifier = Modifier.fillMaxSize(),
         )
+        Text(
+          "${(clip.durationMs / 1000f).let { "%.1fs".format(it) }} still",
+          modifier = Modifier.align(Alignment.TopEnd).padding(10.dp).clip(RoundedCornerShape(999.dp)).background(StudioBackground.copy(alpha = 0.8f)).padding(horizontal = 8.dp, vertical = 4.dp),
+          color = Color.White,
+          fontSize = 11.sp,
+          fontWeight = FontWeight.Bold,
+        )
       }
     }
-    clip.clipType == ClipType.Video -> VideoPreviewPlayer(clip = clip, isPlaying = isPlaying, playheadMs = playheadMs, onSeek = onSeek)
-    else -> {
-      Box(Modifier.fillMaxSize().padding(18.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
-        Text(clip.title, color = StudioTextMuted, fontWeight = FontWeight.Medium)
-      }
-    }
+    PreviewSurfaceState.VideoReady -> clip?.let { VideoPreviewPlayer(clip = it, isPlaying = isPlaying, playheadMs = playheadMs, onSeek = onSeek) }
+      ?: PreviewStatusCard("Video unavailable", "The selected video is missing.", StudioDanger)
   }
 }
 
@@ -1123,9 +1142,7 @@ private fun VideoPreviewPlayer(clip: TimelineClip, isPlaying: Boolean, playheadM
   val context = LocalContext.current
   val mediaUri = clip.mediaUri
   if (mediaUri.isNullOrBlank()) {
-    Box(Modifier.fillMaxSize().padding(18.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
-      Text("Video unavailable", color = StudioDanger, fontWeight = FontWeight.Medium)
-    }
+    PreviewStatusCard("Video unavailable", "The selected video is missing.", StudioDanger)
     return
   }
   val player = remember(mediaUri) {
@@ -1166,6 +1183,19 @@ private fun VideoPreviewPlayer(clip: TimelineClip, isPlaying: Boolean, playheadM
     },
     modifier = Modifier.fillMaxSize(),
   )
+}
+
+@Composable
+private fun PreviewStatusCard(title: String, body: String, tint: Color) {
+  Box(
+    Modifier.fillMaxSize().padding(18.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.18f)),
+    contentAlignment = Alignment.Center,
+  ) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(horizontal = 20.dp)) {
+      Text(title, color = tint, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+      Text(body, color = StudioTextMuted, fontSize = 13.sp, textAlign = TextAlign.Center)
+    }
+  }
 }
 
 @Composable
@@ -1596,6 +1626,8 @@ private fun EngineClipBlock(trackType: TrackType, clip: TimelineClip, index: Int
   ) {
     if ((trackType == TrackType.Video || trackType == TrackType.Overlay) && thumbnailBitmap != null) {
       Image(bitmap = thumbnailBitmap.asImageBitmap(), contentDescription = "${clip.title} thumbnail", modifier = Modifier.matchParentSize())
+    } else if (trackType == TrackType.Video && clip.clipType == ClipType.Image && clip.mediaUri != null && thumbnailBitmap != null) {
+      Image(bitmap = thumbnailBitmap.asImageBitmap(), contentDescription = "${clip.title} thumbnail", modifier = Modifier.matchParentSize())
     } else if (trackType == TrackType.Video || trackType == TrackType.Overlay || trackType == TrackType.Audio) {
       Row(Modifier.matchParentSize().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
         repeat((width / 44).coerceIn(1, 8)) { Box(Modifier.weight(1f).height(18.dp).clip(RoundedCornerShape(6.dp)).background(Brush.linearGradient(listOf(Color.White.copy(alpha = 0.18f), Color.Black.copy(alpha = 0.10f))))) }
@@ -1608,6 +1640,15 @@ private fun EngineClipBlock(trackType: TrackType, clip: TimelineClip, index: Int
       Box(Modifier.offset { IntOffset(kx - 4, 6) }.size(8.dp).background(StudioAccent, RoundedCornerShape(2.dp)))
     }
     Text(clip.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.padding(horizontal = 16.dp))
+    if (trackType == TrackType.Video && clip.clipType == ClipType.Image) {
+      Text(
+        "${(displayDurationMs / 1000f).let { "%.1fs".format(it) }}",
+        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 4.dp).clip(RoundedCornerShape(999.dp)).background(StudioBackground.copy(alpha = 0.72f)).padding(horizontal = 6.dp, vertical = 2.dp),
+        color = Color.White,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.Bold,
+      )
+    }
     if (selected) {
       TrimHandleGrip(Modifier.align(Alignment.CenterStart), color, TrimHandle.Left, clip, timeline, zoom, pixelsPerSecond, touchSlopPx, preview, onTrim, onPreview, onPreviewEnd, onPreviewSeek)
       TrimHandleGrip(Modifier.align(Alignment.CenterEnd), color, TrimHandle.Right, clip, timeline, zoom, pixelsPerSecond, touchSlopPx, preview, onTrim, onPreview, onPreviewEnd, onPreviewSeek)
@@ -2183,6 +2224,17 @@ private fun Context.loadThumbnailBitmap(mediaUri: String, thumbnailTimeMs: Long,
       else -> null
     }?.let { source -> Bitmap.createScaledBitmap(source, widthPx.coerceAtLeast(1), heightPx.coerceAtLeast(1), true) }
   }.getOrNull()
+}
+
+private fun resolvePreviewSurfaceState(clip: TimelineClip?): PreviewSurfaceState {
+  if (clip == null) return PreviewSurfaceState.NoMedia
+  val uri = clip.mediaUri?.trim()
+  if (uri.isNullOrEmpty()) return PreviewSurfaceState.InvalidUri
+  return when (clip.clipType) {
+    ClipType.Image, ClipType.Overlay -> PreviewSurfaceState.ImageReady
+    ClipType.Video -> PreviewSurfaceState.VideoReady
+    else -> PreviewSurfaceState.LoadFailed
+  }
 }
 
 @Preview(showBackground = true)

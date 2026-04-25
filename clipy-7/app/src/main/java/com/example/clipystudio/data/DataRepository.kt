@@ -152,9 +152,9 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
       val baseTimeline = project.timeline
       val videoTrack = baseTimeline.tracks.first { it.type == TrackType.Video }
       val audioTrack = baseTimeline.tracks.first { it.type == TrackType.Audio }
-      val textTrack = baseTimeline.tracks.first { it.type == TrackType.Text }
       var videoCursor = videoTrack.clips.maxOfOrNull { it.startMs + it.durationMs } ?: 0L
       var audioCursor = audioTrack.clips.maxOfOrNull { it.startMs + it.durationMs } ?: 0L
+      var firstImportedClipId: String? = null
       val updatedTracks = baseTimeline.tracks.map { track ->
         when (track.type) {
           TrackType.Video -> track.copy(clips = track.clips + imports.filter { it.type != MediaType.Audio }.map { asset ->
@@ -166,7 +166,7 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
               title = asset.displayName,
               startMs = videoCursor.also { videoCursor += asset.durationMs },
               durationMs = asset.durationMs,
-            )
+            ).also { clip -> if (firstImportedClipId == null) firstImportedClipId = clip.id }
           })
           TrackType.Audio -> track.copy(clips = track.clips + imports.filter { it.type == MediaType.Audio }.map { asset ->
             TimelineClip(
@@ -185,7 +185,17 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
           else -> track
         }
       }
-      project.copy(importedAssets = (project.importedAssets + imports).distinctBy { it.id }, timeline = baseTimeline.copy(tracks = updatedTracks).recalculateDuration())
+      project.copy(
+        importedAssets = (project.importedAssets + imports).distinctBy { it.id },
+        timeline = baseTimeline.copy(
+          tracks = updatedTracks,
+          selectedClipId = firstImportedClipId ?: baseTimeline.selectedClipId,
+          selectedTool = EditorTool.Edit,
+          playheadMs = firstImportedClipId?.let { id ->
+            updatedTracks.flatMap { it.clips }.firstOrNull { it.id == id }?.startMs
+          } ?: baseTimeline.playheadMs,
+        ).recalculateDuration(),
+      )
     }
     persistUpdate { it.copy(selectedImports = emptyList()) }
   }
@@ -247,18 +257,37 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
 
   override fun duplicateSelectedClip() = withUndo("Duplicate clip") { project ->
     val selectedId = project.timeline.selectedClipId ?: return@withUndo project
-    project.copy(timeline = project.timeline.copy(tracks = project.timeline.tracks.map { track ->
-      val clip = track.clips.firstOrNull { it.id == selectedId } ?: return@map track
-      track.copy(clips = track.clips + clip.copy(id = UUID.randomUUID().toString(), startMs = clip.startMs + clip.durationMs, title = "${clip.title} copy"))
-    }).recalculateDuration())
+    var duplicatedId: String? = null
+    project.copy(
+      timeline = project.timeline.copy(
+        tracks = project.timeline.tracks.map { track ->
+          val clip = track.clips.firstOrNull { it.id == selectedId } ?: return@map track
+          val duplicate = clip.copy(
+            id = UUID.randomUUID().toString(),
+            startMs = clip.startMs + clip.durationMs,
+            title = "${clip.title} copy",
+          )
+          duplicatedId = duplicate.id
+          track.copy(clips = track.clips + duplicate)
+        },
+        selectedClipId = duplicatedId ?: selectedId,
+        selectedTool = EditorTool.Edit,
+      ).recalculateDuration(),
+    )
   }
 
   override fun deleteSelectedClip() = withUndo("Delete clip") { project ->
     val selectedId = project.timeline.selectedClipId ?: return@withUndo project
-    project.copy(timeline = project.timeline.copy(
-      selectedClipId = null,
-      tracks = project.timeline.tracks.map { track -> track.copy(clips = track.clips.filterNot { it.id == selectedId }) },
-    ).recalculateDuration())
+    val updatedTracks = project.timeline.tracks.map { track -> track.copy(clips = track.clips.filterNot { it.id == selectedId }) }
+    val nextSelection = updatedTracks.flatMap { it.clips }
+      .minByOrNull { clip -> kotlin.math.abs(clip.startMs - project.timeline.playheadMs) }
+      ?.id
+    project.copy(
+      timeline = project.timeline.copy(
+        selectedClipId = nextSelection,
+        tracks = updatedTracks,
+      ).recalculateDuration(),
+    )
   }
 
   override fun trimSelectedClip(deltaMs: Long) = trimSelectedClipEdge(TrimHandle.Right, deltaMs)
