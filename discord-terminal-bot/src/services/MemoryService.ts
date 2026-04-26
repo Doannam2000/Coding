@@ -93,6 +93,8 @@ export class MemoryService {
   private dataPath: string;
   private maxRecentCommands = 100;
   private maxCommandsPerProject = 50;
+  private readonly maxProjectMarkdownFiles = 8;
+  private readonly maxProjectMarkdownBytesPerFile = 64 * 1024;
   private readonly agentDocFileName = 'agent.md';
   private readonly projectDocFileName = 'project.md';
   private readonly fallbackAgentDocTemplate = `# agent.md (ULTRA BUILDER + GENERATOR MODE)
@@ -972,29 +974,57 @@ ${relevantMdContent || '_No AGENTS.md or README found_'}
     return content;
   }
 
+  private getMarkdownFilePriority(filename: string): number {
+    const normalized = filename.toLowerCase();
+    if (normalized === 'agents.md' || normalized === 'agent.md') return 0;
+    if (normalized === 'readme.md') return 1;
+    if (normalized === 'project.md') return 2;
+    return 10;
+  }
+
   getProjectMarkdownFiles(projectPath: string): MarkdownFile[] {
     const mdFiles: MarkdownFile[] = [];
     
     try {
       if (!fs.existsSync(projectPath)) return [];
 
-      const files = fs.readdirSync(projectPath);
+      const files = fs.readdirSync(projectPath)
+        .filter(file => file.toLowerCase().endsWith('.md'))
+        .sort((a, b) => {
+          const priorityDiff = this.getMarkdownFilePriority(a) - this.getMarkdownFilePriority(b);
+          if (priorityDiff !== 0) return priorityDiff;
+          return a.localeCompare(b);
+        })
+        .slice(0, this.maxProjectMarkdownFiles);
+
       for (const file of files) {
-        if (file.endsWith('.md')) {
-          const filePath = path.join(projectPath, file);
-          try {
-            const stat = fs.statSync(filePath);
-            if (stat.isFile()) {
-              const content = fs.readFileSync(filePath, 'utf-8');
-              mdFiles.push({
-                filename: file,
-                path: filePath,
-                content,
-                size: stat.size,
-              });
+        const filePath = path.join(projectPath, file);
+        try {
+          const stat = fs.statSync(filePath);
+          if (!stat.isFile()) {
+            continue;
+          }
+
+          const readLength = Math.min(stat.size, this.maxProjectMarkdownBytesPerFile);
+          let content = '';
+          if (readLength > 0) {
+            const fd = fs.openSync(filePath, 'r');
+            try {
+              const buffer = Buffer.alloc(readLength);
+              const bytesRead = fs.readSync(fd, buffer, 0, readLength, 0);
+              content = buffer.toString('utf-8', 0, bytesRead);
+            } finally {
+              fs.closeSync(fd);
             }
-          } catch {}
-        }
+          }
+
+          mdFiles.push({
+            filename: file,
+            path: filePath,
+            content,
+            size: stat.size,
+          });
+        } catch {}
       }
     } catch (error) {
       loggerService.warn('Failed to read markdown files', { projectPath, error: String(error) });

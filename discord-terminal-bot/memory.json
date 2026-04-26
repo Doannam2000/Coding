@@ -1,6 +1,19 @@
 {
   "projects": [
     {
+      "path": "D:\\Code\\clipy-7",
+      "name": "clipy-7",
+      "type": "android",
+      "applicationId": "com.example.clipystudio",
+      "lastAccessed": "2026-04-26T04:54:02.457Z",
+      "commands": [
+        "/addFolder"
+      ],
+      "lastActivity": "2026-04-26T04:54:02.457Z",
+      "preferredCLI": "opencode",
+      "preferredModel": "codexer/gpt-5.5"
+    },
+    {
       "path": "D:\\Code\\VideCodingB",
       "name": "VideCodingB",
       "type": "android",
@@ -1183,6 +1196,71 @@
     }
   ],
   "aiUsageHistory": [
+    {
+      "timestamp": "2026-04-26T08:36:07.241Z",
+      "cli": "opencode",
+      "model": "codexer/gpt-5.5",
+      "mode": "chat",
+      "channelId": "1212281184",
+      "userId": "1212281184",
+      "cwd": "D:\\Code\\clipy-7",
+      "inputTokens": 10958,
+      "outputTokens": 92,
+      "totalTokens": 11050,
+      "cost": 0
+    },
+    {
+      "timestamp": "2026-04-26T07:20:49.828Z",
+      "cli": "opencode",
+      "model": "codexer/gpt-5.5",
+      "mode": "chat",
+      "channelId": "1212281184",
+      "userId": "1212281184",
+      "cwd": "D:\\Code\\clipy-7",
+      "inputTokens": 14100,
+      "outputTokens": 213,
+      "totalTokens": 14313,
+      "cost": 0
+    },
+    {
+      "timestamp": "2026-04-26T06:36:21.424Z",
+      "cli": "opencode",
+      "model": "codexer/gpt-5.5",
+      "mode": "chat",
+      "channelId": "1212281184",
+      "userId": "1212281184",
+      "cwd": "D:\\Code\\clipy-7",
+      "inputTokens": 49121,
+      "outputTokens": 1736,
+      "totalTokens": 50857,
+      "cost": 0
+    },
+    {
+      "timestamp": "2026-04-26T06:31:51.882Z",
+      "cli": "opencode",
+      "model": "codexer/gpt-5.5",
+      "mode": "chat",
+      "channelId": "1212281184",
+      "userId": "1212281184",
+      "cwd": "D:\\Code\\clipy-7",
+      "inputTokens": 16201,
+      "outputTokens": 719,
+      "totalTokens": 16920,
+      "cost": 0
+    },
+    {
+      "timestamp": "2026-04-26T06:31:08.436Z",
+      "cli": "opencode",
+      "model": "codexer/gpt-5.5",
+      "mode": "chat",
+      "channelId": "1212281184",
+      "userId": "1212281184",
+      "cwd": "D:\\Code\\clipy-7",
+      "inputTokens": 10957,
+      "outputTokens": 18,
+      "totalTokens": 10975,
+      "cost": 0
+    },
     {
       "timestamp": "2026-04-24T17:31:36.751Z",
       "cli": "opencode",
@@ -5001,9 +5079,9 @@
   },
   "botStats": {
     "totalCommands": 221,
-    "totalProjects": 4,
-    "uptime": "150h",
+    "totalProjects": 5,
+    "uptime": "189h",
     "startTime": "2026-04-18T11:27:06.085Z"
   },
-  "lastUpdated": "2026-04-24T18:22:44.453Z"
+  "lastUpdated": "2026-04-26T08:36:07.241Z"
 }

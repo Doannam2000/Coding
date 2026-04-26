@@ -3,7 +3,7 @@
   "terminalSessions": [
     {
       "channelId": "1212281184",
-      "cwd": "D:\\Code\\VideCodingB",
+      "cwd": "D:\\Code\\clipy-7",
       "history": [
         "set \"ANDROID_SERIAL=emulator-5554\" && set \"GRADLE_USER_HOME=D:\\Code\\VideCodingB\\.gradle-user-home\" && echo Using Android device emulator-5554 && gradlew.bat installDebug && adb -s emulator-5554 shell monkey -p com.nantcompany.lifeflow -c android.intent.category.LAUNCHER 1 & timeout /t 2 /nobreak >nul & adb -s emulator-5554 shell pidof com.nantcompany.lifeflow >nul 2>&1 && (echo App launch verified on device emulator-5554 via pidof. & exit /b 0) & timeout /t 2 /nobreak >nul & adb -s emulator-5554 shell pidof com.nantcompany.lifeflow >nul 2>&1 && (echo App launch verified on device emulator-5554 via pidof retry 1. & exit /b 0) & timeout /t 2 /nobreak >nul & adb -s emulator-5554 shell pidof com.nantcompany.lifeflow >nul 2>&1 && (echo App launch verified on device emulator-5554 via pidof retry 2. & exit /b 0) & adb -s emulator-5554 shell dumpsys activity activities | findstr /i \"com.nantcompany.lifeflow\" >nul 2>&1 && (echo App launch verified on device emulator-5554 via dumpsys. & exit /b 0) & echo App launch could not be verified on device emulator-5554. The device is connected, but the app process was not detected after launch. & exit /b 1",
         "app",
@@ -60,11 +60,11 @@
     }
   ],
   "combined": {
-    "currentCLI": "codex",
+    "currentCLI": "opencode",
     "chatSessions": [
       {
         "key": "1212281184_1212281184",
-        "workdir": "D:\\Code\\VideCodingB",
+        "workdir": "D:\\Code\\clipy-7",
         "messages": []
       }
     ],
@@ -100,5 +100,5 @@
       }
     ]
   },
-  "lastUpdated": "2026-04-24T18:22:14.180Z"
+  "lastUpdated": "2026-04-26T06:30:16.647Z"
 }

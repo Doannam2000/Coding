@@ -1005,7 +1005,6 @@ object TimelineEngine {
     val pxPerMsBefore = pixelsPerMs(previousZoom, timeline.pixelsPerSecond)
     val focalTime = ((previousScroll + focalXpx.coerceIn(0f, viewportWidthPx.coerceAtLeast(1f))) / pxPerMsBefore).roundToLong().coerceIn(0L, timeline.durationMs)
     val playheadTime = timeFromScroll(previousScroll, previousZoom, timeline.pixelsPerSecond, timeline.durationMs, viewportWidthPx)
-    val anchor = anchorZoom(previousScroll, previousZoom, nextZoom, focalXpx, timeline.durationMs, timeline.pixelsPerSecond, viewportWidthPx)
     val nextScroll = scrollFromTime(playheadTime, nextZoom, timeline.pixelsPerSecond, viewportWidthPx)
       .coerceIn(0f, maxScrollOffsetPx(timeline.durationMs, nextZoom, timeline.pixelsPerSecond, viewportWidthPx))
     val next = timeline.copy(zoomLevel = nextZoom, scrollOffsetPx = nextScroll, playheadMs = playheadTime).nextVersion()

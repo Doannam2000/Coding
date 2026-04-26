@@ -26,6 +26,7 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -161,6 +162,8 @@ import com.example.clipystudio.data.TrimHandle
 import com.example.clipystudio.data.PreviewSeekSource
 import com.example.clipystudio.data.asSizeLabel
 import com.example.clipystudio.data.asTimecode
+import com.example.clipystudio.filter.FilterLibrary
+import com.example.clipystudio.filter.FilterPreset
 import com.example.clipystudio.theme.MyApplicationTheme
 import com.example.clipystudio.theme.StudioAccent
 import com.example.clipystudio.theme.StudioBackground
@@ -1130,6 +1133,7 @@ private fun EditorPanelHost(modifier: Modifier, timeline: Timeline, project: Pro
     Box(
       modifier = Modifier
         .fillMaxSize()
+        .verticalScroll(rememberScrollState())
         .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
       when {
@@ -1138,7 +1142,7 @@ private fun EditorPanelHost(modifier: Modifier, timeline: Timeline, project: Pro
         timeline.selectedTool == EditorTool.Text -> TextToolPanel(selectedClip, viewModel)
         timeline.selectedTool == EditorTool.Sticker -> StickerToolPanel(timeline, viewModel)
         timeline.selectedTool == EditorTool.Filter -> FilterAdjustPanel(selectedClip, viewModel)
-        timeline.selectedTool == EditorTool.Effect -> EffectToolPanel(viewModel)
+        timeline.selectedTool == EditorTool.Effect -> EffectToolPanel(selectedClip, viewModel)
         timeline.selectedTool == EditorTool.Transition -> TransitionToolPanel(timeline, viewModel)
         timeline.selectedTool == EditorTool.Canvas -> CanvasToolPanel(project.canvasRatio, timeline.canvasBackground, viewModel)
         timeline.selectedTool == EditorTool.Speed -> SpeedToolPanel(selectedClip, viewModel)
@@ -1468,7 +1472,6 @@ private fun PreviewCanvas(ratio: CanvasRatio, timeline: Timeline, onSelect: (Str
           val hit = TimelineEngine.overlayHitTest(TimelineEngine.overlayHitTargets(activeClips.filter { it.clipType == ClipType.Text || it.clipType == ClipType.Sticker || it.clipType == ClipType.Overlay }, tap.x, tap.y, previewWidthPx, previewHeightPx), tap.x, tap.y)
           when {
             hit.selectedOverlayId != null -> onSelect(hit.selectedOverlayId)
-            selectedClip != null -> onSelect(selectedClip.id)
             else -> onClearSelection()
           }
           feedback = feedback.copy(owner = GestureOwner.PREVIEW_TAP)
@@ -1481,14 +1484,24 @@ private fun PreviewCanvas(ratio: CanvasRatio, timeline: Timeline, onSelect: (Str
             feedback = feedback.copy(owner = GestureOwner.TEXT_DOUBLE_TAP, pendingHaptic = HapticEvent.SNAP)
           }
         })
-      }.pointerInput(selectedClip?.id, selectedClip?.transform, previewWidthPx, previewHeightPx) {
+  }.pointerInput(selectedClip?.id, selectedClip?.transform, previewWidthPx, previewHeightPx) {
         val clip = selectedClip ?: return@pointerInput
         var gestureStarted = false
+        var gesturePositionX = clip.transform.positionX
+        var gesturePositionY = clip.transform.positionY
+        var gestureScale = clip.transform.scale
+        var gestureRotationDegrees = clip.transform.rotationDegrees
+        var pointerStartX = 0f
+        var pointerStartY = 0f
         detectTransformGestures { centroid, pan, zoom, rotation ->
           val owner = if (abs(zoom - 1f) > 0.01f || abs(rotation) > 0.25f) GestureOwner.OVERLAY_TRANSFORM else GestureOwner.OVERLAY_DRAG
           val slop = TimelineEngine.touchSlopGate(0f, 0f, pan.x, pan.y, touchSlopPx, if (owner == GestureOwner.OVERLAY_TRANSFORM) TimelineGestureMode.SCALING_OVERLAY else TimelineGestureMode.MOVING_OVERLAY)
           if (!gestureStarted && !slop.hasExceededTouchSlop && abs(zoom - 1f) <= 0.01f && abs(rotation) <= 0.25f) return@detectTransformGestures
-          gestureStarted = true
+          if (!gestureStarted) {
+            gestureStarted = true
+            pointerStartX = centroid.x
+            pointerStartY = centroid.y
+          }
           val lock = TimelineEngine.resolvePlaybackEditLock(timeline.isPlaying, slop.confirmedGestureMode.takeUnless { it == TimelineGestureMode.IDLE } ?: TimelineGestureMode.MOVING_OVERLAY)
           if (lock.shouldPauseBeforeEdit) {
             onSeek(timeline.playheadMs)
@@ -1496,14 +1509,16 @@ private fun PreviewCanvas(ratio: CanvasRatio, timeline: Timeline, onSelect: (Str
             feedback = feedback.copy(chipLabel = lock.lockReason, pendingHaptic = HapticEvent.INVALID_ACTION)
             return@detectTransformGestures
           }
-          val startCenterX = clip.transform.positionX * previewWidthPx
-          val startCenterY = clip.transform.positionY * previewHeightPx
-          val rawCenterX = startCenterX + pan.x
-          val rawCenterY = startCenterY + pan.y
-          val drag = TimelineEngine.resolveOverlayDrag(clip.id, startCenterX, startCenterY, startCenterX, startCenterY, rawCenterX, rawCenterY, previewWidthPx, previewHeightPx)
-          val transformed = TimelineEngine.resolveOverlayTransform(clip.id, drag.resolvedCenterX, drag.resolvedCenterY, 112f, 48f, centroid.x, centroid.y, clip.transform.scale, zoom, clip.transform.rotationDegrees, rotation)
+          val startCenterX = gesturePositionX * previewWidthPx
+          val startCenterY = gesturePositionY * previewHeightPx
+          val drag = TimelineEngine.resolveOverlayDrag(clip.id, startCenterX, startCenterY, pointerStartX, pointerStartY, centroid.x, centroid.y, previewWidthPx, previewHeightPx)
+          val transformed = TimelineEngine.resolveOverlayTransform(clip.id, drag.resolvedCenterX, drag.resolvedCenterY, 112f, 48f, centroid.x, centroid.y, gestureScale, zoom, gestureRotationDegrees, rotation)
           val boundary = TimelineEngine.resolveOverlayCanvasBoundary(clip.id, transformed.boundingBox.centerX, transformed.boundingBox.centerY, 112f, 48f, transformed.resolvedScale, transformed.resolvedRotationDegrees, previewWidthPx, previewHeightPx)
-          onTransform(boundary.resolvedCenterX / previewWidthPx, boundary.resolvedCenterY / previewHeightPx, transformed.resolvedScale, transformed.resolvedRotationDegrees)
+          gesturePositionX = boundary.resolvedCenterX / previewWidthPx
+          gesturePositionY = boundary.resolvedCenterY / previewHeightPx
+          gestureScale = transformed.resolvedScale
+          gestureRotationDegrees = transformed.resolvedRotationDegrees
+          onTransform(gesturePositionX, gesturePositionY, gestureScale, gestureRotationDegrees)
           val snap = transformed.snapResolution
           val guide = drag.snapResolution
           feedback = feedback.copy(
@@ -1784,7 +1799,7 @@ private fun TimelineView(timeline: Timeline, onSelect: (String) -> Unit, onSeek:
   Box(
     Modifier
       .fillMaxWidth()
-      .height(320.dp)
+      .fillMaxHeight()
       .onSizeChanged { viewportWidthPx = (it.width.toFloat() - 74f).coerceAtLeast(180f) }
       .background(EditorChromeSurfaceAlt)
       .then(
@@ -2412,7 +2427,7 @@ private fun StickerToolPanel(timeline: Timeline, viewModel: MainScreenViewModel)
       Text("Sticker library", fontWeight = FontWeight.Bold)
       Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { StickerCategory.entries.forEach { item -> FilterChip(selected = category == item, onClick = { category = item }, label = { Text(item.label) }) } }
       LazyRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(assets, key = { it.id }) { asset -> StickerTile(asset) { viewModel.addStickerAtPlayhead(asset) } } }
-      LayerActions(viewModel)
+      LayerActions(viewModel, enabled = timeline.selectedRealClip()?.clipType == ClipType.Sticker)
     }
   }
 }
@@ -2430,31 +2445,31 @@ private fun StickerTile(asset: StickerAsset, onClick: () -> Unit) {
 @Composable
 private fun FilterAdjustPanel(selectedClip: TimelineClip?, viewModel: MainScreenViewModel) {
   var adjustments by remember(selectedClip?.id) { mutableStateOf(selectedClip?.filterAdjustments ?: FilterAdjustmentSet()) }
-  val filters = listOf(null to "Original", "warm" to "Warm", "cool" to "Cool", "vintage" to "Vintage", "cinematic" to "Cinematic", "bw" to "B&W")
+  val filters = FilterLibrary.presets
   Card(colors = CardDefaults.cardColors(containerColor = StudioSurfaceHigh), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
     Column(Modifier.padding(14.dp)) {
       Text("Filter and adjust", fontWeight = FontWeight.Bold)
       if (selectedClip == null) Text("Select a video, image, overlay, or text layer to adjust.", color = StudioTextMuted, fontSize = 13.sp)
-      LazyRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(filters) { pair -> FilterPreviewChip(pair.second, selectedClip?.filterAdjustments?.filterId == pair.first) { viewModel.updateSelectedFilter(pair.first) } } }
-      AdjustmentControl("Brightness", adjustments.brightness, 0.5f, 1.5f) { adjustments = adjustments.copy(brightness = it); viewModel.updateSelectedAdjustments(adjustments) }
-      AdjustmentControl("Contrast", adjustments.contrast, 0.5f, 1.6f) { adjustments = adjustments.copy(contrast = it); viewModel.updateSelectedAdjustments(adjustments) }
-      AdjustmentControl("Saturation", adjustments.saturation, 0f, 2f) { adjustments = adjustments.copy(saturation = it); viewModel.updateSelectedAdjustments(adjustments) }
-      AdjustmentControl("Exposure", adjustments.exposure, -1f, 1f) { adjustments = adjustments.copy(exposure = it); viewModel.updateSelectedAdjustments(adjustments) }
-      AdjustmentControl("Temperature", adjustments.temperature, -1f, 1f) { adjustments = adjustments.copy(temperature = it); viewModel.updateSelectedAdjustments(adjustments) }
-      AdjustmentControl("Sharpness", adjustments.sharpness, 0f, 1f) { adjustments = adjustments.copy(sharpness = it); viewModel.updateSelectedAdjustments(adjustments) }
+      LazyRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(filters, key = { it.id ?: "original" }) { filter -> FilterPreviewChip(filter, selectedClip?.filterAdjustments?.filterId == filter.id) { adjustments = filter.defaultAdjustments; viewModel.updateSelectedAdjustments(filter.defaultAdjustments) } } }
+      AdjustmentControl("Brightness", adjustments.brightness, 0.5f, 1.5f) { val next = adjustments.copy(brightness = it); adjustments = next; viewModel.updateSelectedAdjustments(next) }
+      AdjustmentControl("Contrast", adjustments.contrast, 0.5f, 1.6f) { val next = adjustments.copy(contrast = it); adjustments = next; viewModel.updateSelectedAdjustments(next) }
+      AdjustmentControl("Saturation", adjustments.saturation, 0f, 2f) { val next = adjustments.copy(saturation = it); adjustments = next; viewModel.updateSelectedAdjustments(next) }
+      AdjustmentControl("Exposure", adjustments.exposure, -1f, 1f) { val next = adjustments.copy(exposure = it); adjustments = next; viewModel.updateSelectedAdjustments(next) }
+      AdjustmentControl("Temperature", adjustments.temperature, -1f, 1f) { val next = adjustments.copy(temperature = it); adjustments = next; viewModel.updateSelectedAdjustments(next) }
+      AdjustmentControl("Sharpness", adjustments.sharpness, 0f, 1f) { val next = adjustments.copy(sharpness = it); adjustments = next; viewModel.updateSelectedAdjustments(next) }
     }
   }
 }
 
 @Composable
-private fun FilterPreviewChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun FilterPreviewChip(filter: FilterPreset, selected: Boolean, onClick: () -> Unit) {
   Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = if (selected) StudioPrimary.copy(alpha = 0.45f) else StudioSurface), shape = RoundedCornerShape(16.dp), modifier = Modifier.size(92.dp, 66.dp)) {
-    Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(StudioPrimary.copy(alpha = 0.4f), StudioSecondary.copy(alpha = 0.28f)))), contentAlignment = Alignment.Center) { Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center) }
+    Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(StudioPrimary.copy(alpha = 0.4f), StudioSecondary.copy(alpha = 0.28f)))), contentAlignment = Alignment.Center) { Text(filter.label, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center) }
   }
 }
 
 @Composable
-private fun EffectToolPanel(viewModel: MainScreenViewModel) {
+private fun EffectToolPanel(selectedClip: TimelineClip?, viewModel: MainScreenViewModel) {
   var category by remember { mutableStateOf(EffectCategory.Basic) }
   val effects = EffectLibrary.filter { it.category == category }
   Card(colors = CardDefaults.cardColors(containerColor = StudioSurfaceHigh), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
@@ -2462,7 +2477,7 @@ private fun EffectToolPanel(viewModel: MainScreenViewModel) {
       Text("Effects", fontWeight = FontWeight.Bold)
       Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { EffectCategory.entries.forEach { item -> FilterChip(selected = category == item, onClick = { category = item }, label = { Text(item.label) }) } }
       LazyRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(effects, key = { it.id }) { effect -> EffectTile(effect) { viewModel.addEffectAtPlayhead(effect) } } }
-      LayerActions(viewModel)
+      LayerActions(viewModel, enabled = selectedClip?.clipType == ClipType.Effect)
     }
   }
 }
@@ -2515,7 +2530,7 @@ private fun OverlayToolPanel(importedAssets: List<MediaAsset>, selectedClip: Tim
         LazyRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(overlayAssets, key = { it.id }) { asset -> MediaMiniCard(asset) { viewModel.addOverlayAtPlayhead(asset) } } }
       }
       if (selectedClip?.clipType == ClipType.Overlay) AdjustmentControl("Opacity", selectedClip.transform.opacity, 0f, 1f) { viewModel.updateSelectedOpacity(it) }
-      LayerActions(viewModel)
+      LayerActions(viewModel, enabled = selectedClip?.clipType == ClipType.Overlay)
     }
   }
 }
@@ -2564,7 +2579,7 @@ private fun AudioToolPanel(selectedClip: TimelineClip?, viewModel: MainScreenVie
           FilterChip(selected = clip.audioProperties.fadeOutMs > 0, onClick = { viewModel.updateSelectedAudio(clip.audioProperties.volume, clip.audioProperties.fadeInMs, if (clip.audioProperties.fadeOutMs > 0) 0 else 600, clip.audioProperties.loopEnabled) }, label = { Text("Fade out") })
           FilterChip(selected = clip.audioProperties.loopEnabled, onClick = { viewModel.updateSelectedAudio(clip.audioProperties.volume, clip.audioProperties.fadeInMs, clip.audioProperties.fadeOutMs, !clip.audioProperties.loopEnabled) }, label = { Text("Loop") })
         }
-        LayerActions(viewModel)
+        LayerActions(viewModel, enabled = true)
       }
     }
   }
@@ -2595,7 +2610,7 @@ private fun TextToolPanel(selectedClip: TimelineClip?, viewModel: MainScreenView
         listOf("Fade", "Slide", "Pop", "Typewriter").forEach { value -> FilterChip(selected = animation == value, onClick = { animation = value }, label = { Text(value) }) }
       }
       Button(onClick = { if (selectedClip?.clipType == ClipType.Text) viewModel.updateSelectedText(text, size, color, if (background) "#7C5CFF" else null, stroke, shadow, alignment, animation) else viewModel.addTextClipAtPlayhead(text, size, color, if (background) "#7C5CFF" else null, stroke, shadow, alignment, animation) }, modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(48.dp), shape = RoundedCornerShape(999.dp)) { Text(if (selectedClip?.clipType == ClipType.Text) "Update Text" else "Add Text") }
-      LayerActions(viewModel)
+       LayerActions(viewModel, enabled = selectedClip?.clipType == ClipType.Text)
     }
   }
 }

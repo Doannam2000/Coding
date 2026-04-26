@@ -71,6 +71,8 @@ Extracts `applicationId`/`namespace` from `build.gradle`.
   - `agent.md` (copied from workspace root template if available, otherwise fallback template)
   - `project.md` (core feature/architecture note template)
 - This enforces documentation bootstrapping for new projects and backfills missing docs in existing tracked projects.
+- Project doc/context scanning now only reads a small, prioritized set of top-level markdown files (`AGENTS.md`/`agent.md`, `README.md`, `project.md`, then others) and caps bytes read per file.
+- This prevents `/project`, project switching, and AI context loading from hanging too long on projects with very large markdown files.
 
 ## Telegram Commands
 
