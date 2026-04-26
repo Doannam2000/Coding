@@ -7,6 +7,7 @@ import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -18,6 +19,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -27,6 +29,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -36,6 +39,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -53,7 +58,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -71,6 +78,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -82,12 +90,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.consumePositionChange
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -106,6 +116,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
@@ -140,7 +151,6 @@ import com.example.clipystudio.data.StickerAsset
 import com.example.clipystudio.data.StickerCategory
 import com.example.clipystudio.data.StickerLibrary
 import com.example.clipystudio.data.Timeline
-import com.example.clipystudio.data.TimelineThumbnailCache
 import com.example.clipystudio.data.TimelineClip
 import com.example.clipystudio.data.TimelineEngine
 import com.example.clipystudio.data.TimelineGestureMode
@@ -203,10 +213,105 @@ private data class PreviewGestureFeedback(
 
 private enum class PreviewSurfaceState {
   NoMedia,
+  Loading,
   ImageReady,
   VideoReady,
   InvalidUri,
   LoadFailed,
+}
+
+private enum class ClipVisualState {
+  Selected,
+  Active,
+  Inactive,
+  Invalid,
+}
+
+private enum class PreviewMediaLoadState {
+  Idle,
+  Failed,
+}
+
+private enum class VideoPreviewLoadState {
+  Loading,
+  Ready,
+  Failed,
+}
+
+private val EditorChromeBackground = Color(0xFF0A0A0A)
+private val EditorChromeSurface = Color(0xFF1A1A1A)
+private val EditorChromeSurfaceAlt = Color(0xFF0F0F0F)
+private val EditorChromeSurfaceLow = Color(0xFF141414)
+private val EditorChromeBorder = Color(0xFF262626)
+private val EditorChromePrimary = Color(0xFF0084FF)
+private val EditorChromeAudio = Color(0xFF003919)
+private val EditorChromeAudioAccent = Color(0xFF00A657)
+private val EditorChromeMuted = Color(0xFFC6C6C7)
+private val EditorTimelineGrid = Color(0xFF1A1A1A)
+private val EditorChromeDanger = Color(0xFFFF6B6B)
+
+private data class BottomNavItem(val tool: EditorTool, val label: String, val glyph: String)
+
+private fun topBarChevronGlyph() = "‹"
+
+private fun toolbarGlyph(action: String): String = when (action) {
+  "undo" -> "↶"
+  "redo" -> "↷"
+  "split" -> "✂"
+  "speed" -> "◌"
+  "anim" -> "◇"
+  "volume" -> "∿"
+  "delete" -> "⌫"
+  else -> "•"
+}
+
+private fun navGlyph(tool: EditorTool): String = when (tool) {
+  EditorTool.Edit -> "▣"
+  EditorTool.Audio -> "♪"
+  EditorTool.Text -> "T"
+  EditorTool.Effect -> "✦"
+  EditorTool.Overlay -> "▤"
+  EditorTool.Sticker -> "☺"
+  EditorTool.Filter -> "◐"
+  EditorTool.Transition -> "⇄"
+  EditorTool.Canvas -> "□"
+  EditorTool.Speed -> "⟲"
+  EditorTool.Export -> "↑"
+}
+
+private fun clipTypeBadge(clipType: ClipType): String = when (clipType) {
+  ClipType.Image -> "IMG"
+  ClipType.Video -> "VID"
+  ClipType.Audio -> "AUD"
+  ClipType.Text -> "TXT"
+  ClipType.Sticker -> "STK"
+  ClipType.Effect -> "FX"
+  ClipType.Overlay -> "OVR"
+}
+
+private fun Timeline.findClip(clipId: String?): TimelineClip? =
+  clipId?.let { id -> tracks.flatMap { it.clips }.firstOrNull { it.id == id } }
+
+private fun Timeline.activePreviewClip(): TimelineClip? {
+  val allClips = tracks.flatMap { it.clips }
+  val lastFrameTimeMs = playheadMs.takeIf { it < durationMs }
+    ?: (durationMs - 1L).coerceAtLeast(0L)
+  return findClip(selectedClipId)?.takeIf { it.clipType in setOf(ClipType.Image, ClipType.Video, ClipType.Overlay) }
+    ?: TimelineEngine.resolveActiveComposition(this).video?.clipId?.let { activeId -> allClips.firstOrNull { it.id == activeId } }
+    ?: allClips.firstOrNull { it.clipType in setOf(ClipType.Image, ClipType.Video, ClipType.Overlay) && lastFrameTimeMs in it.startMs until (it.startMs + it.durationMs).coerceAtLeast(it.startMs + 1L) }
+}
+
+private fun Timeline.selectedRealClip(): TimelineClip? =
+  findClip(selectedClipId)?.takeIf { it.clipType in setOf(ClipType.Image, ClipType.Video, ClipType.Audio, ClipType.Overlay, ClipType.Text, ClipType.Sticker, ClipType.Effect) }
+
+private fun TimelineClip.isVisualMediaClip(): Boolean = clipType in setOf(ClipType.Image, ClipType.Video, ClipType.Overlay)
+
+private fun TimelineClip.hasUsableMediaUri(): Boolean {
+  if (!isVisualMediaClip()) return false
+  val uri = mediaUri?.trim().orEmpty()
+  if (uri.isBlank()) return false
+  val parsedUri = runCatching { Uri.parse(uri) }.getOrNull() ?: return false
+  return !parsedUri.scheme.isNullOrBlank()
 }
 
 private suspend fun animateTimelineSettle(
@@ -568,6 +673,7 @@ private fun ImportScreen(appState: AppState, copy: Copy, snackbarHostState: Snac
       return@rememberLauncherForActivityResult
     }
     uris.forEach { uri ->
+      context.persistReadPermission(uri)
       val metadata = context.readUriMetadataSafely(uri)
       if (metadata == null) {
         scope.launch { snackbarHostState.showSnackbar(importMessage("This media item could not be read. Try another file.", "Khong the doc media nay. Hay thu tep khac.")) }
@@ -681,53 +787,110 @@ private fun EditorScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onI
     return
   }
   val timeline = project.timeline
+  val selectedClip = timeline.selectedRealClip()
   var showExitDialog by remember { mutableStateOf(false) }
   BackHandler { showExitDialog = true }
-  StudioScreen(horizontalPadding = 10.dp) {
-    EditorTopBar(
-      title = project.name,
-      version = project.autosaveVersion,
-      canUndo = appState.undoStack.isNotEmpty(),
-      canRedo = appState.redoStack.isNotEmpty(),
-      onBack = { showExitDialog = true },
-      onUndo = viewModel::undo,
-      onRedo = viewModel::redo,
-      onExport = onExport,
-    )
-    PreviewCanvas(project.canvasRatio, timeline, viewModel::selectClip, viewModel::clearSelection, viewModel::deleteSelectedClip, viewModel::transformSelectedClipAbsolute, viewModel::updateSelectedTool, viewModel::updateCanvasRatio, viewModel::seekTo)
-    PlaybackControls(timeline, viewModel::togglePlayback, viewModel::seekBy)
-    if (isPlaybackLocked) {
-      Text(
-        if (appState.languageCode == LanguageCode.Vi) "Dang phat: cac thay doi truc tiep duoc khoa de giu dong bo preview." else "Playback lock: direct edits are held to keep preview and timeline synced.",
-        color = StudioTextMuted,
-        fontSize = 11.sp,
-        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Playback editing lock active" },
+  Box(
+    modifier = Modifier
+      .fillMaxSize()
+      .background(EditorChromeBackground),
+  ) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+      val bottomBarHeight = 72.dp
+      val previewHeight = (maxHeight * 0.40f).coerceIn(248.dp, 360.dp)
+      val panelHeight = if (maxHeight < 780.dp) 132.dp else 160.dp
+      Column(
+        modifier = Modifier
+          .fillMaxSize()
+          .background(EditorChromeBackground),
+      ) {
+        EditorTopBar(
+          resolution = appState.defaultExportSettings.resolution.label.uppercase(),
+          onBack = { showExitDialog = true },
+          onExport = onExport,
+        )
+        EditorPreviewSection(
+          modifier = Modifier
+            .fillMaxWidth()
+            .height(previewHeight),
+          ratio = project.canvasRatio,
+          timeline = timeline,
+          onSelect = viewModel::selectClip,
+          onClearSelection = viewModel::clearSelection,
+          onDelete = viewModel::deleteSelectedClip,
+          onTransform = viewModel::transformSelectedClipAbsolute,
+          onEditText = viewModel::updateSelectedTool,
+          onRatio = viewModel::updateCanvasRatio,
+          onSeek = viewModel::seekTo,
+          onPlay = viewModel::togglePlayback,
+          onSeekBy = viewModel::seekBy,
+        )
+        if (isPlaybackLocked) {
+          Text(
+            if (appState.languageCode == LanguageCode.Vi) "Dang phat: cac thay doi truc tiep duoc khoa de giu dong bo preview." else "Playback lock: direct edits are held to keep preview and timeline synced.",
+            color = EditorChromeMuted.copy(alpha = 0.78f),
+            fontSize = 11.sp,
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 12.dp, vertical = 4.dp)
+              .semantics { contentDescription = "Playback editing lock active" },
+          )
+        }
+        LaunchedEffect(timeline.isPlaying) {
+          while (timeline.isPlaying) {
+            delay(50)
+            viewModel.tickPlayback(50)
+          }
+        }
+        EditorTimelineSection(
+          modifier = Modifier.weight(1f),
+          timeline = timeline,
+          canUndo = appState.undoStack.isNotEmpty(),
+          canRedo = appState.redoStack.isNotEmpty(),
+          hasSelection = selectedClip != null,
+          onUndo = viewModel::undo,
+          onRedo = viewModel::redo,
+          onSplit = viewModel::splitSelectedClip,
+          onSpeed = { viewModel.updateSelectedTool(EditorTool.Speed) },
+          onAnimation = { viewModel.updateSelectedTool(EditorTool.Effect) },
+          onVolume = { viewModel.updateSelectedTool(EditorTool.Audio) },
+          onDelete = viewModel::deleteSelectedClip,
+          timelineContent = {
+            TimelineView(
+              timeline = timeline,
+              onSelect = viewModel::selectClip,
+              onSeek = viewModel::seekTo,
+              onScroll = viewModel::scrollTimelineTo,
+              onZoom = viewModel::updateTimelineZoom,
+              onTrim = viewModel::trimSelectedClipEdge,
+              onMove = viewModel::dragSelectedClip,
+              onSplit = viewModel::splitSelectedClip,
+              onReorder = viewModel::reorderSelectedVideoClip,
+            )
+          },
+        )
+        EditorPanelHost(
+          modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 112.dp)
+            .height(panelHeight),
+          timeline = timeline,
+          project = project,
+          selectedClip = selectedClip,
+          viewModel = viewModel,
+        )
+        Spacer(Modifier.height(bottomBarHeight + 16.dp))
+      }
+      EditorBottomBar(
+        modifier = Modifier.align(Alignment.BottomCenter),
+        selected = timeline.selectedTool,
+        onSelect = viewModel::updateSelectedTool,
+      )
+      AddMediaFab(
+        modifier = Modifier.align(Alignment.BottomEnd).offset(x = (-24).dp, y = (-92).dp),
+        onClick = onImport,
       )
     }
-    LaunchedEffect(timeline.isPlaying) {
-      while (timeline.isPlaying) {
-        delay(250)
-        viewModel.tickPlayback(250)
-      }
-    }
-    TimelineView(timeline, viewModel::selectClip, viewModel::seekTo, viewModel::scrollTimelineTo, viewModel::updateTimelineZoom, viewModel::trimSelectedClipEdge, viewModel::dragSelectedClip, viewModel::splitSelectedClip, viewModel::reorderSelectedVideoClip)
-    Spacer(Modifier.height(8.dp))
-    val selectedClip = timeline.tracks.flatMap { it.clips }.firstOrNull { it.id == timeline.selectedClipId }
-    when {
-      selectedClip != null && timeline.selectedTool == EditorTool.Edit -> ClipEditPanel(selectedClip, viewModel)
-      timeline.selectedTool == EditorTool.Audio -> AudioToolPanel(selectedClip, viewModel)
-      timeline.selectedTool == EditorTool.Text -> TextToolPanel(selectedClip, viewModel)
-      timeline.selectedTool == EditorTool.Sticker -> StickerToolPanel(timeline, viewModel)
-      timeline.selectedTool == EditorTool.Filter -> FilterAdjustPanel(selectedClip, viewModel)
-      timeline.selectedTool == EditorTool.Effect -> EffectToolPanel(viewModel)
-      timeline.selectedTool == EditorTool.Transition -> TransitionToolPanel(timeline, viewModel)
-      timeline.selectedTool == EditorTool.Canvas -> CanvasToolPanel(project.canvasRatio, timeline.canvasBackground, viewModel)
-      timeline.selectedTool == EditorTool.Speed -> SpeedToolPanel(selectedClip, viewModel)
-      timeline.selectedTool == EditorTool.Overlay -> OverlayToolPanel(project.importedAssets, selectedClip, viewModel)
-      else -> ToolPanel(timeline, viewModel)
-    }
-    Spacer(Modifier.height(8.dp))
-    ToolRail(timeline.selectedTool, viewModel::updateSelectedTool, onImport, onExport)
   }
   if (showExitDialog) {
     AlertDialog(
@@ -746,16 +909,305 @@ private fun EditorScreen(appState: AppState, copy: Copy, onBack: () -> Unit, onI
 }
 
 @Composable
-private fun EditorTopBar(title: String, version: Long, canUndo: Boolean, canRedo: Boolean, onBack: () -> Unit, onUndo: () -> Unit, onRedo: () -> Unit, onExport: () -> Unit) {
-  Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
-    TextButton(onClick = onBack, modifier = Modifier.semantics { contentDescription = "Back from editor" }) { Text("Back") }
-    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-      Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
-      Text("Autosaved v$version", color = StudioSecondary, fontSize = 11.sp)
+private fun EditorTopBar(resolution: String, onBack: () -> Unit, onExport: () -> Unit) {
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .height(56.dp)
+      .background(EditorChromeBackground)
+      .border(1.dp, EditorChromeBorder)
+      .padding(horizontal = 14.dp),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.SpaceBetween,
+  ) {
+    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+      IconButton(
+        onClick = onBack,
+        modifier = Modifier
+          .size(40.dp)
+          .clip(CircleShape)
+          .background(Color.Transparent)
+          .semantics { contentDescription = "Back from editor" },
+      ) {
+        Text(topBarChevronGlyph(), color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Medium)
+      }
+      Surface(
+        color = EditorChromeSurface,
+        shape = RoundedCornerShape(999.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, EditorChromeBorder),
+      ) {
+        Row(
+          modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+          Text(resolution, color = Color(0xFF9CA3AF), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+          Text("▾", color = Color(0xFF9CA3AF), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+      }
     }
-    TextButton(onClick = onUndo, enabled = canUndo, modifier = Modifier.semantics { contentDescription = "Undo edit" }) { Text("Undo") }
-    TextButton(onClick = onRedo, enabled = canRedo, modifier = Modifier.semantics { contentDescription = "Redo edit" }) { Text("Redo") }
-    Button(onClick = onExport, shape = RoundedCornerShape(999.dp), modifier = Modifier.height(44.dp).semantics { contentDescription = "Export project" }) { Text("Export") }
+    Button(
+      onClick = onExport,
+      shape = RoundedCornerShape(8.dp),
+      colors = ButtonDefaults.buttonColors(containerColor = EditorChromePrimary, contentColor = Color.White),
+      modifier = Modifier.height(36.dp).semantics { contentDescription = "Export project" },
+      contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+    ) {
+      Text("↑", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+      Spacer(Modifier.width(6.dp))
+      Text("Export", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+    }
+  }
+}
+
+@Composable
+private fun EditorPreviewSection(
+  modifier: Modifier,
+  ratio: CanvasRatio,
+  timeline: Timeline,
+  onSelect: (String) -> Unit,
+  onClearSelection: () -> Unit,
+  onDelete: () -> Unit,
+  onTransform: (Float, Float, Float, Float) -> Unit,
+  onEditText: (EditorTool) -> Unit,
+  onRatio: (CanvasRatio) -> Unit,
+  onSeek: (Long) -> Unit,
+  onPlay: () -> Unit,
+  onSeekBy: (Long) -> Unit,
+) {
+  Box(
+    modifier = modifier
+      .fillMaxWidth()
+      .background(EditorChromeBackground)
+      .padding(horizontal = 20.dp, vertical = 12.dp),
+  ) {
+    Column(
+      modifier = Modifier.fillMaxSize(),
+      horizontalAlignment = Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.SpaceBetween,
+    ) {
+      PreviewCanvas(ratio, timeline, onSelect, onClearSelection, onDelete, onTransform, onEditText, onRatio, onSeek)
+      PlaybackControls(timeline, onPlay, onSeekBy)
+    }
+  }
+}
+
+@Composable
+private fun EditorTimelineSection(
+  modifier: Modifier,
+  timeline: Timeline,
+  canUndo: Boolean,
+  canRedo: Boolean,
+  hasSelection: Boolean,
+  onUndo: () -> Unit,
+  onRedo: () -> Unit,
+  onSplit: () -> Unit,
+  onSpeed: () -> Unit,
+  onAnimation: () -> Unit,
+  onVolume: () -> Unit,
+  onDelete: () -> Unit,
+  timelineContent: @Composable () -> Unit,
+) {
+  Column(
+    modifier = modifier
+      .fillMaxWidth()
+      .background(EditorChromeSurfaceAlt)
+      .border(1.dp, EditorChromeBorder),
+  ) {
+    EditorTimelineToolbar(
+      timeline = timeline,
+      canUndo = canUndo,
+      canRedo = canRedo,
+      hasSelection = hasSelection,
+      onUndo = onUndo,
+      onRedo = onRedo,
+      onSplit = onSplit,
+      onSpeed = onSpeed,
+      onAnimation = onAnimation,
+      onVolume = onVolume,
+      onDelete = onDelete,
+    )
+    Box(Modifier.weight(1f).fillMaxWidth()) {
+      timelineContent()
+    }
+  }
+}
+
+@Composable
+private fun EditorTimelineToolbar(
+  timeline: Timeline,
+  canUndo: Boolean,
+  canRedo: Boolean,
+  hasSelection: Boolean,
+  onUndo: () -> Unit,
+  onRedo: () -> Unit,
+  onSplit: () -> Unit,
+  onSpeed: () -> Unit,
+  onAnimation: () -> Unit,
+  onVolume: () -> Unit,
+  onDelete: () -> Unit,
+) {
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .height(44.dp)
+      .background(EditorChromeSurface)
+      .border(1.dp, EditorChromeBorder)
+      .padding(horizontal = 6.dp),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.SpaceBetween,
+  ) {
+    Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+      CompactToolbarIconButton(toolbarGlyph("undo"), "Undo edit", canUndo, onUndo)
+      CompactToolbarIconButton(toolbarGlyph("redo"), "Redo edit", canRedo, onRedo)
+      Box(Modifier.padding(horizontal = 4.dp).width(1.dp).height(16.dp).background(EditorChromeBorder))
+      CompactToolbarAction(toolbarGlyph("split"), "Split", hasSelection, onSplit)
+      CompactToolbarAction(toolbarGlyph("speed"), "Speed", hasSelection, onSpeed)
+    }
+    Surface(
+      color = EditorChromePrimary.copy(alpha = 0.10f),
+      shape = RoundedCornerShape(6.dp),
+      border = androidx.compose.foundation.BorderStroke(1.dp, EditorChromePrimary.copy(alpha = 0.20f)),
+    ) {
+      Text(
+        timeline.playheadMs.asTimecode(),
+        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+        color = EditorChromePrimary,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+      )
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+      CompactToolbarAction(toolbarGlyph("anim"), "Anim", true, onAnimation)
+      CompactToolbarAction(toolbarGlyph("volume"), "Vol", hasSelection, onVolume)
+      CompactToolbarIconButton(toolbarGlyph("delete"), "Delete selected clip", hasSelection, onDelete, tint = EditorChromeDanger)
+    }
+  }
+}
+
+@Composable
+private fun CompactToolbarIconButton(
+  glyph: String,
+  description: String,
+  enabled: Boolean,
+  onClick: () -> Unit,
+  tint: Color = EditorChromeMuted,
+) {
+  IconButton(
+    onClick = onClick,
+    enabled = enabled,
+    modifier = Modifier.size(36.dp).semantics { contentDescription = description },
+  ) {
+    Text(glyph, color = if (enabled) tint else tint.copy(alpha = 0.35f), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+  }
+}
+
+@Composable
+private fun CompactToolbarAction(glyph: String, label: String, enabled: Boolean, onClick: () -> Unit) {
+  Row(
+    modifier = Modifier
+      .clip(RoundedCornerShape(8.dp))
+      .background(Color.Transparent)
+      .clickable(enabled = enabled, onClick = onClick)
+      .padding(horizontal = 8.dp, vertical = 8.dp)
+      .semantics { contentDescription = label },
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(4.dp),
+  ) {
+    Text(glyph, color = if (enabled) EditorChromeMuted else EditorChromeMuted.copy(alpha = 0.35f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+    Text(label, color = if (enabled) EditorChromeMuted else EditorChromeMuted.copy(alpha = 0.35f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+  }
+}
+
+@Composable
+private fun EditorPanelHost(modifier: Modifier, timeline: Timeline, project: Project, selectedClip: TimelineClip?, viewModel: MainScreenViewModel) {
+  Surface(
+    modifier = modifier,
+    color = EditorChromeSurface,
+    shape = RectangleShape,
+    border = androidx.compose.foundation.BorderStroke(1.dp, EditorChromeBorder),
+  ) {
+    Box(
+      modifier = Modifier
+        .fillMaxSize()
+        .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+      when {
+        selectedClip != null && timeline.selectedTool == EditorTool.Edit -> ClipEditPanel(selectedClip, viewModel)
+        timeline.selectedTool == EditorTool.Audio -> AudioToolPanel(selectedClip, viewModel)
+        timeline.selectedTool == EditorTool.Text -> TextToolPanel(selectedClip, viewModel)
+        timeline.selectedTool == EditorTool.Sticker -> StickerToolPanel(timeline, viewModel)
+        timeline.selectedTool == EditorTool.Filter -> FilterAdjustPanel(selectedClip, viewModel)
+        timeline.selectedTool == EditorTool.Effect -> EffectToolPanel(viewModel)
+        timeline.selectedTool == EditorTool.Transition -> TransitionToolPanel(timeline, viewModel)
+        timeline.selectedTool == EditorTool.Canvas -> CanvasToolPanel(project.canvasRatio, timeline.canvasBackground, viewModel)
+        timeline.selectedTool == EditorTool.Speed -> SpeedToolPanel(selectedClip, viewModel)
+        timeline.selectedTool == EditorTool.Overlay -> OverlayToolPanel(project.importedAssets, selectedClip, viewModel)
+        else -> ToolPanel(timeline, viewModel)
+      }
+    }
+  }
+}
+
+@Composable
+private fun EditorBottomBar(modifier: Modifier = Modifier, selected: EditorTool, onSelect: (EditorTool) -> Unit) {
+  val items = listOf(
+    BottomNavItem(EditorTool.Edit, "Edit", navGlyph(EditorTool.Edit)),
+    BottomNavItem(EditorTool.Audio, "Audio", navGlyph(EditorTool.Audio)),
+    BottomNavItem(EditorTool.Text, "Text", navGlyph(EditorTool.Text)),
+    BottomNavItem(EditorTool.Effect, "Effects", navGlyph(EditorTool.Effect)),
+    BottomNavItem(EditorTool.Overlay, "Overlay", navGlyph(EditorTool.Overlay)),
+  )
+  Row(
+    modifier = modifier
+      .fillMaxWidth()
+      .height(72.dp)
+      .navigationBarsPadding()
+      .background(EditorChromeSurface)
+      .border(1.dp, Color(0xFF333333))
+      .padding(horizontal = 4.dp),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.SpaceEvenly,
+  ) {
+    items.forEach { item ->
+      val active = selected == item.tool
+      val tint = if (active) EditorChromePrimary else Color(0xFF737373)
+      Column(
+        modifier = Modifier
+          .weight(1f)
+          .clickable(onClick = { onSelect(item.tool) })
+          .padding(vertical = 6.dp)
+          .semantics { contentDescription = "${item.label} tool" },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+      ) {
+        Box(
+          modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (active) EditorChromePrimary.copy(alpha = 0.10f) else Color.Transparent)
+            .padding(horizontal = 10.dp, vertical = 2.dp),
+        ) {
+          Text(item.glyph, color = tint, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        }
+        Text(item.label.uppercase(), color = tint, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+      }
+    }
+  }
+}
+
+@Composable
+private fun AddMediaFab(modifier: Modifier = Modifier, onClick: () -> Unit) {
+  Surface(
+    modifier = modifier.size(56.dp),
+    shape = CircleShape,
+    color = EditorChromePrimary,
+    shadowElevation = 12.dp,
+    border = androidx.compose.foundation.BorderStroke(4.dp, EditorChromeBackground),
+    onClick = onClick,
+  ) {
+    Box(contentAlignment = Alignment.Center) {
+      Text("+", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+    }
   }
 }
 
@@ -982,10 +1434,11 @@ private fun PreviewCanvas(ratio: CanvasRatio, timeline: Timeline, onSelect: (Str
   val activeIds = buildSet { composition.video?.let { add(it.clipId) }; addAll(composition.audio.map { it.clipId }); addAll(composition.text.map { it.clipId }); addAll(composition.stickers.map { it.clipId }); addAll(composition.overlays.map { it.clipId }); addAll(composition.effects.map { it.clipId }) }
   val allClips = timeline.tracks.flatMap { it.clips }
   val activeClips = allClips.filter { it.id in activeIds }.sortedBy { it.zIndex }
-  val selectedClip = allClips.firstOrNull { it.id == timeline.selectedClipId }
+  val selectedClip = timeline.findClip(timeline.selectedClipId)
   val selectedVisualClip = selectedClip?.takeIf { it.clipType in setOf(ClipType.Image, ClipType.Video, ClipType.Overlay) }
-  val primaryVisualClip = selectedVisualClip ?: composition.video?.let { active -> allClips.firstOrNull { it.id == active.clipId } }
-  val previewState = remember(primaryVisualClip?.id, primaryVisualClip?.mediaUri) { resolvePreviewSurfaceState(primaryVisualClip) }
+  val primaryVisualClip = selectedVisualClip ?: timeline.activePreviewClip()?.takeIf { it.clipType in setOf(ClipType.Image, ClipType.Video, ClipType.Overlay) }
+  val context = LocalContext.current
+  val previewState = remember(primaryVisualClip?.id, primaryVisualClip?.mediaUri, primaryVisualClip?.clipType) { context.resolvePreviewSurfaceState(primaryVisualClip) }
   var feedback by remember { mutableStateOf(PreviewGestureFeedback()) }
   val haptic = LocalHapticFeedback.current
   val density = LocalDensity.current
@@ -995,15 +1448,29 @@ private fun PreviewCanvas(ratio: CanvasRatio, timeline: Timeline, onSelect: (Str
     haptic.performHapticFeedback(if (event == HapticEvent.INVALID_ACTION) HapticFeedbackType.LongPress else HapticFeedbackType.TextHandleMove)
     feedback = feedback.copy(pendingHaptic = null)
   }
-  Column(Modifier.fillMaxWidth()) {
-    Box(Modifier.fillMaxWidth().height(282.dp).clip(RoundedCornerShape(24.dp)).background(StudioSurfaceHigh), contentAlignment = Alignment.Center) {
+  BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+    val previewHeight = maxHeight.coerceAtLeast(180.dp)
+    Box(
+      Modifier
+        .fillMaxHeight(0.92f)
+        .height(previewHeight)
+        .aspectRatio(ratioValue)
+        .clip(RoundedCornerShape(14.dp))
+        .background(Color.Black)
+        .border(1.dp, EditorChromeBorder, RoundedCornerShape(14.dp)),
+      contentAlignment = Alignment.Center,
+    ) {
       val backgroundColor = runCatching { Color(android.graphics.Color.parseColor(timeline.canvasBackground.color)) }.getOrDefault(StudioBackground)
       var previewWidthPx by remember { mutableStateOf(1f) }
       var previewHeightPx by remember { mutableStateOf(1f) }
-      Box(Modifier.fillMaxHeight(0.88f).aspectRatio(ratioValue).clip(RoundedCornerShape(18.dp)).background(if (timeline.canvasBackground.blurEnabled) Brush.radialGradient(listOf(StudioPrimary.copy(alpha = 0.28f + timeline.canvasBackground.blurStrength * 0.24f), backgroundColor)) else Brush.radialGradient(listOf(StudioPrimary.copy(alpha = 0.55f * glow), backgroundColor))).onSizeChanged { previewWidthPx = it.width.toFloat().coerceAtLeast(1f); previewHeightPx = it.height.toFloat().coerceAtLeast(1f) }.pointerInput(activeClips.map { Triple(it.id, it.transform, it.zIndex) }, timeline.selectedClipId, previewWidthPx, previewHeightPx) {
+      Box(Modifier.fillMaxSize().background(if (timeline.canvasBackground.blurEnabled) Brush.radialGradient(listOf(StudioPrimary.copy(alpha = 0.20f + timeline.canvasBackground.blurStrength * 0.20f), backgroundColor)) else Brush.radialGradient(listOf(StudioPrimary.copy(alpha = 0.16f * glow), backgroundColor))).onSizeChanged { previewWidthPx = it.width.toFloat().coerceAtLeast(1f); previewHeightPx = it.height.toFloat().coerceAtLeast(1f) }.pointerInput(activeClips.map { Triple(it.id, it.transform, it.zIndex) }, timeline.selectedClipId, previewWidthPx, previewHeightPx) {
         detectTapGestures(onTap = { tap ->
           val hit = TimelineEngine.overlayHitTest(TimelineEngine.overlayHitTargets(activeClips.filter { it.clipType == ClipType.Text || it.clipType == ClipType.Sticker || it.clipType == ClipType.Overlay }, tap.x, tap.y, previewWidthPx, previewHeightPx), tap.x, tap.y)
-          if (hit.selectedOverlayId == null) onClearSelection() else onSelect(hit.selectedOverlayId)
+          when {
+            hit.selectedOverlayId != null -> onSelect(hit.selectedOverlayId)
+            selectedClip != null -> onSelect(selectedClip.id)
+            else -> onClearSelection()
+          }
           feedback = feedback.copy(owner = GestureOwner.PREVIEW_TAP)
         }, onDoubleTap = { tap ->
           val hitId = TimelineEngine.overlayHitTest(TimelineEngine.overlayHitTargets(activeClips.filter { it.clipType == ClipType.Text }, tap.x, tap.y, previewWidthPx, previewHeightPx, 144f, 88f), tap.x, tap.y).selectedOverlayId
@@ -1052,43 +1519,40 @@ private fun PreviewCanvas(ratio: CanvasRatio, timeline: Timeline, onSelect: (Str
       }) {
         PreviewMediaSurface(primaryVisualClip, previewState, timeline.playheadMs, timeline.isPlaying, onSeek)
         Canvas(Modifier.fillMaxSize()) {
-          drawRect(Color.White.copy(alpha = 0.06f), style = Stroke(width = 2.dp.toPx()))
-          drawCircle(StudioSecondary.copy(alpha = glow), radius = 18.dp.toPx(), center = center)
+          drawRect(Color.White.copy(alpha = 0.05f), style = Stroke(width = 1.dp.toPx()))
           if (feedback.showCenterXGuide || selectedClip != null && feedback.owner == GestureOwner.OVERLAY_DRAG) {
-            drawLine(StudioSecondary.copy(alpha = 0.35f), Offset(size.width / 2, 0f), Offset(size.width / 2, size.height), strokeWidth = 1.dp.toPx())
+            drawLine(EditorChromePrimary.copy(alpha = 0.35f), Offset(size.width / 2, 0f), Offset(size.width / 2, size.height), strokeWidth = 1.dp.toPx())
           }
           if (feedback.showCenterYGuide || selectedClip != null && feedback.owner == GestureOwner.OVERLAY_DRAG) {
-            drawLine(StudioSecondary.copy(alpha = 0.35f), Offset(0f, size.height / 2), Offset(size.width, size.height / 2), strokeWidth = 1.dp.toPx())
+            drawLine(EditorChromePrimary.copy(alpha = 0.35f), Offset(0f, size.height / 2), Offset(size.width, size.height / 2), strokeWidth = 1.dp.toPx())
           }
           if (feedback.showBoundaryGuide) {
-            drawRect(StudioAccent.copy(alpha = 0.42f), style = Stroke(width = 2.dp.toPx()))
+            drawRect(EditorChromeAudioAccent.copy(alpha = 0.42f), style = Stroke(width = 2.dp.toPx()))
           }
         }
         activeClips.filter { it.clipType == ClipType.Text || it.clipType == ClipType.Sticker || it.clipType == ClipType.Overlay }.forEach { clip ->
           PreviewLayerChip(clip, selected = clip.id == timeline.selectedClipId, previewWidthPx = previewWidthPx, previewHeightPx = previewHeightPx, onSelect = { onSelect(clip.id) }, onDelete = onDelete)
         }
-        feedback.angleLabel?.let { Text(it, modifier = Modifier.align(Alignment.TopEnd).padding(10.dp).clip(RoundedCornerShape(999.dp)).background(StudioBackground.copy(alpha = 0.78f)).padding(horizontal = 8.dp, vertical = 4.dp), color = StudioAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-        feedback.chipLabel?.let { Text(it, modifier = Modifier.align(Alignment.TopStart).padding(10.dp).clip(RoundedCornerShape(999.dp)).background(StudioBackground.copy(alpha = 0.78f)).padding(horizontal = 8.dp, vertical = 4.dp), color = StudioAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+        feedback.angleLabel?.let { Text(it, modifier = Modifier.align(Alignment.TopEnd).padding(10.dp).clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.42f)).border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp), color = EditorChromeAudioAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+        feedback.chipLabel?.let { Text(it, modifier = Modifier.align(Alignment.TopStart).padding(10.dp).clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.42f)).border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp), color = EditorChromeAudioAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
         composition.transition?.let { transition ->
           Text("${transition.type.label} transition", modifier = Modifier.align(Alignment.Center).clip(RoundedCornerShape(999.dp)).background(StudioBackground.copy(alpha = 0.72f)).padding(horizontal = 12.dp, vertical = 8.dp), color = StudioSecondary, fontWeight = FontWeight.Bold)
         }
-        Text("Preview ${timeline.playheadMs.asTimecode()}", modifier = Modifier.align(Alignment.TopCenter).padding(10.dp), fontWeight = FontWeight.Bold)
         Text(
-          when (previewState) {
-            PreviewSurfaceState.NoMedia -> "Import media to preview the current frame"
-            PreviewSurfaceState.InvalidUri -> "Selected media link is invalid. Re-import the clip to recover preview."
-            PreviewSurfaceState.LoadFailed -> "Selected media could not load. Check file access and try again."
-            else -> "Tap clips, drag trim handles, and keep playhead synced"
-          },
-          modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
-          color = if (previewState == PreviewSurfaceState.LoadFailed || previewState == PreviewSurfaceState.InvalidUri) StudioDanger else StudioTextMuted,
+          timeline.playheadMs.asTimecode(),
+          modifier = Modifier.align(Alignment.TopStart).padding(12.dp).clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.40f)).border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 4.dp),
+          color = Color.White,
           fontSize = 12.sp,
-          textAlign = TextAlign.Center,
+          fontWeight = FontWeight.Medium,
+        )
+        Text(
+          navGlyph(EditorTool.Canvas),
+          modifier = Modifier.align(Alignment.TopEnd).padding(12.dp).clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.40f)).border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp),
+          color = Color.White,
+          fontSize = 16.sp,
+          fontWeight = FontWeight.Medium,
         )
       }
-    }
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-      CanvasRatio.entries.forEach { item -> FilterChip(selected = ratio == item, onClick = { onRatio(item) }, label = { Text(item.label, fontSize = 12.sp) }) }
     }
   }
 }
@@ -1113,23 +1577,44 @@ private fun PreviewLayerChip(clip: TimelineClip, selected: Boolean, previewWidth
 private fun PreviewMediaSurface(clip: TimelineClip?, previewState: PreviewSurfaceState, playheadMs: Long, isPlaying: Boolean, onSeek: (Long) -> Unit) {
   when (previewState) {
     PreviewSurfaceState.NoMedia -> PreviewStatusCard("No media selected", "Import an image or video to start previewing and editing.", StudioTextMuted)
+    PreviewSurfaceState.Loading -> PreviewStatusCard("Loading media", "Clipy Studio is preparing the selected preview.", StudioSecondary)
     PreviewSurfaceState.InvalidUri -> PreviewStatusCard("Invalid media", "This clip does not have a usable URI.", StudioDanger)
     PreviewSurfaceState.LoadFailed -> PreviewStatusCard("Media failed to load", "Clipy Studio could not open this file for preview.", StudioDanger)
     PreviewSurfaceState.ImageReady -> {
       val model = clip?.mediaUri ?: return PreviewStatusCard("Image unavailable", "The selected image is missing.", StudioDanger)
+      var loadState by rememberSaveable(model) { mutableStateOf(PreviewMediaLoadState.Idle) }
+      LaunchedEffect(model) { loadState = PreviewMediaLoadState.Idle }
+      if (loadState == PreviewMediaLoadState.Failed) {
+        PreviewStatusCard("Image failed to load", "Clipy Studio could not decode this image for preview.", StudioDanger)
+        return
+      }
       Box(Modifier.fillMaxSize()) {
         AsyncImage(
-          model = model,
-          contentDescription = clip.title,
+          model = Uri.parse(model),
+          contentDescription = "Image preview for ${clip.title}",
           modifier = Modifier.fillMaxSize(),
+          contentScale = ContentScale.Fit,
+          onSuccess = { loadState = PreviewMediaLoadState.Idle },
+          onError = { loadState = PreviewMediaLoadState.Failed },
         )
-        Text(
-          "${(clip.durationMs / 1000f).let { "%.1fs".format(it) }} still",
-          modifier = Modifier.align(Alignment.TopEnd).padding(10.dp).clip(RoundedCornerShape(999.dp)).background(StudioBackground.copy(alpha = 0.8f)).padding(horizontal = 8.dp, vertical = 4.dp),
-          color = Color.White,
-          fontSize = 11.sp,
-          fontWeight = FontWeight.Bold,
-        )
+        Column(Modifier.align(Alignment.TopEnd).padding(10.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          Text(
+            "${(clip.durationMs / 1000f).let { "%.1fs".format(it) }} still",
+            modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(StudioBackground.copy(alpha = 0.8f)).padding(horizontal = 8.dp, vertical = 4.dp),
+            color = Color.White,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+          )
+          clip.mediaUri?.let {
+            Text(
+              clip.title,
+              modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(StudioBackground.copy(alpha = 0.76f)).padding(horizontal = 8.dp, vertical = 4.dp),
+              color = Color.White.copy(alpha = 0.92f),
+              fontSize = 11.sp,
+              fontWeight = FontWeight.Medium,
+            )
+          }
+        }
       }
     }
     PreviewSurfaceState.VideoReady -> clip?.let { VideoPreviewPlayer(clip = it, isPlaying = isPlaying, playheadMs = playheadMs, onSeek = onSeek) }
@@ -1145,6 +1630,7 @@ private fun VideoPreviewPlayer(clip: TimelineClip, isPlaying: Boolean, playheadM
     PreviewStatusCard("Video unavailable", "The selected video is missing.", StudioDanger)
     return
   }
+  var loadState by remember(mediaUri) { mutableStateOf(VideoPreviewLoadState.Loading) }
   val player = remember(mediaUri) {
     ExoPlayer.Builder(context).build().apply {
       repeatMode = Player.REPEAT_MODE_OFF
@@ -1159,36 +1645,69 @@ private fun VideoPreviewPlayer(clip: TimelineClip, isPlaying: Boolean, playheadM
     player.playWhenReady = isPlaying
     if (!isPlaying) player.pause()
   }
-  LaunchedEffect(playheadMs, mediaUri) {
-    val targetPosition = (clip.sourceInMs + (playheadMs - clip.startMs).coerceAtLeast(0L) * clip.videoProperties.speed).toLong().coerceAtLeast(0L)
-    if (kotlin.math.abs(player.currentPosition - targetPosition) > 250L) {
+  LaunchedEffect(playheadMs, mediaUri, clip.id, clip.startMs, clip.durationMs, clip.sourceInMs, clip.sourceDurationMs, clip.videoProperties.speed, isPlaying) {
+    val localPlayhead = (playheadMs - clip.startMs).coerceIn(0L, clip.durationMs)
+    val maxSourcePosition = clip.sourceDurationMs?.coerceAtLeast(clip.sourceInMs + 1L)
+    val unclampedTarget = (clip.sourceInMs + localPlayhead * clip.videoProperties.speed).toLong().coerceAtLeast(0L)
+    val targetPosition = maxSourcePosition?.let { unclampedTarget.coerceAtMost(it - 1L) } ?: unclampedTarget
+    if (!isPlaying || kotlin.math.abs(player.currentPosition - targetPosition) > 250L) {
       player.seekTo(targetPosition)
     }
   }
   DisposableEffect(player, onSeek) {
     val listener = object : Player.Listener {
+      override fun onPlaybackStateChanged(playbackState: Int) {
+        loadState = when (playbackState) {
+          Player.STATE_READY -> VideoPreviewLoadState.Ready
+          Player.STATE_IDLE -> VideoPreviewLoadState.Loading
+          Player.STATE_BUFFERING -> if (loadState == VideoPreviewLoadState.Failed) VideoPreviewLoadState.Failed else VideoPreviewLoadState.Loading
+          Player.STATE_ENDED -> VideoPreviewLoadState.Ready
+          else -> loadState
+        }
+      }
+
+      override fun onPlayerError(error: PlaybackException) {
+        loadState = VideoPreviewLoadState.Failed
+      }
+
       override fun onIsPlayingChanged(playing: Boolean) {
-        if (!playing && isPlaying) onSeek(playheadMs)
+        if (!playing && loadState == VideoPreviewLoadState.Ready && player.playbackState == Player.STATE_ENDED) {
+          onSeek((clip.startMs + clip.durationMs).coerceAtMost(playheadMs.coerceAtLeast(clip.startMs + clip.durationMs)))
+        }
       }
     }
     player.addListener(listener)
     onDispose { player.removeListener(listener) }
   }
-  AndroidView(
-    factory = {
-      PlayerView(it).apply {
-        useController = false
-        this.player = player
+  Box(Modifier.fillMaxSize()) {
+    AndroidView(
+      factory = {
+        PlayerView(it).apply {
+          useController = false
+          this.player = player
+        }
+      },
+      modifier = Modifier.fillMaxSize(),
+    )
+    when (loadState) {
+      VideoPreviewLoadState.Loading -> {
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+          Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            CircularProgressIndicator(color = StudioSecondary, strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
+            Text("Loading video preview", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+          }
+        }
       }
-    },
-    modifier = Modifier.fillMaxSize(),
-  )
+      VideoPreviewLoadState.Failed -> PreviewStatusCard("Video failed to load", "Clipy Studio could not prepare this video for preview.", StudioDanger)
+      VideoPreviewLoadState.Ready -> Unit
+    }
+  }
 }
 
 @Composable
 private fun PreviewStatusCard(title: String, body: String, tint: Color) {
   Box(
-    Modifier.fillMaxSize().padding(18.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.18f)),
+    Modifier.fillMaxSize().padding(18.dp).clip(RoundedCornerShape(16.dp)).background(EditorChromeSurfaceLow.copy(alpha = 0.72f)).border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(16.dp)),
     contentAlignment = Alignment.Center,
   ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(horizontal = 20.dp)) {
@@ -1201,14 +1720,30 @@ private fun PreviewStatusCard(title: String, body: String, tint: Color) {
 @Composable
 private fun PlaybackControls(timeline: Timeline, onPlay: () -> Unit, onSeek: (Long) -> Unit) {
   val hasContent = timeline.durationMs > 0L
-  Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-    Text(timeline.playheadMs.asTimecode(), color = StudioSecondary, fontWeight = FontWeight.Bold)
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-      OutlinedButton(onClick = { onSeek(-1_000) }, enabled = hasContent) { Text("-1s") }
-      Button(onClick = onPlay, enabled = hasContent, shape = CircleShape, modifier = Modifier.semantics { contentDescription = if (timeline.isPlaying) "Pause playback" else "Play playback" }) { Text(if (timeline.isPlaying) "Pause" else "Play") }
-      OutlinedButton(onClick = { onSeek(1_000) }, enabled = hasContent) { Text("+1s") }
+  Row(
+    Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.Center,
+  ) {
+    Row(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
+      IconButton(onClick = { onSeek(-1_000) }, enabled = hasContent, modifier = Modifier.size(44.dp).semantics { contentDescription = "Seek backward" }) {
+        Text("⏮", color = EditorChromeMuted, fontSize = 20.sp, fontWeight = FontWeight.Medium)
+      }
+      Surface(
+        onClick = onPlay,
+        enabled = hasContent,
+        shape = CircleShape,
+        color = Color.White,
+        modifier = Modifier.size(40.dp).semantics { contentDescription = if (timeline.isPlaying) "Pause playback" else "Play playback" },
+      ) {
+        Box(contentAlignment = Alignment.Center) {
+          Text(if (timeline.isPlaying) "❚❚" else "▶", color = Color.Black, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
+      }
+      IconButton(onClick = { onSeek(1_000) }, enabled = hasContent, modifier = Modifier.size(44.dp).semantics { contentDescription = "Seek forward" }) {
+        Text("⏭", color = EditorChromeMuted, fontSize = 20.sp, fontWeight = FontWeight.Medium)
+      }
     }
-    Text(timeline.durationMs.asTimecode(), color = StudioTextMuted)
   }
 }
 
@@ -1249,10 +1784,9 @@ private fun TimelineView(timeline: Timeline, onSelect: (String) -> Unit, onSeek:
   Box(
     Modifier
       .fillMaxWidth()
-      .height(312.dp)
+      .height(320.dp)
       .onSizeChanged { viewportWidthPx = (it.width.toFloat() - 74f).coerceAtLeast(180f) }
-      .clip(RoundedCornerShape(20.dp))
-      .background(Color.Black.copy(alpha = 0.30f))
+      .background(EditorChromeSurfaceAlt)
       .then(
         if (isEditGestureActive) {
           Modifier
@@ -1347,7 +1881,15 @@ private fun TimelineView(timeline: Timeline, onSelect: (String) -> Unit, onSeek:
         },
       ),
   ) {
-    Column(Modifier.fillMaxSize().padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Canvas(Modifier.matchParentSize()) {
+      val stepPx = 40.dp.toPx()
+      var x = 66.dp.toPx() - (timeline.scrollOffsetPx % stepPx)
+      while (x < size.width) {
+        drawLine(EditorTimelineGrid, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1.dp.toPx())
+        x += stepPx
+      }
+    }
+    Column(Modifier.fillMaxSize().padding(top = 10.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
       TimelineHeader(
         timeline = timeline,
         contentWidth = contentWidth,
@@ -1404,26 +1946,28 @@ private fun TimelineView(timeline: Timeline, onSelect: (String) -> Unit, onSeek:
     TimelineGuides(timeline, contentWidth, gestureOverlay.snapTimeMs)
     EdgeResistanceMask(gestureOverlay.resistanceFraction)
     AutoScrollEdgeMask(gestureOverlay.autoScrollDirection)
-    gestureOverlay.snapLabel?.let { Text(it, modifier = Modifier.align(Alignment.TopCenter).padding(top = 30.dp).clip(RoundedCornerShape(999.dp)).background(StudioSurface.copy(alpha = 0.90f)).padding(horizontal = 9.dp, vertical = 3.dp), color = StudioAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+    gestureOverlay.snapLabel?.let { Text(it, modifier = Modifier.align(Alignment.TopCenter).padding(top = 30.dp).clip(RoundedCornerShape(999.dp)).background(EditorChromeSurface.copy(alpha = 0.92f)).border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(999.dp)).padding(horizontal = 9.dp, vertical = 3.dp), color = EditorChromeAudioAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
     TimelineGestureReadout(gestureTimecode ?: timeline.playheadMs.asTimecode(), gestureOverlay.zoomLabel, gestureOverlay.snapLabel, gestureOverlay.resistanceFraction)
-    Text("${(timeline.zoomLevel * 100).roundToInt()}% · ${thumbnailFrames.count { it.value != null }} thumbs · Saved v${timeline.version}", modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).clip(RoundedCornerShape(999.dp)).background(StudioSurface.copy(alpha = 0.88f)).padding(horizontal = 8.dp, vertical = 3.dp), color = StudioTextMuted, fontSize = 10.sp)
-    Box(Modifier.align(Alignment.TopCenter).width(2.dp).fillMaxHeight().background(StudioSecondary))
+    Text("${(timeline.zoomLevel * 100).roundToInt()}% · ${thumbnailFrames.count { it.value != null }} thumbs · Saved v${timeline.version}", modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).clip(RoundedCornerShape(999.dp)).background(EditorChromeSurface.copy(alpha = 0.88f)).border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(999.dp)).padding(horizontal = 8.dp, vertical = 3.dp), color = EditorChromeMuted, fontSize = 10.sp)
+    Box(Modifier.align(Alignment.TopCenter).width(2.dp).fillMaxHeight().background(EditorChromePrimary))
     Column(Modifier.align(Alignment.TopCenter).padding(top = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-      Box(Modifier.size(13.dp).clip(CircleShape).background(StudioSecondary))
-      Text(timeline.playheadMs.asTimecode(), color = StudioSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.background(StudioSurface.copy(alpha = 0.82f), RoundedCornerShape(8.dp)).padding(horizontal = 5.dp, vertical = 2.dp))
+      Box(Modifier.size(10.dp).graphicsLayer { rotationZ = 45f }.background(EditorChromePrimary))
+      Text(timeline.playheadMs.asTimecode(), color = EditorChromePrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.background(EditorChromeSurface.copy(alpha = 0.82f), RoundedCornerShape(8.dp)).padding(horizontal = 5.dp, vertical = 2.dp))
     }
   }
 }
 
 @Composable
 private fun TimelineHeader(timeline: Timeline, contentWidth: Int, viewportWidthPx: Float, onSeek: (Long) -> Unit, onScroll: (Float, Float) -> Unit, onZoom: (Float, Float, Float) -> Unit, onGestureZoomLabel: (String?) -> Unit, onGestureTimecode: (String?) -> Unit, onTransformStart: () -> Unit, onTransformFrame: (Float) -> Unit) {
-  Row(Modifier.fillMaxWidth().height(42.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-    Text("Ruler", modifier = Modifier.width(58.dp), fontSize = 12.sp, color = StudioTextMuted)
+  Row(Modifier.fillMaxWidth().height(34.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Text("SYNC", modifier = Modifier.width(58.dp), fontSize = 10.sp, color = EditorChromeMuted.copy(alpha = 0.74f), fontWeight = FontWeight.Bold)
     Box(
       Modifier
         .weight(1f)
-        .height(34.dp)
-        .clip(RoundedCornerShape(12.dp))
+        .height(28.dp)
+        .clip(RoundedCornerShape(8.dp))
+        .background(EditorChromeSurface)
+        .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
         .pointerInput(timeline.id, timeline.zoomLevel, viewportWidthPx, timeline.scrollOffsetPx) {
           var gestureScroll = timeline.scrollOffsetPx
           var gestureZoom = timeline.zoomLevel
@@ -1464,22 +2008,22 @@ private fun TimelineHeader(timeline: Timeline, contentWidth: Int, viewportWidthP
         val pxPerMs = timeline.pixelsPerSecond * timeline.zoomLevel / 1_000f
         for (tick in 0..timeline.durationMs step 1_000L) {
           val x = tick * pxPerMs - timeline.scrollOffsetPx
-          drawLine(if (kotlin.math.abs(tick - timeline.playheadMs) < 550) StudioSecondary else StudioTextMuted.copy(alpha = 0.5f), Offset(x, 6f), Offset(x, size.height), strokeWidth = 2f)
+          drawLine(if (kotlin.math.abs(tick - timeline.playheadMs) < 550) EditorChromePrimary else EditorChromeMuted.copy(alpha = 0.28f), Offset(x, 4f), Offset(x, size.height), strokeWidth = 1.5f)
         }
       }
       Box(Modifier.fillMaxSize()) {
         (0..timeline.durationMs step 2_000L).forEach { tick ->
           val x = (tick * (timeline.pixelsPerSecond * timeline.zoomLevel / 1_000f) - timeline.scrollOffsetPx).roundToInt()
-          Text(tick.asTimecode(), color = StudioTextMuted, fontSize = 10.sp, modifier = Modifier.offset { IntOffset(x, 0) }.clickable { onSeek(tick) })
+          Text(tick.asTimecode(), color = EditorChromeMuted.copy(alpha = 0.85f), fontSize = 10.sp, modifier = Modifier.offset { IntOffset(x, 0) }.clickable { onSeek(tick) })
         }
       }
       timeline.markers.forEach { marker ->
         val left = ((marker.timeMs / 1_000f) * timeline.pixelsPerSecond * timeline.zoomLevel - timeline.scrollOffsetPx).roundToInt()
-        Text(marker.label, modifier = Modifier.offset { IntOffset(left, 0) }.clip(RoundedCornerShape(999.dp)).background(StudioAccent.copy(alpha = 0.24f)).padding(horizontal = 4.dp), color = StudioAccent, fontSize = 9.sp)
+        Text(marker.label, modifier = Modifier.offset { IntOffset(left, 0) }.clip(RoundedCornerShape(999.dp)).background(EditorChromePrimary.copy(alpha = 0.18f)).padding(horizontal = 4.dp), color = EditorChromePrimary, fontSize = 9.sp)
       }
     }
-    TextButton(onClick = { onZoom(-0.2f, viewportWidthPx / 2f, viewportWidthPx) }, modifier = Modifier.size(42.dp)) { Text("-") }
-    TextButton(onClick = { onZoom(0.2f, viewportWidthPx / 2f, viewportWidthPx) }, modifier = Modifier.size(42.dp)) { Text("+") }
+    TextButton(onClick = { onZoom(-0.2f, viewportWidthPx / 2f, viewportWidthPx) }, modifier = Modifier.size(34.dp)) { Text("-", color = EditorChromeMuted, fontWeight = FontWeight.Bold) }
+    TextButton(onClick = { onZoom(0.2f, viewportWidthPx / 2f, viewportWidthPx) }, modifier = Modifier.size(34.dp)) { Text("+", color = EditorChromeMuted, fontWeight = FontWeight.Bold) }
   }
 }
 
@@ -1525,9 +2069,14 @@ private fun AutoScrollEdgeMask(direction: com.example.clipystudio.data.AutoScrol
 
 @Composable
 private fun EngineTrackLane(projectTimeline: com.example.clipystudio.data.ProjectTimeline, timeline: Timeline, track: TimelineTrack, contentWidth: Int, viewportWidthPx: Float, activeIds: Set<String>, touchSlopPx: Float, thumbnailFrames: Map<String, Bitmap?>, onSelect: (String) -> Unit, onTrim: (TrimHandle, Long) -> Unit, onMove: (Long) -> Unit, onSplit: () -> Unit, onReorder: (Int) -> Unit, activePreview: TimelineClipPreviewState?, onPreview: (TimelineClipPreviewState?) -> Unit, onAutoScroll: (Float, com.example.clipystudio.data.AutoScrollDirection) -> Unit, onPreviewSeek: (Long) -> Unit, onPreviewEnd: () -> Unit) {
-  Row(Modifier.fillMaxWidth().height(38.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-    Text(track.type.label, modifier = Modifier.width(58.dp), fontSize = 12.sp, color = StudioTextMuted)
-    Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(12.dp)).background(StudioSurface.copy(alpha = 0.55f))) {
+  val laneHeight = when (track.type) {
+    TrackType.Text, TrackType.Sticker, TrackType.Overlay, TrackType.Effect -> 28.dp
+    TrackType.Video -> 80.dp
+    TrackType.Audio -> 40.dp
+  }
+  Row(Modifier.fillMaxWidth().height(laneHeight).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Text(track.type.label.uppercase(), modifier = Modifier.width(58.dp), fontSize = 10.sp, color = EditorChromeMuted.copy(alpha = 0.74f), fontWeight = FontWeight.Bold)
+    Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(8.dp)).background(EditorChromeSurface.copy(alpha = 0.66f)).border(1.dp, Color.White.copy(alpha = 0.03f), RoundedCornerShape(8.dp))) {
       Box(Modifier.fillMaxWidth().fillMaxHeight()) {
         track.clips.sortedBy { it.startMs }.forEachIndexed { index, clip ->
           EngineClipBlock(track.type, clip, index, selected = projectTimeline.selectedClipId == clip.id, active = clip.id in activeIds, zoom = projectTimeline.zoomScale, pixelsPerSecond = projectTimeline.pixelsPerSecond, scrollOffsetPx = timeline.scrollOffsetPx, transition = timeline.transitions.firstOrNull { it.fromClipId == clip.id || it.toClipId == clip.id }, timeline = timeline, viewportWidthPx = viewportWidthPx, touchSlopPx = touchSlopPx, thumbnailBitmap = thumbnailFrames[clip.id], preview = activePreview?.takeIf { it.clipId == clip.id }, onSelect = onSelect, onTrim = onTrim, onMove = onMove, onSplit = onSplit, onReorder = onReorder, onPreview = onPreview, onPreviewEnd = onPreviewEnd, onAutoScroll = onAutoScroll, onPreviewSeek = onPreviewSeek)
@@ -1539,26 +2088,42 @@ private fun EngineTrackLane(projectTimeline: com.example.clipystudio.data.Projec
 
 @Composable
 private fun EngineClipBlock(trackType: TrackType, clip: TimelineClip, index: Int, selected: Boolean, active: Boolean, zoom: Float, pixelsPerSecond: Float, scrollOffsetPx: Float, transition: com.example.clipystudio.data.Transition?, timeline: Timeline, viewportWidthPx: Float, touchSlopPx: Float, thumbnailBitmap: Bitmap?, preview: TimelineClipPreviewState?, onSelect: (String) -> Unit, onTrim: (TrimHandle, Long) -> Unit, onMove: (Long) -> Unit, onSplit: () -> Unit, onReorder: (Int) -> Unit, onPreview: (TimelineClipPreviewState?) -> Unit, onPreviewEnd: () -> Unit, onAutoScroll: (Float, com.example.clipystudio.data.AutoScrollDirection) -> Unit, onPreviewSeek: (Long) -> Unit) {
-  val color = when (trackType) { TrackType.Video -> StudioPrimary; TrackType.Audio -> StudioSecondary; TrackType.Text -> StudioAccent; TrackType.Sticker -> Color(0xFFFF65B3); TrackType.Effect -> Color(0xFF55A7FF); TrackType.Overlay -> Color(0xFF56E58A) }
+  val color = when (trackType) { TrackType.Video -> EditorChromeSurface; TrackType.Audio -> EditorChromeAudio; TrackType.Text -> EditorChromePrimary.copy(alpha = 0.30f); TrackType.Sticker -> EditorChromeAudioAccent.copy(alpha = 0.24f); TrackType.Effect -> EditorChromePrimary.copy(alpha = 0.18f); TrackType.Overlay -> EditorChromePrimary.copy(alpha = 0.24f) }
   val selectedOutline by animateFloatAsState(if (selected) 1f else 0f, tween(140), label = "selectedOutline")
   val liftFraction by animateFloatAsState(if (preview != null) 1f else 0f, tween(120), label = "clipLift")
   var longPressReordering by remember { mutableStateOf(false) }
+  val density = LocalDensity.current
   val reorderLift by animateFloatAsState(if (longPressReordering) 1f else 0f, tween(110), label = "reorderLift")
   val visualLift = max(liftFraction, reorderLift)
   val displayStartMs = preview?.startTimeMs ?: clip.startMs
   val displayDurationMs = preview?.durationMs ?: clip.durationMs
   val left = ((displayStartMs / 1_000f) * pixelsPerSecond * zoom - scrollOffsetPx).roundToInt()
   val width = ((displayDurationMs / 1_000f) * pixelsPerSecond * zoom).roundToInt().coerceAtLeast(56)
+  val widthDp = with(density) { width.toDp() }
   val pxPerMs = TimelineEngine.pixelsPerMs(zoom, pixelsPerSecond)
   val isPreviewing = preview != null
+  val visualState = when {
+    clip.isVisualMediaClip() && !clip.hasUsableMediaUri() -> ClipVisualState.Invalid
+    selected || isPreviewing || longPressReordering -> ClipVisualState.Selected
+    active -> ClipVisualState.Active
+    else -> ClipVisualState.Inactive
+  }
+  val backgroundColor = when (visualState) {
+    ClipVisualState.Invalid -> StudioDanger.copy(alpha = 0.28f)
+    ClipVisualState.Selected -> if (trackType == TrackType.Audio) EditorChromeAudio else Color(0xFF1A1A1A)
+    ClipVisualState.Active -> if (trackType == TrackType.Audio) EditorChromeAudio.copy(alpha = 0.92f) else Color(0xFF222222)
+    ClipVisualState.Inactive -> if (trackType == TrackType.Audio) EditorChromeAudio.copy(alpha = 0.78f) else Color(0xFF262626)
+  }
+  val outlineColor = when {
+    preview?.isValid == false -> StudioDanger
+    visualState == ClipVisualState.Invalid -> StudioDanger.copy(alpha = 0.92f)
+    selected -> EditorChromePrimary.copy(alpha = 0.92f * selectedOutline)
+    active -> if (trackType == TrackType.Audio) EditorChromeAudioAccent else Color.White.copy(alpha = 0.26f)
+    else -> Color.White.copy(alpha = 0.18f)
+  }
   Box(
-    Modifier.offset { IntOffset(left, (-3 * visualLift).roundToInt()) }.graphicsLayer { scaleX = 1f + visualLift * 0.025f; scaleY = 1f + visualLift * 0.055f; shadowElevation = visualLift * 14f }.width(width.dp).fillMaxHeight().padding(vertical = 2.dp).clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = if (isPreviewing || longPressReordering) 0.98f else if (selected) 0.96f else if (active) 0.76f else 0.58f)).border(if (selected || isPreviewing || longPressReordering) 2.dp else 1.dp, when {
-      preview?.isValid == false -> StudioDanger
-      selected -> Color.White.copy(alpha = 0.9f * selectedOutline)
-      active -> StudioSecondary
-      else -> Color.White.copy(alpha = 0.18f)
-    }, RoundedCornerShape(12.dp)).clickable { onSelect(clip.id) }.pointerInput(clip.id, selected) {
-      detectTapGestures(onDoubleTap = { onSelect(clip.id); onSplit() }, onLongPress = { onSelect(clip.id); longPressReordering = true; if (trackType == TrackType.Video) onReorder(index + 1) else onMove(250); longPressReordering = false })
+    Modifier.offset { IntOffset(left, (-3 * visualLift).roundToInt()) }.graphicsLayer { scaleX = 1f + visualLift * 0.025f; scaleY = 1f + visualLift * 0.055f; shadowElevation = visualLift * 14f }.width(widthDp).fillMaxHeight().padding(vertical = 1.dp).clip(RoundedCornerShape(if (trackType == TrackType.Video) 8.dp else 6.dp)).background(backgroundColor).border(if (selected || isPreviewing || longPressReordering || visualState == ClipVisualState.Invalid) 2.dp else 1.dp, outlineColor, RoundedCornerShape(if (trackType == TrackType.Video) 8.dp else 6.dp)).clickable { onSelect(clip.id) }.pointerInput(clip.id, selected) {
+      detectTapGestures(onDoubleTap = { onSelect(clip.id); onSplit() }, onLongPress = { onSelect(clip.id); longPressReordering = true })
     }.pointerInput(clip.id, trackType, timeline.version) {
       var dragPx = 0f
       detectDragGesturesAfterLongPress(
@@ -1624,22 +2189,51 @@ private fun EngineClipBlock(trackType: TrackType, clip: TimelineClip, index: Int
     }.semantics { contentDescription = "${clip.clipType} clip, ${trackType.label} track, starts at ${clip.startMs.asTimecode()}, duration ${clip.durationMs.asTimecode()}" },
     contentAlignment = Alignment.Center,
   ) {
-    if ((trackType == TrackType.Video || trackType == TrackType.Overlay) && thumbnailBitmap != null) {
-      Image(bitmap = thumbnailBitmap.asImageBitmap(), contentDescription = "${clip.title} thumbnail", modifier = Modifier.matchParentSize())
-    } else if (trackType == TrackType.Video && clip.clipType == ClipType.Image && clip.mediaUri != null && thumbnailBitmap != null) {
-      Image(bitmap = thumbnailBitmap.asImageBitmap(), contentDescription = "${clip.title} thumbnail", modifier = Modifier.matchParentSize())
-    } else if (trackType == TrackType.Video || trackType == TrackType.Overlay || trackType == TrackType.Audio) {
-      Row(Modifier.matchParentSize().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-        repeat((width / 44).coerceIn(1, 8)) { Box(Modifier.weight(1f).height(18.dp).clip(RoundedCornerShape(6.dp)).background(Brush.linearGradient(listOf(Color.White.copy(alpha = 0.18f), Color.Black.copy(alpha = 0.10f))))) }
+    if (selected && trackType == TrackType.Video) {
+      Box(Modifier.align(Alignment.CenterStart).fillMaxHeight().width(4.dp).background(EditorChromePrimary))
+    }
+    val shouldRenderBitmapThumbnail = clip.clipType in setOf(ClipType.Image, ClipType.Video, ClipType.Overlay)
+    if (shouldRenderBitmapThumbnail && thumbnailBitmap != null) {
+      Image(bitmap = thumbnailBitmap.asImageBitmap(), contentDescription = "${clip.title} thumbnail", modifier = Modifier.matchParentSize(), contentScale = ContentScale.Crop)
+    } else if (shouldRenderBitmapThumbnail || trackType == TrackType.Audio) {
+      Box(Modifier.matchParentSize().background(Brush.linearGradient(listOf(Color.White.copy(alpha = 0.10f), Color.Black.copy(alpha = 0.16f))))) {
+        Row(Modifier.matchParentSize().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+          repeat((width / 44).coerceIn(1, 8)) { Box(Modifier.weight(1f).height(if (trackType == TrackType.Audio) 22.dp else 18.dp).clip(RoundedCornerShape(6.dp)).background(if (trackType == TrackType.Audio) Brush.verticalGradient(listOf(EditorChromeAudioAccent.copy(alpha = 0.50f), EditorChromeAudioAccent.copy(alpha = 0.18f))) else Brush.linearGradient(listOf(Color.White.copy(alpha = 0.18f), Color.Black.copy(alpha = 0.10f))))) }
+        }
+        Text(
+          clipTypeBadge(clip.clipType),
+          modifier = Modifier.align(Alignment.TopStart).padding(6.dp).clip(RoundedCornerShape(999.dp)).background(Color.Black.copy(alpha = 0.52f)).padding(horizontal = 6.dp, vertical = 2.dp),
+          color = Color.White,
+          fontSize = 9.sp,
+          fontWeight = FontWeight.Bold,
+        )
+      if (shouldRenderBitmapThumbnail) {
+        Text(
+          if (!clip.hasUsableMediaUri()) "Invalid media" else "Thumbnail unavailable",
+          modifier = Modifier.align(Alignment.BottomStart).padding(start = 6.dp, bottom = 4.dp),
+          color = Color.White.copy(alpha = 0.92f),
+          fontSize = 9.sp,
+          fontWeight = FontWeight.Medium,
+        )
       }
     }
-    if (active) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(3.dp).background(StudioSecondary.copy(alpha = 0.82f)))
-    transition?.let { Box(Modifier.align(if (it.fromClipId == clip.id) Alignment.CenterEnd else Alignment.CenterStart).width(18.dp).fillMaxHeight().background(StudioAccent.copy(alpha = 0.36f))) }
+    }
+    if (active && trackType != TrackType.Audio) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(2.dp).background(Color.White.copy(alpha = 0.30f)))
+    transition?.let { Box(Modifier.align(if (it.fromClipId == clip.id) Alignment.CenterEnd else Alignment.CenterStart).width(18.dp).fillMaxHeight().background(EditorChromeAudioAccent.copy(alpha = 0.22f))) }
     clip.keyframes.distinctBy { it.timeMs }.forEach { keyframe ->
       val kx = ((keyframe.timeMs.toFloat() / clip.durationMs.coerceAtLeast(1L)) * width).roundToInt().coerceIn(8, width - 8)
       Box(Modifier.offset { IntOffset(kx - 4, 6) }.size(8.dp).background(StudioAccent, RoundedCornerShape(2.dp)))
     }
-    Text(clip.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.padding(horizontal = 16.dp))
+    Text(clip.title.uppercase(), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = if (trackType == TrackType.Video) 10.sp else 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = if (trackType == TrackType.Video) 16.dp else 10.dp), color = if (trackType == TrackType.Audio) EditorChromeAudioAccent else if (selected) Color.White else Color.White.copy(alpha = 0.96f))
+    if (trackType == TrackType.Video && clip.clipType == ClipType.Video && clip.sourceDurationMs != null) {
+      Text(
+        clip.sourceDurationMs.asTimecode(),
+        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 4.dp).clip(RoundedCornerShape(999.dp)).background(StudioBackground.copy(alpha = 0.72f)).padding(horizontal = 6.dp, vertical = 2.dp),
+        color = Color.White,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.Bold,
+      )
+    }
     if (trackType == TrackType.Video && clip.clipType == ClipType.Image) {
       Text(
         "${(displayDurationMs / 1000f).let { "%.1fs".format(it) }}",
@@ -1768,6 +2362,30 @@ private fun ClipEditPanel(selectedClip: TimelineClip, viewModel: MainScreenViewM
     Column(Modifier.padding(14.dp)) {
       Text("Edit ${selectedClip.clipType}", fontWeight = FontWeight.Bold)
       Text("${selectedClip.startMs.asTimecode()} · ${selectedClip.durationMs.asTimecode()} · ${selectedClip.title}", color = StudioTextMuted, fontSize = 13.sp)
+      if (selectedClip.isVisualMediaClip() && !selectedClip.hasUsableMediaUri()) {
+        Text(
+          "This clip is still on the timeline, but its media URI is invalid. Re-import or replace the source to recover preview and thumbnails.",
+          color = StudioDanger,
+          fontSize = 12.sp,
+          modifier = Modifier.padding(top = 6.dp),
+        )
+      }
+      if (selectedClip.clipType == ClipType.Video && selectedClip.sourceDurationMs != null) {
+        Text(
+          "Source ${selectedClip.sourceDurationMs.asTimecode()} · In ${selectedClip.sourceInMs.asTimecode()}",
+          color = StudioTextMuted,
+          fontSize = 12.sp,
+          modifier = Modifier.padding(top = 4.dp),
+        )
+      }
+      val supportsDurationAdjust = selectedClip.clipType in setOf(ClipType.Image, ClipType.Video, ClipType.Overlay, ClipType.Audio)
+      val durationStepMs = if (selectedClip.clipType == ClipType.Image) 500L else 1_000L
+      if (supportsDurationAdjust) {
+        Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          OutlinedButton(onClick = { viewModel.trimSelectedClip(-durationStepMs) }, modifier = Modifier.semantics { contentDescription = "Shorten selected clip duration" }) { Text(if (selectedClip.clipType == ClipType.Image) "Duration -0.5s" else "Trim -1s") }
+          OutlinedButton(onClick = { viewModel.trimSelectedClip(durationStepMs) }, modifier = Modifier.semantics { contentDescription = "Extend selected clip duration" }) { Text(if (selectedClip.clipType == ClipType.Image) "Duration +0.5s" else "Trim +1s") }
+        }
+      }
       Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = viewModel::splitSelectedClip, modifier = Modifier.semantics { contentDescription = "Split selected clip" }) { Text("Split") }
         OutlinedButton(onClick = viewModel::deleteSelectedClip, modifier = Modifier.semantics { contentDescription = "Delete selected clip" }) { Text("Delete") }
@@ -2206,9 +2824,9 @@ private fun Context.readMediaDurationMs(uri: Uri, mimeType: String?): Long? {
 
 private fun Context.loadThumbnailBitmap(mediaUri: String, thumbnailTimeMs: Long, widthPx: Int, heightPx: Int): Bitmap? {
   if (mediaUri.startsWith("local://")) return null
-  val uri = Uri.parse(mediaUri)
+  val uri = runCatching { Uri.parse(mediaUri) }.getOrNull() ?: return null
   return runCatching {
-    val mimeType = contentResolver.getType(uri)
+    val mimeType = resolveMimeType(uri)
     when {
       mimeType?.startsWith("image") == true -> {
         contentResolver.openInputStream(uri)?.use { input ->
@@ -2221,20 +2839,57 @@ private fun Context.loadThumbnailBitmap(mediaUri: String, thumbnailTimeMs: Long,
           retriever.getFrameAtTime(thumbnailTimeMs * 1_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
         }
       }
-      else -> null
+      else -> {
+        // Some picker-backed content URIs do not expose a MIME type, so try image decode first and
+        // fall back to video frame extraction before giving up.
+        contentResolver.openInputStream(uri)?.use { input ->
+          BitmapFactory.decodeStream(input)
+        } ?: MediaMetadataRetriever().use { retriever ->
+          retriever.setDataSource(this, uri)
+          retriever.getFrameAtTime(thumbnailTimeMs * 1_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+        }
+      }
     }?.let { source -> Bitmap.createScaledBitmap(source, widthPx.coerceAtLeast(1), heightPx.coerceAtLeast(1), true) }
   }.getOrNull()
 }
 
-private fun resolvePreviewSurfaceState(clip: TimelineClip?): PreviewSurfaceState {
+private fun Context.resolvePreviewSurfaceState(clip: TimelineClip?): PreviewSurfaceState {
   if (clip == null) return PreviewSurfaceState.NoMedia
   val uri = clip.mediaUri?.trim()
   if (uri.isNullOrEmpty()) return PreviewSurfaceState.InvalidUri
-  return when (clip.clipType) {
-    ClipType.Image, ClipType.Overlay -> PreviewSurfaceState.ImageReady
-    ClipType.Video -> PreviewSurfaceState.VideoReady
+  val parsedUri = runCatching { Uri.parse(uri) }.getOrNull() ?: return PreviewSurfaceState.InvalidUri
+  if (parsedUri.scheme.isNullOrBlank()) return PreviewSurfaceState.InvalidUri
+  if (!canOpenPreviewUri(parsedUri)) return PreviewSurfaceState.LoadFailed
+  val mimeType = resolveMimeType(parsedUri)
+  return when {
+    clip.clipType == ClipType.Video -> PreviewSurfaceState.VideoReady
+    clip.clipType == ClipType.Image -> PreviewSurfaceState.ImageReady
+    clip.clipType == ClipType.Overlay && mimeType?.startsWith("video") == true -> PreviewSurfaceState.VideoReady
+    clip.clipType == ClipType.Overlay -> PreviewSurfaceState.ImageReady
     else -> PreviewSurfaceState.LoadFailed
   }
+}
+
+private fun Context.canOpenPreviewUri(uri: Uri): Boolean {
+  return when (uri.scheme?.lowercase()) {
+    "content" -> runCatching {
+      contentResolver.openAssetFileDescriptor(uri, "r")?.use { true }
+        ?: contentResolver.openInputStream(uri)?.use { true }
+        ?: false
+    }.getOrDefault(false)
+    "file" -> runCatching {
+      val path = uri.path ?: return@runCatching false
+      File(path).exists()
+    }.getOrDefault(false)
+    "android.resource" -> true
+    else -> false
+  }
+}
+
+private fun Context.resolveMimeType(uri: Uri): String? {
+  contentResolver.getType(uri)?.let { return it }
+  val extension = MimeTypeMap.getFileExtensionFromUrl(uri.toString())?.lowercase().orEmpty()
+  return extension.takeIf { it.isNotBlank() }?.let { MimeTypeMap.getSingleton().getMimeTypeFromExtension(it) }
 }
 
 @Preview(showBackground = true)

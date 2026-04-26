@@ -13,12 +13,12 @@ New editor-facing code should prefer stable models under `editor.model` (`Projec
 
 <!-- AUTO-GENERATED:CORE_START -->
 ## Core App Snapshot (Auto)
-- Last updated: 2026-04-25 17:13 UTC
+- Last updated: 2026-04-25 22:23 UTC
 - App: Clipy Studio
 - Slug: clipy
 - Tagline: A premium offline-friendly Android video editor for fast, polished social videos.
 - Target users: General users
-- Design direction: Refine the existing editor into a media-first workspace: keep the current structure and visual language, but replace ambiguous blank areas with explicit preview states, stronger clip selection cues, and clearer timeline feedback so imported image and video clips feel real, playable, and editable.
+- Design direction: Refine the existing dark CapCut-inspired editor into a tighter, more literal translation of the `edit.txt` HTML by emphasizing compact chrome, stronger panel separation, flatter but precise dark surfaces, sharper timeline hierarchy, and clearer active/selected states without changing the current editor architecture.
 - Core constraints: android only, MVP first, offline-friendly where possible
 Design style must align with: modern minimal premium
 Typography should align with: clean geometric sans
@@ -586,6 +586,52 @@ Additional follow-up requirement: FIX EDITOR SCREEN BROKEN FEATURES:
 18. Add empty/error states: no media, invalid URI, load failed.
 19. Save editor state after every edit and support undo/redo.
 20. Final test: import media → preview works → timeline thumbnails show → select/trim/split/delete/duplicate/play all work.
+Additional follow-up requirement: READ edit.txt AND REBUILD EDITOR UI:
+
+Read the file edit.txt first, understand the HTML layout, spacing, colors, toolbar, preview area, timeline, buttons, panels, icons, and interaction style inside that file.
+
+Task:
+Rewrite the current Editor Screen UI to match the HTML design in edit.txt as closely as possible.
+
+Requirements:
+1. Use edit.txt as the main UI reference.
+2. Convert the HTML layout into Kotlin Jetpack Compose UI.
+3. Keep the same visual structure: top bar, preview area, playback controls, timeline area, bottom toolbar, and panels.
+4. Match colors, spacing, rounded corners, typography, icon style, shadows, and dark theme from the HTML.
+5. Timeline UI must visually match the HTML: clip blocks, tracks, thumbnails, playhead, selected state, and scroll behavior.
+6. Preview area must visually match the HTML: black canvas, media placeholder, overlay layer, selected bounding box if shown.
+7. Bottom toolbar must match the HTML: button order, active state, icon/text alignment, panel behavior.
+8. All buttons can use mock actions for now, but must not look broken.
+9. Use mock data if real editor data is not available.
+10. Do not create a new unrelated design; follow edit.txt exactly.
+11. Remove old broken Editor UI if it conflicts with the HTML design.
+12. Keep Compose code clean, reusable, and responsive for Android screens.
+
+Acceptance:
+After this task, the Editor Screen should visually look like the HTML design in edit.txt, with clean CapCut-style UI, smooth layout, no overlap, no clipped text, and no blank broken sections.
+Additional follow-up requirement: READ edit.txt AND REBUILD EDITOR UI:
+
+Read the file edit.txt first, understand the HTML layout, spacing, colors, toolbar, preview area, timeline, buttons, panels, icons, and interaction style inside that file.
+
+Task:
+Rewrite the current Editor Screen UI to match the HTML design in edit.txt as closely as possible.
+
+Requirements:
+1. Use edit.txt as the main UI reference.
+2. Convert the HTML layout into Kotlin Jetpack Compose UI.
+3. Keep the same visual structure: top bar, preview area, playback controls, timeline area, bottom toolbar, and panels.
+4. Match colors, spacing, rounded corners, typography, icon style, shadows, and dark theme from the HTML.
+5. Timeline UI must visually match the HTML: clip blocks, tracks, thumbnails, playhead, selected state, and scroll behavior.
+6. Preview area must visually match the HTML: black canvas, media placeholder, overlay layer, selected bounding box if shown.
+7. Bottom toolbar must match the HTML: button order, active state, icon/text alignment, panel behavior.
+8. All buttons can use mock actions for now, but must not look broken.
+9. Use mock data if real editor data is not available.
+10. Do not create a new unrelated design; follow edit.txt exactly.
+11. Remove old broken Editor UI if it conflicts with the HTML design.
+12. Keep Compose code clean, reusable, and responsive for Android screens.
+
+Acceptance:
+After this task, the Editor Screen should visually look like the HTML design in edit.txt, with clean CapCut-style UI, smooth layout, no overlap, no clipped text, and no blank broken sections.
 
 ### Core Features
 - Splash -> onboarding/intro -> main app flow
@@ -611,12 +657,13 @@ Additional follow-up requirement: FIX EDITOR SCREEN BROKEN FEATURES:
 - Performance foundations including lazy thumbnail loading, background rendering/export, media proxy strategies for large files, memory-aware preview, and responsive Compose UI
 
 ### Main Screens
-- Main Editor Screen
-- Media Import To Timeline Flow
-- Timeline Strip
+- Editor Screen Polish Pass
+- Preview Area Refinement
+- Timeline Visual Match Pass
+- Bottom Toolbar And Panel Pass
 
 ### Architecture Core
 - ui: Jetpack Compose
 - pattern: MVVM
-- storage: Keep the existing repository and ViewModel persistence path. Continue storing editor state through the current repository/save flow after each edit, keep URI-backed media references in imported assets and timeline clips, and use the current thumbnail/media loading path with targeted hardening for invalid or inaccessible URIs rather than introducing a new storage layer.
+- storage: Keep the existing repository, editor state, timeline state/action wiring, and media/thumbnail flow unchanged. Limit follow-up work to UI composables, visual token cleanup, lightweight UI-model mapping, and verification of the refined editor presentation.
 <!-- AUTO-GENERATED:CORE_END -->

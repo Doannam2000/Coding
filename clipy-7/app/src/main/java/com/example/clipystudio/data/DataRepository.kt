@@ -117,23 +117,25 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
   }
 
   override fun addImportedAsset(type: MediaType, uri: String?, displayName: String?, sizeBytes: Long?, durationMs: Long?) = persistUpdate { app ->
-    val safeUri = uri?.takeIf { it.isNotBlank() } ?: return@persistUpdate app
+    val safeUri = uri?.trim()?.takeIf { it.isNotBlank() } ?: return@persistUpdate app
     val index = app.selectedImports.count { it.type == type } + 1
+    val safeDurationMs = durationMs?.takeIf { it > 0L } ?: when (type) {
+      MediaType.Image -> 3_000L
+      MediaType.Video -> 8_000L
+      MediaType.Audio -> 12_000L
+    }
+    val safeSizeBytes = sizeBytes?.takeIf { it > 0L } ?: when (type) {
+      MediaType.Image -> 2_400_000L
+      MediaType.Video -> 48_000_000L
+      MediaType.Audio -> 6_800_000L
+    }
     val asset = MediaAsset(
       id = UUID.randomUUID().toString(),
       uri = safeUri,
       type = type,
       displayName = displayName?.ifBlank { null } ?: "${type.label} import $index",
-      durationMs = durationMs ?: when (type) {
-        MediaType.Image -> 3_000
-        MediaType.Video -> 8_000
-        MediaType.Audio -> 12_000
-      },
-      sizeBytes = sizeBytes ?: when (type) {
-        MediaType.Image -> 2_400_000
-        MediaType.Video -> 48_000_000
-        MediaType.Audio -> 6_800_000
-      },
+      durationMs = safeDurationMs,
+      sizeBytes = safeSizeBytes,
     )
     app.copy(selectedImports = app.selectedImports + asset)
   }
@@ -155,9 +157,11 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
       var videoCursor = videoTrack.clips.maxOfOrNull { it.startMs + it.durationMs } ?: 0L
       var audioCursor = audioTrack.clips.maxOfOrNull { it.startMs + it.durationMs } ?: 0L
       var firstImportedClipId: String? = null
+      val validImports = imports.filter { it.uri.isNotBlank() }
+      if (validImports.isEmpty()) return@mutateProject project
       val updatedTracks = baseTimeline.tracks.map { track ->
         when (track.type) {
-          TrackType.Video -> track.copy(clips = track.clips + imports.filter { it.type != MediaType.Audio }.map { asset ->
+          TrackType.Video -> track.copy(clips = track.clips + validImports.filter { it.type != MediaType.Audio }.map { asset ->
             TimelineClip(
               id = UUID.randomUUID().toString(),
               assetId = asset.id,
@@ -166,9 +170,10 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
               title = asset.displayName,
               startMs = videoCursor.also { videoCursor += asset.durationMs },
               durationMs = asset.durationMs,
+              sourceDurationMs = asset.durationMs.takeIf { asset.type == MediaType.Video },
             ).also { clip -> if (firstImportedClipId == null) firstImportedClipId = clip.id }
           })
-          TrackType.Audio -> track.copy(clips = track.clips + imports.filter { it.type == MediaType.Audio }.map { asset ->
+          TrackType.Audio -> track.copy(clips = track.clips + validImports.filter { it.type == MediaType.Audio }.map { asset ->
             TimelineClip(
               id = UUID.randomUUID().toString(),
               assetId = asset.id,
@@ -186,7 +191,7 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
         }
       }
       project.copy(
-        importedAssets = (project.importedAssets + imports).distinctBy { it.id },
+        importedAssets = (project.importedAssets + validImports).distinctBy { it.id },
         timeline = baseTimeline.copy(
           tracks = updatedTracks,
           selectedClipId = firstImportedClipId ?: baseTimeline.selectedClipId,
@@ -203,14 +208,27 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
   override fun selectClip(clipId: String) = updateTimeline { it.copy(selectedClipId = clipId, selectedTool = EditorTool.Edit) }
   override fun clearSelection() = updateTimeline { it.copy(selectedClipId = null) }
 
-  override fun togglePlayback() = updateTimeline { it.copy(isPlaying = !it.isPlaying, playheadMs = if (it.playheadMs >= it.durationMs) 0L else it.playheadMs).nextVersion() }
+  override fun togglePlayback() = updateTimeline { timeline ->
+    val nextPlayhead = if (timeline.playheadMs >= timeline.durationMs) 0L else timeline.playheadMs
+    timeline.copy(
+      isPlaying = !timeline.isPlaying,
+      playheadMs = nextPlayhead,
+      scrollOffsetPx = TimelineEngine.scrollFromTime(nextPlayhead, timeline.zoomLevel, timeline.pixelsPerSecond),
+    ).nextVersion()
+  }
 
   override fun seekTo(positionMs: Long) = updateTimeline { timeline ->
     val time = positionMs.coerceIn(0L, timeline.durationMs)
     timeline.copy(playheadMs = time, scrollOffsetPx = TimelineEngine.scrollFromTime(time, timeline.zoomLevel, timeline.pixelsPerSecond)).nextVersion()
   }
 
-  override fun seekBy(deltaMs: Long) = updateTimeline { timeline -> timeline.copy(playheadMs = (timeline.playheadMs + deltaMs).coerceIn(0L, timeline.durationMs)) }
+  override fun seekBy(deltaMs: Long) = updateTimeline { timeline ->
+    val time = (timeline.playheadMs + deltaMs).coerceIn(0L, timeline.durationMs)
+    timeline.copy(
+      playheadMs = time,
+      scrollOffsetPx = TimelineEngine.scrollFromTime(time, timeline.zoomLevel, timeline.pixelsPerSecond),
+    ).nextVersion()
+  }
 
   override fun scrollTimelineTo(scrollOffsetPx: Float, viewportWidthPx: Float) = updateTimeline { timeline ->
     TimelineEngine.withScroll(
@@ -258,33 +276,66 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
   override fun duplicateSelectedClip() = withUndo("Duplicate clip") { project ->
     val selectedId = project.timeline.selectedClipId ?: return@withUndo project
     var duplicatedId: String? = null
+    var duplicatedStartMs: Long? = null
     project.copy(
       timeline = project.timeline.copy(
         tracks = project.timeline.tracks.map { track ->
           val clip = track.clips.firstOrNull { it.id == selectedId } ?: return@map track
+          val insertAtMs = if (track.type == TrackType.Video) {
+            track.clips.maxOfOrNull { it.startMs + it.durationMs } ?: 0L
+          } else {
+            clip.startMs + clip.durationMs
+          }
           val duplicate = clip.copy(
             id = UUID.randomUUID().toString(),
-            startMs = clip.startMs + clip.durationMs,
+            startMs = insertAtMs,
             title = "${clip.title} copy",
           )
           duplicatedId = duplicate.id
-          track.copy(clips = track.clips + duplicate)
+          duplicatedStartMs = duplicate.startMs
+          track.copy(
+            clips = (track.clips + duplicate).sortedBy { it.startMs },
+          )
         },
         selectedClipId = duplicatedId ?: selectedId,
         selectedTool = EditorTool.Edit,
+        playheadMs = duplicatedStartMs ?: project.timeline.playheadMs,
+        scrollOffsetPx = TimelineEngine.scrollFromTime(duplicatedStartMs ?: project.timeline.playheadMs, project.timeline.zoomLevel, project.timeline.pixelsPerSecond),
       ).recalculateDuration(),
     )
   }
 
   override fun deleteSelectedClip() = withUndo("Delete clip") { project ->
     val selectedId = project.timeline.selectedClipId ?: return@withUndo project
-    val updatedTracks = project.timeline.tracks.map { track -> track.copy(clips = track.clips.filterNot { it.id == selectedId }) }
-    val nextSelection = updatedTracks.flatMap { it.clips }
-      .minByOrNull { clip -> kotlin.math.abs(clip.startMs - project.timeline.playheadMs) }
-      ?.id
+    val selectedClip = project.timeline.tracks.flatMap { it.clips }.firstOrNull { it.id == selectedId } ?: return@withUndo project
+    val selectedTrackType = project.timeline.tracks.firstOrNull { track -> track.clips.any { it.id == selectedId } }?.type
+    val updatedTracks = project.timeline.tracks.map { track ->
+      val remaining = track.clips.filterNot { it.id == selectedId }
+      if (track.type == TrackType.Video) {
+        var cursor = 0L
+        track.copy(clips = remaining.sortedBy { it.startMs }.map { clip -> clip.copy(startMs = cursor).also { cursor += clip.durationMs } })
+      } else {
+        track.copy(clips = remaining)
+      }
+    }
+    val remainingClips = updatedTracks.flatMap { it.clips }
+    val remainingTrackClips = selectedTrackType?.let { type ->
+      updatedTracks.firstOrNull { it.type == type }?.clips?.sortedBy { it.startMs }
+    }.orEmpty()
+    val nextSelection = remainingTrackClips.firstOrNull { it.startMs >= selectedClip.startMs }?.id
+      ?: remainingTrackClips.lastOrNull()?.id
+      ?: remainingClips
+        .filter { it.clipType == selectedClip.clipType }
+        .minByOrNull { clip -> kotlin.math.abs(clip.startMs - project.timeline.playheadMs) }
+        ?.id
+      ?: remainingClips
+        .minByOrNull { clip -> kotlin.math.abs(clip.startMs - project.timeline.playheadMs) }
+        ?.id
     project.copy(
       timeline = project.timeline.copy(
         selectedClipId = nextSelection,
+        playheadMs = nextSelection?.let { id -> remainingClips.firstOrNull { it.id == id }?.startMs } ?: 0L,
+        scrollOffsetPx = TimelineEngine.scrollFromTime(nextSelection?.let { id -> remainingClips.firstOrNull { it.id == id }?.startMs } ?: 0L, project.timeline.zoomLevel, project.timeline.pixelsPerSecond),
         tracks = updatedTracks,
       ).recalculateDuration(),
     )
@@ -328,19 +379,27 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
     }
   }
 
-  override fun transformSelectedClipAbsolute(positionX: Float, positionY: Float, scale: Float, rotationDegrees: Float) = updateTimeline { timeline ->
-    val selectedId = timeline.selectedClipId ?: return@updateTimeline timeline
-    timeline.copy(
-      tracks = timeline.tracks.map { track ->
-        track.copy(clips = track.clips.map { clip ->
-          if (clip.id == selectedId) clip.copy(transform = clip.transform.copy(
-            positionX = positionX.coerceIn(0.05f, 0.95f),
-            positionY = positionY.coerceIn(0.05f, 0.95f),
-            scale = scale.coerceIn(0.35f, 3f),
-            rotationDegrees = ((rotationDegrees % 360f) + 360f) % 360f,
-          )) else clip
-        })
-      },
+  override fun transformSelectedClipAbsolute(positionX: Float, positionY: Float, scale: Float, rotationDegrees: Float) = withUndo("Transform overlay") { project ->
+    val selectedId = project.timeline.selectedClipId ?: return@withUndo project
+    project.copy(
+      timeline = project.timeline.copy(
+        tracks = project.timeline.tracks.map { track ->
+          track.copy(clips = track.clips.map { clip ->
+            if (clip.id == selectedId) {
+              clip.copy(
+                transform = clip.transform.copy(
+                  positionX = positionX.coerceIn(0.05f, 0.95f),
+                  positionY = positionY.coerceIn(0.05f, 0.95f),
+                  scale = scale.coerceIn(0.35f, 3f),
+                  rotationDegrees = ((rotationDegrees % 360f) + 360f) % 360f,
+                ),
+              )
+            } else {
+              clip
+            }
+          })
+        },
+      ),
     )
   }
 
@@ -446,8 +505,12 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
     mapSelectedClip(project) { clip ->
       val oldSpeed = clip.videoProperties.speed.coerceAtLeast(0.1f)
       val nextSpeed = speed.coerceIn(0.5f, 2f)
-      val sourceDuration = (clip.durationMs * oldSpeed).toLong().coerceAtLeast(1_000L)
-      clip.copy(durationMs = (sourceDuration / nextSpeed).toLong().coerceAtLeast(1_000L), videoProperties = clip.videoProperties.copy(speed = nextSpeed))
+      val sourceDuration = ((clip.sourceDurationMs ?: (clip.durationMs * oldSpeed).toLong()) - clip.sourceInMs)
+        .coerceAtLeast(TimelineEngine.MinClipDurationMs)
+      clip.copy(
+        durationMs = (sourceDuration / nextSpeed).toLong().coerceAtLeast(TimelineEngine.MinClipDurationMs),
+        videoProperties = clip.videoProperties.copy(speed = nextSpeed),
+      )
     }.copyTimelineDuration()
   }
 
@@ -706,6 +769,7 @@ private fun TimelineClip.toJson() = JSONObject()
   .put("startMs", startMs)
   .put("durationMs", durationMs)
   .put("sourceInMs", sourceInMs)
+  .put("sourceDurationMs", sourceDurationMs)
   .put("zIndex", zIndex)
   .put("transform", transform.toJson())
   .put("videoProperties", videoProperties.toJson())
@@ -723,6 +787,7 @@ private fun JSONObject.toTimelineClip() = TimelineClip(
   startMs = optLong("startMs"),
   durationMs = optLong("durationMs"),
   sourceInMs = optLong("sourceInMs"),
+  sourceDurationMs = optLong("sourceDurationMs").takeIf { it > 0L },
   zIndex = optInt("zIndex"),
   transform = optJSONObject("transform")?.toTransformState() ?: TransformState(),
   videoProperties = optJSONObject("videoProperties")?.toVideoProperties() ?: VideoProperties(),
@@ -876,6 +941,7 @@ data class TimelineClip(
   val startMs: Long = 0,
   val durationMs: Long,
   val sourceInMs: Long = 0,
+  val sourceDurationMs: Long? = null,
   val zIndex: Int = 0,
   val transform: TransformState = TransformState(),
   val videoProperties: VideoProperties = VideoProperties(),

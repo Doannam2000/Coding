@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-container": "#00a657",
+                        "on-secondary-fixed-variant": "#454747",
+                        "on-secondary": "#2f3131",
+                        "secondary": "#c6c6c7",
+                        "on-tertiary-fixed": "#00210c",
+                        "secondary-fixed": "#e2e2e2",
+                        "on-primary-fixed-variant": "#00468c",
+                        "on-tertiary": "#003919",
+                        "on-error": "#690005",
+                        "surface-container": "#201f1f",
+                        "on-surface-variant": "#c0c6d6",
+                        "primary-fixed-dim": "#a9c7ff",
+                        "outline-variant": "#414754",
+                        "on-background": "#e5e2e1",
+                        "background": "#131313",
+                        "primary-fixed": "#d6e3ff",
+                        "on-surface": "#e5e2e1",
+                        "error": "#ffb4ab",
+                        "surface-dim": "#131313",
+                        "secondary-container": "#454747",
+                        "on-secondary-fixed": "#1a1c1c",
+                        "primary-container": "#3c90ff",
+                        "surface": "#131313",
+                        "on-tertiary-fixed-variant": "#005228",
+                        "inverse-surface": "#e5e2e1",
+                        "surface-tint": "#a9c7ff",
+                        "surface-container-low": "#1c1b1b",
+                        "surface-container-highest": "#353534",
+                        "error-container": "#93000a",
+                        "on-primary": "#003063",
+                        "surface-container-high": "#2a2a2a",
+                        "inverse-on-surface": "#313030",
+                        "tertiary-fixed": "#6bfe9c",
+                        "tertiary": "#4ae183",
+                        "outline": "#8a91a0",
+                        "on-error-container": "#ffdad6",
+                        "on-tertiary-container": "#003115",
+                        "primary": "#a9c7ff",
+                        "on-primary-fixed": "#001b3d",
+                        "surface-bright": "#393939",
+                        "inverse-primary": "#005db7",
+                        "surface-container-lowest": "#0e0e0e",
+                        "secondary-fixed-dim": "#c6c6c7",
+                        "surface-variant": "#353534",
+                        "on-secondary-container": "#b4b5b5",
+                        "tertiary-fixed-dim": "#4ae183",
+                        "on-primary-container": "#002957"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "sm": "8px",
+                        "gutter": "12px",
+                        "panel-padding": "16px",
+                        "lg": "24px",
+                        "xs": "4px",
+                        "md": "16px",
+                        "unit": "4px",
+                        "xl": "32px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Manrope"],
+                        "body-sm": ["Manrope"],
+                        "label-sm": ["Manrope"],
+                        "label-md": ["Manrope"],
+                        "body-md": ["Manrope"],
+                        "mono-time": ["Inter"],
+                        "headline-lg": ["Manrope"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["18px", {"lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "body-sm": ["13px", {"lineHeight": "18px", "letterSpacing": "0em", "fontWeight": "400"}],
+                        "label-sm": ["11px", {"lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "500"}],
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600"}],
+                        "body-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400"}],
+                        "mono-time": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                        "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .timeline-grid {
+            background-image: linear-gradient(to right, #1A1A1A 1px, transparent 1px);
+            background-size: 40px 100%;
+        }
+        .playhead-shadow {
+            box-shadow: 0 0 12px rgba(0, 132, 255, 0.4);
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        body {
+            min-height: max(884px, 100dvh);
+        }
+    </style>
+</head>
+<body class="bg-[#0A0A0A] text-on-surface font-body-md overflow-hidden h-screen flex flex-col">
+<!-- Top Navigation Bar -->
+<header class="flex justify-between items-center px-4 h-14 w-full z-50 bg-[#0A0A0A] border-b border-[#1A1A1A]">
+<div class="flex items-center gap-4">
+<button class="text-on-surface hover:bg-[#262626] p-2 rounded-full transition-colors active:scale-95">
+<span class="material-symbols-outlined">chevron_left</span>
+</button>
+<div class="flex items-center gap-2 px-3 py-1 bg-[#1A1A1A] rounded-full border border-[#262626]">
+<span class="font-label-md text-label-md text-neutral-400">1080P</span>
+<span class="material-symbols-outlined text-[14px] text-neutral-400">expand_more</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="bg-[#0084FF] text-white px-4 py-1.5 rounded-lg font-label-md text-label-md font-bold flex items-center gap-2 active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[18px]">upload</span>
+                Export
+            </button>
+</div>
+</header>
+<!-- Main Workspace -->
+<main class="flex-1 flex flex-col overflow-hidden">
+<!-- Preview Window (Shrunk to approx 40% height) -->
+<section class="h-[40%] bg-[#0A0A0A] relative flex flex-col items-center justify-center py-4 px-6">
+<div class="relative h-full aspect-[9/16] bg-black rounded-xl overflow-hidden shadow-2xl border border-[#1A1A1A]">
+<img class="w-full h-full object-cover" data-alt="cinematic vertical shot of a young person running through a futuristic neon-lit city street at night with motion blur effects" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBib1MM34ohvv7w565KBBWQGldMHNnHrh2mpja-N89N1XegtDm_HoB8W-v7Aeor07d-v1CoZVZN26-sJmrN3Eol1tKaLcffX-M7HYdM04cRAmqGu0AyNMocqnbDnAksITozbZj-8G-5R5_v4qQV9YcqxkojODWZHnzR-wR6ArBv_JyMNCuhrlAmDMZexEDaCEEgSjY-J8zoePsfZ6IQMWqSfQrVqX4KD4QICUTra8YqskvwurJTdUTlGYCvvCqIsEdJXK_hoTkbjr6y"/>
+<!-- HUD Controls -->
+<div class="absolute inset-0 flex flex-col justify-between p-4 pointer-events-none">
+<div class="flex justify-between items-start">
+<div class="bg-black/40 backdrop-blur-md px-2 py-1 rounded text-[10px] font-mono-time text-white pointer-events-auto border border-white/10">00:00:12:14</div>
+<button class="bg-black/40 backdrop-blur-md p-1.5 rounded-lg text-white pointer-events-auto border border-white/10">
+<span class="material-symbols-outlined text-[20px]">fullscreen</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Playback controls moved into section for better space management -->
+<div class="absolute bottom-6 flex items-center gap-6 z-10">
+<button class="text-neutral-400 hover:text-white transition-colors"><span class="material-symbols-outlined text-[24px]">skip_previous</span></button>
+<button class="w-10 h-10 bg-white text-black rounded-full flex items-center justify-center active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</button>
+<button class="text-neutral-400 hover:text-white transition-colors"><span class="material-symbols-outlined text-[24px]">skip_next</span></button>
+</div>
+</section>
+<!-- Timeline Section (Expanded) -->
+<section class="flex-1 bg-[#0F0F0F] flex flex-col border-t border-[#262626] overflow-hidden">
+<!-- Timeline Toolbar (Expanded with more CapCut-like controls) -->
+<div class="h-11 flex items-center justify-between px-2 bg-[#1A1A1A] border-b border-[#262626]">
+<div class="flex items-center gap-1">
+<button class="p-2 text-neutral-400 hover:text-white hover:bg-[#262626] rounded-md transition-colors">
+<span class="material-symbols-outlined text-[18px]">undo</span>
+</button>
+<button class="p-2 text-neutral-400 hover:text-white hover:bg-[#262626] rounded-md transition-colors">
+<span class="material-symbols-outlined text-[18px]">redo</span>
+</button>
+<div class="w-[1px] h-4 bg-neutral-700 mx-1"></div>
+<button class="flex items-center gap-1.5 p-2 text-neutral-400 hover:text-white hover:bg-[#262626] rounded-md transition-colors">
+<span class="material-symbols-outlined text-[18px]">content_cut</span>
+<span class="text-[11px] font-bold uppercase">Split</span>
+</button>
+<button class="flex items-center gap-1.5 p-2 text-neutral-400 hover:text-white hover:bg-[#262626] rounded-md transition-colors">
+<span class="material-symbols-outlined text-[18px]">speed</span>
+<span class="text-[11px] font-bold uppercase">Speed</span>
+</button>
+</div>
+<div class="font-mono-time text-[12px] text-[#0084FF] tracking-widest font-semibold bg-[#0084FF]/10 px-2 py-0.5 rounded border border-[#0084FF]/20">00:00:12:14</div>
+<div class="flex items-center gap-1">
+<button class="flex items-center gap-1.5 p-2 text-neutral-400 hover:text-white hover:bg-[#262626] rounded-md transition-colors">
+<span class="material-symbols-outlined text-[18px]">animation</span>
+<span class="text-[11px] font-bold uppercase">Anim</span>
+</button>
+<button class="flex items-center gap-1.5 p-2 text-neutral-400 hover:text-white hover:bg-[#262626] rounded-md transition-colors">
+<span class="material-symbols-outlined text-[18px]">volume_up</span>
+<span class="text-[11px] font-bold uppercase">Vol</span>
+</button>
+<button class="p-2 text-red-400 hover:text-red-500 hover:bg-red-500/10 rounded-md transition-colors ml-1">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+</div>
+<!-- Multi-Layer Timeline Workspace -->
+<div class="relative flex-1 overflow-x-auto overflow-y-auto no-scrollbar timeline-grid">
+<!-- Playhead Indicator -->
+<div class="absolute left-1/2 top-0 bottom-0 w-[2px] bg-[#0084FF] z-40 playhead-shadow pointer-events-none">
+<div class="absolute -top-1 -left-[5px] w-3 h-3 bg-[#0084FF] rotate-45"></div>
+</div>
+<!-- Tracks Container -->
+<div class="min-w-[2400px] py-4 px-[50%] flex flex-col gap-3">
+<!-- Layer 1: Text/Stickers -->
+<div class="flex flex-col gap-1.5">
+<div class="h-6 flex items-center">
+<div class="h-full w-48 bg-primary-container/30 border border-primary/40 rounded px-2 flex items-center gap-2 ml-24 cursor-pointer hover:bg-primary-container/40 transition-colors">
+<span class="material-symbols-outlined text-[14px] text-primary">title</span>
+<span class="text-[10px] text-primary font-bold truncate uppercase tracking-tight">CITY LIGHTS TITLE</span>
+</div>
+<div class="h-full w-24 bg-tertiary-container/30 border border-tertiary/40 rounded px-2 flex items-center gap-2 ml-32 cursor-pointer hover:bg-tertiary-container/40 transition-colors">
+<span class="material-symbols-outlined text-[14px] text-tertiary">mood</span>
+<span class="text-[10px] text-tertiary font-bold truncate uppercase tracking-tight">FIRE.PNG</span>
+</div>
+</div>
+</div>
+<!-- Layer 2: Main Video (A-Roll) -->
+<div class="flex flex-col gap-1.5">
+<div class="h-20 flex items-center">
+<!-- Clip 1 -->
+<div class="h-full w-[380px] bg-[#1A1A1A] border-2 border-[#0084FF] rounded-lg overflow-hidden flex relative shadow-lg group cursor-pointer">
+<div class="absolute inset-y-0 left-0 w-1 bg-[#0084FF]"></div>
+<div class="flex h-full w-full">
+<img class="w-1/5 h-full object-cover opacity-70 group-hover:opacity-90 transition-opacity" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB_FENRlzF7rw6q4qlsLy24RWG1ZlryTwWGB-Ky7Ll7JC_kA2ZL00Viv4pNs5F9f9ygfNDANMaUC2L7uDm_NshuqyAo0D4boUno9mGMAoRuXkBkmQb7pYegWHg-x_ME-5C0Xey_dZQDGTkM9XXo2QntMOSU9js_ZoDceJ1-s0ozj8AjUQ5_fvaoec6s26BT-IQ3g3Dgei1rtXWdq-iPNrHH_a6Ufda1EoIoNYt6_O8taD1wGpVTIRStcMMQneaEqLPk8-JfJ9W07WcR"/>
+<img class="w-1/5 h-full object-cover opacity-70" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDyR4XPUJDZidjkJ_29K5OprMcMHbzKEnZQgoOW_1kbNM5w5VO9Imdq_92ouxk58xVb-bnyZ_5XFATNwDC_c06LuusOlFJ4KcCZfsZ1G5_El0sv4pWDrTIekebiEeJ4HpH87NvLWQCarOxQo8SyAHD2AaSWGiMugmcRyoaRcsan80k79nalAsi1i59lpxu0abUlFcCznM7c1nktwV0vwetz9a6U1DWtvC02W4QBo4WhM5iNH3W7Dt4Z5Z0p2r7bGhknpy_upKOQdyLa"/>
+<img class="w-1/5 h-full object-cover opacity-70" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBHoOE0FAyzcvNXR_kEUi7ROVUNvcZCiOsLELHyJWxKPRbulQot5bQxSGlxFuuOCXpuaAa9RjWlBhgR8DNY__dSyeWLXuLBDCaxgCAEwcCKtr5Es1Dp_BzlrjF7bQaMVHuIKpujuGelb_MKqSQJoLaJ5C3MSHl9mMjFgERp4JHiKp_iXmw8IYE8F-zxesxoygXLfYj-zB0hgBcdhEJNWCdILV8JwrmtB13QzffF-z3V5r97rwAPVd758w0AmG_1pPSRFjfqwd__6tDl"/>
+<img class="w-1/5 h-full object-cover opacity-70" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC6GS6MjtpkJKxyzrzl7QyLUkAqvNtBknJRz5mCWfk-tz7NaXFMn6Kdi1Ov7c1M5rKXHGu4jdTS3OY_2KYnQCQu2eb_cwJklp2AgYbQz4E-5yLQcqWWjQbjrHbALJew4Lg-cH8XWrVMgrFRtXU2kaAeIgWNjNk4-bmWG2Yw3rqglbdW6lfKpH1XhbE_rpmaApQajKtWt_trV_-XN-ljADefMpHlL0J3eHN4rOemvpZCI1GlQOMo5ahjBT7CZRxFRpLf8P6g1r4vTe8Q"/>
+<img class="w-1/5 h-full object-cover opacity-70" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCBY_-HeYvCQpKZ8dGQKU7mowdhnh1Hq_5T5hgLsKTp645_GI-1Rx8wt9MaI5-0LUu-nhW_FJwU1Tq0CZfrdrtjKLSXTE1sPRxPhdE_iWy6EsVFCqJA_HVbHEhfXzyW1hYI29NNwVftF8MtRznak6ZGrsV5LW5lI-fq7W-bGaIGt2ko7JHdt-SzRMi6Y3hdif6IOagiQZhVk_VH4flKzwtnsvkYG0iG4yLy7883rq8QBvqhG360-pGg4s_rcRzmYKGnNkqRNu2TB4Un"/>
+</div>
+<div class="absolute bottom-1 left-2 text-[8px] font-black text-white bg-black/60 px-1 rounded uppercase tracking-tighter">001_A_Roll.mp4</div>
+<div class="absolute top-1 right-1 text-white scale-75 opacity-50"><span class="material-symbols-outlined text-[16px]">link</span></div>
+</div>
+<!-- Clip 2 -->
+<div class="h-full w-[200px] bg-[#262626] border border-[#333] rounded-lg overflow-hidden flex relative ml-1 cursor-pointer hover:border-neutral-500 transition-colors">
+<img class="w-full h-full object-cover opacity-40" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBUkF-pKpH8TNWv3wr0zh2wKDYq7JYytGSV-4ILLK-7AOMysnHSQiwtXrM2M5U7jp_Vn1clNVtoxPWxFD7ua91yI0qFt7AdHbrntq4q2CPy0tvVC7ErMAkf8gGi1dinatME_PJhCM1-A5d7pnmxejJefqo_iXSpGrrXQTkQKDd8GyXNmesVv-_Q_aWFN6L2GRuYuO00iI3_Mzyx9jrTJ6t2vdgBKT5qTdUqOSSY7-P7kTILOqrTSSUdI4nLOGP0PXQMG0UksbHhd3aq"/>
+<div class="absolute bottom-1 left-2 text-[8px] font-black text-white bg-black/40 px-1 rounded uppercase tracking-tighter">002_Garage.mp4</div>
+</div>
+</div>
+</div>
+<!-- Layer 3: Audio (Waveforms) -->
+<div class="flex flex-col gap-1.5">
+<div class="h-10 flex items-center">
+<div class="h-full w-[700px] bg-[#003919] border border-[#00a657]/40 rounded-md relative flex items-center px-3 gap-2 cursor-pointer hover:bg-[#004d22] transition-colors">
+<span class="material-symbols-outlined text-[16px] text-tertiary">music_note</span>
+<div class="flex-1 h-full flex items-center gap-[1.5px] overflow-hidden">
+<!-- Simplified SVG waveform for better professional look -->
+<svg class="h-6 w-full opacity-60" preserveaspectratio="none" viewbox="0 0 400 40">
+<path class="text-tertiary" d="M0 20 L5 10 L10 25 L15 5 L20 30 L25 15 L30 35 L35 10 L40 25 L45 5 L50 30 L55 15 L60 35 L65 10 L70 25 L75 5 L80 30 L85 15 L90 35 L95 10 L100 20 L105 10 L110 25 L115 5 L120 30 L125 15 L130 35 L135 10 L140 25 L145 5 L150 30 L155 15 L160 35 L165 10 L170 25 L175 5 L180 30 L185 15 L190 35 L195 10 L200 20 L205 10 L210 25 L215 5 L220 30 L225 15 L230 35 L235 10 L240 25 L245 5 L250 30 L255 15 L260 35 L265 10 L270 25 L275 5 L280 30 L285 15 L290 35 L295 10 L300 20 L305 10 L310 25 L315 5 L320 30 L325 15 L330 35 L335 10 L340 25 L345 5 L350 30 L355 15 L360 35 L365 10 L370 25 L375 5 L380 30 L385 15 L390 35 L395 10 L400 20" fill="none" stroke="currentColor" stroke-width="1.5"></path>
+</svg>
+</div>
+<span class="text-[9px] text-tertiary font-black uppercase whitespace-nowrap tracking-tighter">CINEMATIC_DRIVE_MASTER.WAV</span>
+</div>
+</div>
+</div>
+<!-- Layer 4: Secondary Audio (SFX) -->
+<div class="flex flex-col gap-1.5">
+<div class="h-8 flex items-center">
+<div class="h-full w-[120px] bg-[#003919]/60 border border-[#00a657]/20 rounded-md relative flex items-center px-2 gap-1 ml-48 cursor-pointer">
+<span class="material-symbols-outlined text-[12px] text-tertiary/70">volume_up</span>
+<span class="text-[8px] text-tertiary/70 font-bold uppercase truncate">SWOOSH_SFX.MP3</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Editing Toolbar (Prominent Navigation) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-[72px] px-2 pb-safe bg-[#1A1A1A] border-t border-[#333] shadow-[0_-4px_24px_rgba(0,0,0,0.5)]">
+<button class="flex-1 flex flex-col items-center justify-center gap-1 text-[#0084FF] transition-all group">
+<div class="p-1 rounded-lg group-active:bg-primary/10">
+<span class="material-symbols-outlined text-[26px]">video_library</span>
+</div>
+<span class="font-manrope text-[11px] font-bold uppercase tracking-tight">Edit</span>
+</button>
+<button class="flex-1 flex flex-col items-center justify-center gap-1 text-neutral-500 hover:text-neutral-200 transition-all group">
+<div class="p-1 rounded-lg group-active:bg-white/10">
+<span class="material-symbols-outlined text-[26px]">music_note</span>
+</div>
+<span class="font-manrope text-[11px] font-bold uppercase tracking-tight">Audio</span>
+</button>
+<button class="flex-1 flex flex-col items-center justify-center gap-1 text-neutral-500 hover:text-neutral-200 transition-all group">
+<div class="p-1 rounded-lg group-active:bg-white/10">
+<span class="material-symbols-outlined text-[26px]">title</span>
+</div>
+<span class="font-manrope text-[11px] font-bold uppercase tracking-tight">Text</span>
+</button>
+<button class="flex-1 flex flex-col items-center justify-center gap-1 text-neutral-500 hover:text-neutral-200 transition-all group">
+<div class="p-1 rounded-lg group-active:bg-white/10">
+<span class="material-symbols-outlined text-[26px]">auto_awesome</span>
+</div>
+<span class="font-manrope text-[11px] font-bold uppercase tracking-tight">Effects</span>
+</button>
+<button class="flex-1 flex flex-col items-center justify-center gap-1 text-neutral-500 hover:text-neutral-200 transition-all group">
+<div class="p-1 rounded-lg group-active:bg-white/10">
+<span class="material-symbols-outlined text-[26px]">layers</span>
+</div>
+<span class="font-manrope text-[11px] font-bold uppercase tracking-tight">Overlay</span>
+</button>
+</nav>
+<!-- Floating Add Media Action -->
+<button class="fixed right-6 bottom-[92px] w-14 h-14 bg-[#0084FF] text-white rounded-full shadow-lg flex items-center justify-center active:scale-95 hover:bg-[#0074e0] transition-all z-40 border-4 border-[#0A0A0A]">
+<span class="material-symbols-outlined text-[28px] font-bold">add</span>
+</button>
+</body></html>

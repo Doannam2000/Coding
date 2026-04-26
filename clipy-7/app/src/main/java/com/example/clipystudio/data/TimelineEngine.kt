@@ -1183,14 +1183,20 @@ object TimelineEngine {
   fun resolveTrimGesture(timeline: Timeline, clipId: String, handle: TrimHandle, proposedTimeMs: Long): TrimGestureResolution {
     val located = timeline.locateClip(clipId) ?: return TrimGestureResolution(proposedTimeMs, proposedTimeMs, SnapResolution(), false)
     val clip = located.clip
+    val nextClipStartMs = located.track.clips.filterNot { it.id == clipId }.map { it.startMs }.filter { it > clip.startMs }.minOrNull()
+    val rightEdgeLimitMs = when {
+      located.track.type == TrackType.Video && nextClipStartMs != null -> nextClipStartMs
+      clip.sourceDurationMs != null -> clip.startMs + (clip.sourceDurationMs - clip.sourceInMs).coerceAtLeast(MinClipDurationMs)
+      else -> (clip.startMs + clip.durationMs + 60_000L).coerceAtLeast(clip.startMs + MinClipDurationMs)
+    }
     val rawTime = when (handle) {
       TrimHandle.Left -> proposedTimeMs.coerceIn((clip.startMs - clip.sourceInMs).coerceAtLeast(0L), clip.startMs + clip.durationMs - MinClipDurationMs)
-      TrimHandle.Right -> proposedTimeMs.coerceIn(clip.startMs + MinClipDurationMs, timeline.durationMs.coerceAtLeast(clip.startMs + MinClipDurationMs))
+      TrimHandle.Right -> proposedTimeMs.coerceIn(clip.startMs + MinClipDurationMs, rightEdgeLimitMs.coerceAtLeast(clip.startMs + MinClipDurationMs))
     }
     val snap = resolveSnapResolution(timeline, located.track.type, clipId, rawTime)
     val resolved = when (handle) {
       TrimHandle.Left -> (snap.snappedTimeMs ?: rawTime).coerceIn((clip.startMs - clip.sourceInMs).coerceAtLeast(0L), clip.startMs + clip.durationMs - MinClipDurationMs)
-      TrimHandle.Right -> (snap.snappedTimeMs ?: rawTime).coerceIn(clip.startMs + MinClipDurationMs, timeline.durationMs.coerceAtLeast(clip.startMs + MinClipDurationMs))
+      TrimHandle.Right -> (snap.snappedTimeMs ?: rawTime).coerceIn(clip.startMs + MinClipDurationMs, rightEdgeLimitMs.coerceAtLeast(clip.startMs + MinClipDurationMs))
     }
     val nextClip = resolveTrimmedClip(timeline, clipId, handle, resolved)
     return TrimGestureResolution(rawTime, resolved, snap, nextClip != null)
@@ -1219,7 +1225,13 @@ object TimelineEngine {
         )
       }
       TrimHandle.Right -> {
-        val end = proposedTimeMs.coerceAtLeast(clip.startMs + MinClipDurationMs)
+        val nextClipStartMs = located.track.clips.filterNot { it.id == clipId }.map { it.startMs }.filter { it > clip.startMs }.minOrNull()
+        val maxEnd = when {
+          located.track.type == TrackType.Video && nextClipStartMs != null -> nextClipStartMs
+          clip.sourceDurationMs != null -> clip.startMs + (clip.sourceDurationMs - clip.sourceInMs).coerceAtLeast(MinClipDurationMs)
+          else -> maxOf(timeline.durationMs, clip.startMs + clip.durationMs, proposedTimeMs)
+        }
+        val end = proposedTimeMs.coerceAtLeast(clip.startMs + MinClipDurationMs).coerceAtMost(maxEnd)
         clip.copy(durationMs = (end - clip.startMs).coerceAtLeast(MinClipDurationMs))
       }
     }
@@ -1233,7 +1245,12 @@ object TimelineEngine {
     val split = timeline.playheadMs - clip.startMs
     if (split < MinClipDurationMs || clip.durationMs - split < MinClipDurationMs) return TimelineMutationResult(timeline, selectedId, timeline.playheadMs, emptyList(), "Split too close to clip edge")
     val first = clip.copy(durationMs = split)
-    val second = clip.copy(id = UUID.randomUUID().toString(), startMs = timeline.playheadMs, durationMs = clip.durationMs - split, sourceInMs = clip.sourceInMs + split)
+    val second = clip.copy(
+      id = UUID.randomUUID().toString(),
+      startMs = timeline.playheadMs,
+      durationMs = clip.durationMs - split,
+      sourceInMs = if (clip.clipType == ClipType.Video || clip.sourceDurationMs != null) clip.sourceInMs + split else clip.sourceInMs,
+    )
     val next = timeline.copy(tracks = timeline.tracks.map { track -> if (track.id == located.track.id) track.copy(clips = track.clips.flatMap { if (it.id == clip.id) listOf(first, second) else listOf(it) }) else track }).recalculateDuration().nextVersion()
     return TimelineMutationResult(next, second.id, timeline.playheadMs, listOf(first.id, second.id))
   }
