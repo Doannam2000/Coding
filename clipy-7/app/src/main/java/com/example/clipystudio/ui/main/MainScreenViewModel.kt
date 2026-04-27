@@ -1,5 +1,10 @@
 package com.example.clipystudio.ui.main
 
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.BoxScope
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.clipystudio.data.AppState

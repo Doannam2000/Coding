@@ -1,0 +1,2 @@
+ninja: Entering directory `D:\Code\BotVibeProject\clipy-7\gpuimage-core\.cxx\Debug\5f6n5j71\arm64-v8a'
+ninja: no work to do.

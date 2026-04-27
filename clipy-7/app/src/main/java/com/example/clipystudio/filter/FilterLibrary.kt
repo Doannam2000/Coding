@@ -12,15 +12,23 @@ data class FilterPreset(
 object FilterLibrary {
   val presets = listOf(
     FilterPreset(null, "Original", null),
-    FilterPreset("warm", "Warm", "GPUImageWhiteBalanceFilter", FilterAdjustmentSet(filterId = "warm", temperature = 0.28f, saturation = 1.08f)),
-    FilterPreset("cool", "Cool", "GPUImageWhiteBalanceFilter", FilterAdjustmentSet(filterId = "cool", temperature = -0.22f, saturation = 1.04f)),
-    FilterPreset("vintage", "Vintage", "GPUImageSepiaToneFilter", FilterAdjustmentSet(filterId = "vintage", contrast = 1.06f, saturation = 0.86f, vignette = 0.18f)),
-    FilterPreset("cinematic", "Cinematic", "GPUImageContrastFilter", FilterAdjustmentSet(filterId = "cinematic", contrast = 1.12f, saturation = 0.92f, exposure = -0.04f)),
-    FilterPreset("bw", "B&W", "GPUImageGrayscaleFilter", FilterAdjustmentSet(filterId = "bw", contrast = 1.08f, saturation = 0f)),
-    FilterPreset("invert", "Invert", "GPUImageColorInvertFilter", FilterAdjustmentSet(filterId = "invert")),
-    FilterPreset("sketch", "Sketch", "GPUImageSketchFilter", FilterAdjustmentSet(filterId = "sketch", contrast = 1.15f)),
-    FilterPreset("toon", "Toon", "GPUImageToonFilter", FilterAdjustmentSet(filterId = "toon", saturation = 1.18f)),
+    FilterPreset("sepia", "Sepia", "jp.co.cyberagent.android.gpuimage.filter.GPUImageSepiaToneFilter"),
+    FilterPreset("grayscale", "Grayscale", "jp.co.cyberagent.android.gpuimage.filter.GPUImageGrayscaleFilter"),
+    FilterPreset("invert", "Invert", "jp.co.cyberagent.android.gpuimage.filter.GPUImageColorInvertFilter"),
+    FilterPreset("sketch", "Sketch", "jp.co.cyberagent.android.gpuimage.filter.GPUImageSketchFilter"),
+    FilterPreset("toon", "Toon", "jp.co.cyberagent.android.gpuimage.filter.GPUImageToonFilter"),
+    FilterPreset("posterize", "Posterize", "jp.co.cyberagent.android.gpuimage.filter.GPUImagePosterizeFilter"),
+    FilterPreset("vignette", "Vignette", "jp.co.cyberagent.android.gpuimage.filter.GPUImageVignetteFilter"),
+    FilterPreset("kuwahara", "Kuwahara", "jp.co.cyberagent.android.gpuimage.filter.GPUImageKuwaharaFilter"),
+    FilterPreset("pixelation", "Pixel", "jp.co.cyberagent.android.gpuimage.filter.GPUImagePixelationFilter"),
+    FilterPreset("bulge_distortion", "Bulge", "jp.co.cyberagent.android.gpuimage.filter.GPUImageBulgeDistortionFilter"),
+    FilterPreset("glass_sphere", "Glass", "jp.co.cyberagent.android.gpuimage.filter.GPUImageGlassSphereFilter"),
+    FilterPreset("haze", "Haze", "jp.co.cyberagent.android.gpuimage.filter.GPUImageHazeFilter"),
+    FilterPreset("solarize", "Solarize", "jp.co.cyberagent.android.gpuimage.filter.GPUImageSolarizeFilter"),
+    FilterPreset("emboss", "Emboss", "jp.co.cyberagent.android.gpuimage.filter.GPUImageEmbossFilter"),
+    FilterPreset("false_color", "FalseColor", "jp.co.cyberagent.android.gpuimage.filter.GPUImageFalseColorFilter"),
+    FilterPreset("halftone", "Halftone", "jp.co.cyberagent.android.gpuimage.filter.GPUImageHalftoneFilter"),
+    FilterPreset("crosshatch", "Crosshatch", "jp.co.cyberagent.android.gpuimage.filter.GPUImageCrosshatchFilter"),
+    FilterPreset("cga", "CGA", "jp.co.cyberagent.android.gpuimage.filter.GPUImageCGAColorspaceFilter"),
   )
-
-  fun byId(id: String?): FilterPreset = presets.firstOrNull { it.id == id } ?: presets.first()
 }

@@ -19,3 +19,4 @@ plugins {
 
 rootProject.name = "Clipy Studio"
 include(":app")
+include(":gpuimage-core")

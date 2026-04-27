@@ -1119,25 +1119,25 @@ object TimelineEngine {
     return TimelineMutationResult(next, clipId, next.playheadMs, listOf(clipId))
   }
 
-  fun resolveDraggedClip(timeline: Timeline, clipId: String, proposedStartMs: Long): ClipGestureResolution {
+  fun resolveDraggedClip(timeline: Timeline, clipId: String, proposedStartMs: Long, snapConfig: TimelineSnapConfig = DefaultSnapConfig): ClipGestureResolution {
     val located = timeline.locateClip(clipId) ?: return ClipGestureResolution(proposedStartMs, proposedStartMs, SnapResolution(), false)
     val maxStart = timeline.durationMs.coerceAtLeast(located.clip.durationMs) - located.clip.durationMs
     val proposed = proposedStartMs.coerceIn(0L, maxStart.coerceAtLeast(0L))
-    val snap = resolveSnapResolution(timeline, located.track.type, clipId, proposed)
+    val snap = resolveSnapResolution(timeline, located.track.type, clipId, proposed, snapConfig)
     val resolved = (snap.snappedTimeMs ?: proposed).coerceIn(0L, maxStart.coerceAtLeast(0L))
     val outOfBounds = proposedStartMs < 0L || proposedStartMs + located.clip.durationMs > timeline.durationMs.coerceAtLeast(located.clip.durationMs)
     val isValid = !outOfBounds && (located.track.type != TrackType.Video || !hasVideoOverlap(timeline, clipId, resolved, located.clip.durationMs))
     return ClipGestureResolution(proposed, resolved, snap, isValid)
   }
 
-  fun resolveClipBoundaryState(timeline: Timeline, clipId: String, proposedStartMs: Long, lastValidStartMs: Long, pixelsPerSecond: Float = timeline.pixelsPerSecond, zoomScale: Float = timeline.zoomLevel, physics: TimelinePhysicsConfig = DefaultPhysics): ClipDragBoundaryState {
+  fun resolveClipBoundaryState(timeline: Timeline, clipId: String, proposedStartMs: Long, lastValidStartMs: Long, pixelsPerSecond: Float = timeline.pixelsPerSecond, zoomScale: Float = timeline.zoomLevel, physics: TimelinePhysicsConfig = DefaultPhysics, snapConfig: TimelineSnapConfig = DefaultSnapConfig): ClipDragBoundaryState {
     val located = timeline.locateClip(clipId)
     val clip = located?.clip
     val duration = clip?.durationMs ?: 0L
     val minStart = 0L
     val maxStart = (timeline.durationMs.coerceAtLeast(duration) - duration).coerceAtLeast(0L)
     val proposedEnd = proposedStartMs + duration
-    val resolved = resolveDraggedClip(timeline, clipId, proposedStartMs)
+    val resolved = resolveDraggedClip(timeline, clipId, proposedStartMs, snapConfig)
     val boundaryDeltaMs = when {
       proposedStartMs < minStart -> proposedStartMs - minStart
       proposedStartMs > maxStart -> proposedStartMs - maxStart
@@ -1179,7 +1179,7 @@ object TimelineEngine {
     return TimelineDragUpdate(nextOffset, timeFromScroll(nextOffset, zoomScale, pixelsPerSecond, durationMs, viewportWidthPx), 0f)
   }
 
-  fun resolveTrimGesture(timeline: Timeline, clipId: String, handle: TrimHandle, proposedTimeMs: Long): TrimGestureResolution {
+  fun resolveTrimGesture(timeline: Timeline, clipId: String, handle: TrimHandle, proposedTimeMs: Long, snapConfig: TimelineSnapConfig = DefaultSnapConfig): TrimGestureResolution {
     val located = timeline.locateClip(clipId) ?: return TrimGestureResolution(proposedTimeMs, proposedTimeMs, SnapResolution(), false)
     val clip = located.clip
     val nextClipStartMs = located.track.clips.filterNot { it.id == clipId }.map { it.startMs }.filter { it > clip.startMs }.minOrNull()
@@ -1192,7 +1192,7 @@ object TimelineEngine {
       TrimHandle.Left -> proposedTimeMs.coerceIn((clip.startMs - clip.sourceInMs).coerceAtLeast(0L), clip.startMs + clip.durationMs - MinClipDurationMs)
       TrimHandle.Right -> proposedTimeMs.coerceIn(clip.startMs + MinClipDurationMs, rightEdgeLimitMs.coerceAtLeast(clip.startMs + MinClipDurationMs))
     }
-    val snap = resolveSnapResolution(timeline, located.track.type, clipId, rawTime)
+    val snap = resolveSnapResolution(timeline, located.track.type, clipId, rawTime, snapConfig)
     val resolved = when (handle) {
       TrimHandle.Left -> (snap.snappedTimeMs ?: rawTime).coerceIn((clip.startMs - clip.sourceInMs).coerceAtLeast(0L), clip.startMs + clip.durationMs - MinClipDurationMs)
       TrimHandle.Right -> (snap.snappedTimeMs ?: rawTime).coerceIn(clip.startMs + MinClipDurationMs, rightEdgeLimitMs.coerceAtLeast(clip.startMs + MinClipDurationMs))
@@ -1201,10 +1201,10 @@ object TimelineEngine {
     return TrimGestureResolution(rawTime, resolved, snap, nextClip != null)
   }
 
-  fun resolveTrimPreviewScrub(timeline: Timeline, clipId: String, handle: TrimHandle, proposedTimeMs: Long): TrimPreviewScrubState {
+  fun resolveTrimPreviewScrub(timeline: Timeline, clipId: String, handle: TrimHandle, proposedTimeMs: Long, snapConfig: TimelineSnapConfig = DefaultSnapConfig): TrimPreviewScrubState {
     val located = timeline.locateClip(clipId)
     val clip = located?.clip
-    val resolution = resolveTrimGesture(timeline, clipId, handle, proposedTimeMs)
+    val resolution = resolveTrimGesture(timeline, clipId, handle, proposedTimeMs, snapConfig)
     val start = if (handle == TrimHandle.Left) resolution.resolvedTimeMs else clip?.startMs ?: resolution.resolvedTimeMs
     val end = if (handle == TrimHandle.Right) resolution.resolvedTimeMs else (clip?.startMs ?: 0L) + (clip?.durationMs ?: 0L)
     return TrimPreviewScrubState(clipId, handle, resolution.resolvedTimeMs, resolution.resolvedTimeMs.coerceIn(0L, timeline.durationMs), start, end, true)
@@ -1460,8 +1460,8 @@ object TimelineEngine {
     SnapTargetType.TimelineEnd, SnapTargetType.None -> MagneticSnapTargetType.TIMELINE_END
   }
 
-  fun resolveSnap(timeline: Timeline, trackType: TrackType, clipId: String, proposed: Long): TimelineSnapResult {
-    val resolution = resolveSnapResolution(timeline, trackType, clipId, proposed)
+  fun resolveSnap(timeline: Timeline, trackType: TrackType, clipId: String, proposed: Long, snapConfig: TimelineSnapConfig = DefaultSnapConfig): TimelineSnapResult {
+    val resolution = resolveSnapResolution(timeline, trackType, clipId, proposed, snapConfig)
     val target = resolution.target
     return if (target != null && resolution.snappedTimeMs != null) {
       TimelineSnapResult(

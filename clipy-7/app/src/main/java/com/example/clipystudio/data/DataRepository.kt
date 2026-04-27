@@ -1,6 +1,7 @@
 package com.example.clipystudio.data
 
 import android.content.Context
+import com.example.clipystudio.filter.FilterLibrary
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
@@ -354,16 +355,26 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
         ClipAction.Flip -> clip.copy(transform = clip.transform.copy(flipHorizontal = !clip.transform.flipHorizontal))
         ClipAction.OpacityDown -> clip.copy(transform = clip.transform.copy(opacity = (clip.transform.opacity - 0.1f).coerceAtLeast(0.2f)))
         ClipAction.OpacityUp -> clip.copy(transform = clip.transform.copy(opacity = (clip.transform.opacity + 0.1f).coerceAtMost(1f)))
-        ClipAction.SpeedUp -> clip.copy(videoProperties = clip.videoProperties.copy(speed = (clip.videoProperties.speed + 0.25f).coerceAtMost(2f)))
-        ClipAction.SpeedDown -> clip.copy(videoProperties = clip.videoProperties.copy(speed = (clip.videoProperties.speed - 0.25f).coerceAtLeast(0.5f)))
-        ClipAction.Mute -> clip.copy(videoProperties = clip.videoProperties.copy(sourceAudioMuted = !clip.videoProperties.sourceAudioMuted))
-        ClipAction.Filter -> clip.copy(filterAdjustments = clip.filterAdjustments.copy(filterId = if (clip.filterAdjustments.filterId == "cinematic") null else "cinematic", contrast = 1.1f, saturation = 0.92f))
+        ClipAction.SpeedUp -> clip.withResolvedSpeed((clip.videoProperties.speed + 0.25f).coerceAtMost(2f))
+        ClipAction.SpeedDown -> clip.withResolvedSpeed((clip.videoProperties.speed - 0.25f).coerceAtLeast(0.5f))
+        ClipAction.Mute -> when (clip.clipType) {
+          ClipType.Audio -> clip.copy(audioProperties = clip.audioProperties.copy(volume = if (clip.audioProperties.volume > 0f) 0f else 0.8f))
+          ClipType.Video -> clip.copy(videoProperties = clip.videoProperties.copy(sourceAudioMuted = !clip.videoProperties.sourceAudioMuted))
+          else -> clip
+        }
+        ClipAction.Filter -> clip.copy(filterAdjustments = clip.filterAdjustments.copy(filterId = if (clip.filterAdjustments.filterId == "cinematic") null else "cinematic", contrast = 1.1f, saturation = 0.92f, gpuImageFilterClass = if (clip.filterAdjustments.filterId == "cinematic") null else "GPUImageContrastFilter"))
         ClipAction.Keyframe -> clip.copy(keyframes = clip.keyframes + Keyframe(timeMs = project.timeline.playheadMs, property = KeyframeProperty.Opacity, value = clip.transform.opacity))
         ClipAction.VolumeDown -> clip.copy(audioProperties = clip.audioProperties.copy(volume = (clip.audioProperties.volume - 0.1f).coerceAtLeast(0f)))
         ClipAction.VolumeUp -> clip.copy(audioProperties = clip.audioProperties.copy(volume = (clip.audioProperties.volume + 0.1f).coerceAtMost(1f)))
         ClipAction.Fade -> clip.copy(audioProperties = clip.audioProperties.copy(fadeInMs = if (clip.audioProperties.fadeInMs == 0L) 600 else 0, fadeOutMs = if (clip.audioProperties.fadeOutMs == 0L) 600 else 0))
         ClipAction.Loop -> clip.copy(audioProperties = clip.audioProperties.copy(loopEnabled = !clip.audioProperties.loopEnabled))
-        ClipAction.Crop -> clip.copy(filterAdjustments = clip.filterAdjustments.copy(vignette = if (clip.filterAdjustments.vignette == 0f) 0.28f else 0f))
+        ClipAction.Crop -> clip.copy(
+          transform = clip.transform.copy(
+            scale = if (clip.transform.scale < 1.08f) 1.2f else 1f,
+            positionX = 0.5f,
+            positionY = 0.5f,
+          )
+        )
       }
     }
   }
@@ -459,7 +470,14 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
   }
 
   override fun updateSelectedFilter(filterId: String?) = withUndo("Update filter") { project ->
-    mapSelectedClip(project) { clip -> clip.copy(filterAdjustments = clip.filterAdjustments.copy(filterId = filterId)) }
+    mapSelectedClip(project) { clip ->
+      clip.copy(
+        filterAdjustments = clip.filterAdjustments.copy(
+          filterId = filterId,
+          gpuImageFilterClass = FilterLibrary.presets.firstOrNull { it.id == filterId }?.gpuImageFilterClass,
+        )
+      )
+    }
   }
 
   override fun updateSelectedAdjustments(adjustments: FilterAdjustmentSet) = withUndo("Update adjustments") { project ->
@@ -467,13 +485,31 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
   }
 
   override fun addEffectAtPlayhead(effect: EffectPreset) = withUndo("Add effect") { project ->
+    val visualSelection = project.selectedClip()?.takeIf { it.clipType in setOf(ClipType.Video, ClipType.Image, ClipType.Overlay) }
+    val startMs = visualSelection?.startMs ?: project.timeline.playheadMs
+    val durationMs = visualSelection?.durationMs?.coerceIn(600L, 6_000L) ?: 2_500L
     val clip = TimelineClip(
       id = UUID.randomUUID().toString(),
       clipType = ClipType.Effect,
       title = effect.label,
-      startMs = project.timeline.playheadMs,
-      durationMs = 2_500,
-      filterAdjustments = FilterAdjustmentSet(filterId = effect.id, brightness = 1f, contrast = 1f + effect.intensity * 0.08f, saturation = 1f + effect.intensity * 0.04f, sharpness = effect.intensity * 0.2f),
+      startMs = startMs,
+      durationMs = durationMs,
+      filterAdjustments = FilterAdjustmentSet(
+        filterId = effect.id,
+        gpuImageFilterClass = when (effect.id) {
+          "blur" -> "GPUImageGaussianBlurFilter"
+          "glow" -> "GPUImageExposureFilter"
+          "shake" -> "GPUImageSharpenFilter"
+          "zoom" -> "GPUImageZoomBlurFilter"
+          "glitch" -> "GPUImageRGBFilter"
+          "vhs" -> "GPUImageHazeFilter"
+          else -> null
+        },
+        brightness = 1f,
+        contrast = 1f + effect.intensity * 0.08f,
+        saturation = 1f + effect.intensity * 0.04f,
+        sharpness = effect.intensity * 0.2f,
+      ),
     )
     project.copy(timeline = project.timeline.copy(
       selectedClipId = clip.id,
@@ -485,16 +521,23 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
   override fun applyTransition(type: TransitionType, durationMs: Long) = withUndo("Apply transition") { project ->
     val clips = project.timeline.tracks.firstOrNull { it.type == TrackType.Video }?.clips?.sortedBy { it.startMs }.orEmpty()
     val playhead = project.timeline.playheadMs
-    val index = clips.indexOfLast { playhead >= it.startMs + it.durationMs - 1_000 }
-    val from = clips.getOrNull(index) ?: clips.getOrNull(0) ?: return@withUndo project
-    val to = clips.getOrNull(index + 1) ?: return@withUndo project
-    val transition = Transition(UUID.randomUUID().toString(), type, from.id, to.id, durationMs.coerceIn(300, 2_000), from.startMs + from.durationMs)
+    val candidatePairs = clips.zipWithNext()
+    val pair = candidatePairs.minByOrNull { (_, next) -> kotlin.math.abs((next.startMs - playhead).toInt()) } ?: return@withUndo project
+    val (from, to) = pair
+    val boundaryMs = from.startMs + from.durationMs
+    val transition = Transition(UUID.randomUUID().toString(), type, from.id, to.id, durationMs.coerceIn(300, 2_000), boundaryMs)
     project.copy(timeline = project.timeline.copy(selectedTool = EditorTool.Transition, transitions = project.timeline.transitions.filterNot { it.fromClipId == from.id && it.toClipId == to.id } + transition))
   }
 
   override fun removeTransition() = withUndo("Remove transition") { project ->
-    val selectedId = project.timeline.selectedClipId
-    project.copy(timeline = project.timeline.copy(transitions = project.timeline.transitions.filterNot { it.fromClipId == selectedId || it.toClipId == selectedId }))
+    val clips = project.timeline.tracks.firstOrNull { it.type == TrackType.Video }?.clips?.sortedBy { it.startMs }.orEmpty()
+    val pair = clips.zipWithNext().minByOrNull { (_, next) -> kotlin.math.abs((next.startMs - project.timeline.playheadMs).toInt()) }
+      ?: return@withUndo project
+    project.copy(
+      timeline = project.timeline.copy(
+        transitions = project.timeline.transitions.filterNot { it.fromClipId == pair.first.id && it.toClipId == pair.second.id }
+      )
+    )
   }
 
   override fun updateCanvasBackground(background: CanvasBackground) = withUndo("Canvas background") { project ->
@@ -503,19 +546,22 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
 
   override fun updateSelectedSpeed(speed: Float) = withUndo("Update speed") { project ->
     mapSelectedClip(project) { clip ->
+      if (clip.clipType != ClipType.Video) return@mapSelectedClip clip
       val oldSpeed = clip.videoProperties.speed.coerceAtLeast(0.1f)
       val nextSpeed = speed.coerceIn(0.5f, 2f)
       val sourceDuration = ((clip.sourceDurationMs ?: (clip.durationMs * oldSpeed).toLong()) - clip.sourceInMs)
         .coerceAtLeast(TimelineEngine.MinClipDurationMs)
-      clip.copy(
-        durationMs = (sourceDuration / nextSpeed).toLong().coerceAtLeast(TimelineEngine.MinClipDurationMs),
-        videoProperties = clip.videoProperties.copy(speed = nextSpeed),
-      )
+      clip.copy(durationMs = (sourceDuration / nextSpeed).toLong().coerceAtLeast(TimelineEngine.MinClipDurationMs), videoProperties = clip.videoProperties.copy(speed = nextSpeed))
     }.copyTimelineDuration()
   }
 
   override fun updateSelectedAudio(volume: Float, fadeInMs: Long, fadeOutMs: Long, loopEnabled: Boolean) = withUndo("Update audio") { project ->
-    mapSelectedClip(project) { clip -> clip.copy(audioProperties = AudioProperties(volume.coerceIn(0f, 1f), fadeInMs.coerceAtLeast(0), fadeOutMs.coerceAtLeast(0), loopEnabled)) }
+    mapSelectedClip(project) { clip ->
+      when (clip.clipType) {
+        ClipType.Audio, ClipType.Video -> clip.copy(audioProperties = clip.audioProperties.copy(volume = volume.coerceIn(0f, 1f), fadeInMs = fadeInMs.coerceAtLeast(0), fadeOutMs = fadeOutMs.coerceAtLeast(0), loopEnabled = loopEnabled))
+        else -> clip
+      }
+    }
   }
 
   override fun updateSelectedText(content: String, fontSizeSp: Float, color: String, backgroundColor: String?, strokeEnabled: Boolean, shadowEnabled: Boolean, alignment: String, animation: String) = withUndo("Update text") { project ->
@@ -656,6 +702,21 @@ class DefaultDataRepository(context: Context? = null) : DataRepository {
     return project.copy(timeline = project.timeline.copy(tracks = project.timeline.tracks.map { track ->
       track.copy(clips = track.clips.map { if (it.id == selectedId) transform(it) else it })
     }))
+  }
+
+  private fun Project.selectedClip(): TimelineClip? {
+    val selectedId = timeline.selectedClipId ?: return null
+    return timeline.tracks.flatMap { it.clips }.firstOrNull { it.id == selectedId }
+  }
+
+  private fun TimelineClip.withResolvedSpeed(nextSpeed: Float): TimelineClip {
+    if (clipType != ClipType.Video) return this
+    val previousSpeed = videoProperties.speed.coerceAtLeast(0.1f)
+    val sourceDuration = ((sourceDurationMs ?: (durationMs * previousSpeed).toLong()) - sourceInMs).coerceAtLeast(TimelineEngine.MinClipDurationMs)
+    return copy(
+      durationMs = (sourceDuration / nextSpeed.coerceIn(0.5f, 2f)).toLong().coerceAtLeast(TimelineEngine.MinClipDurationMs),
+      videoProperties = videoProperties.copy(speed = nextSpeed.coerceIn(0.5f, 2f)),
+    )
   }
 
   private fun Project.copyTimelineDuration() = copy(timeline = timeline.recalculateDuration())
@@ -805,8 +866,8 @@ private fun AudioProperties.toJson() = JSONObject().put("volume", volume.toDoubl
 private fun JSONObject.toAudioProperties() = AudioProperties(optDouble("volume", 1.0).toFloat(), optLong("fadeInMs"), optLong("fadeOutMs"), optBoolean("loopEnabled"))
 private fun TextProperties.toJson() = JSONObject().put("content", content).put("fontSizeSp", fontSizeSp.toDouble()).put("color", color).put("backgroundColor", backgroundColor).put("strokeEnabled", strokeEnabled).put("shadowEnabled", shadowEnabled).put("alignment", alignment).put("animation", animation)
 private fun JSONObject.toTextProperties() = TextProperties(optString("content", "Clipy Studio"), optDouble("fontSizeSp", 28.0).toFloat(), optString("color", "#F4F6FF"), optNullableString("backgroundColor"), optBoolean("strokeEnabled"), optBoolean("shadowEnabled"), optString("alignment", "Center"), optString("animation", "Fade"))
-private fun FilterAdjustmentSet.toJson() = JSONObject().put("filterId", filterId).put("brightness", brightness.toDouble()).put("contrast", contrast.toDouble()).put("saturation", saturation.toDouble()).put("exposure", exposure.toDouble()).put("temperature", temperature.toDouble()).put("sharpness", sharpness.toDouble()).put("vignette", vignette.toDouble())
-private fun JSONObject.toFilterAdjustmentSet() = FilterAdjustmentSet(optNullableString("filterId"), optDouble("brightness", 1.0).toFloat(), optDouble("contrast", 1.0).toFloat(), optDouble("saturation", 1.0).toFloat(), optDouble("exposure").toFloat(), optDouble("temperature").toFloat(), optDouble("sharpness").toFloat(), optDouble("vignette").toFloat())
+private fun FilterAdjustmentSet.toJson() = JSONObject().put("filterId", filterId).put("gpuImageFilterClass", gpuImageFilterClass).put("brightness", brightness.toDouble()).put("contrast", contrast.toDouble()).put("saturation", saturation.toDouble()).put("exposure", exposure.toDouble()).put("temperature", temperature.toDouble()).put("sharpness", sharpness.toDouble()).put("vignette", vignette.toDouble())
+private fun JSONObject.toFilterAdjustmentSet() = FilterAdjustmentSet(optNullableString("filterId"), optNullableString("gpuImageFilterClass"), optDouble("brightness", 1.0).toFloat(), optDouble("contrast", 1.0).toFloat(), optDouble("saturation", 1.0).toFloat(), optDouble("exposure").toFloat(), optDouble("temperature").toFloat(), optDouble("sharpness").toFloat(), optDouble("vignette").toFloat())
 private fun Keyframe.toJson() = JSONObject().put("id", id).put("timeMs", timeMs).put("property", property.name).put("value", value.toDouble())
 private fun JSONObject.toKeyframe() = Keyframe(optString("id", UUID.randomUUID().toString()), optLong("timeMs"), enumValueOf(optString("property", KeyframeProperty.Opacity.name)), optDouble("value").toFloat())
 private fun CanvasBackground.toJson() = JSONObject().put("color", color).put("blurEnabled", blurEnabled).put("blurStrength", blurStrength.toDouble())
@@ -961,7 +1022,7 @@ data class TransformState(val positionX: Float = 0.5f, val positionY: Float = 0.
 data class VideoProperties(val speed: Float = 1f, val isFreezeFrame: Boolean = false, val sourceAudioMuted: Boolean = false)
 data class AudioProperties(val volume: Float = 1f, val fadeInMs: Long = 0, val fadeOutMs: Long = 0, val loopEnabled: Boolean = false)
 data class TextProperties(val content: String = "Clipy Studio", val fontSizeSp: Float = 28f, val color: String = "#F4F6FF", val backgroundColor: String? = "#7C5CFF", val strokeEnabled: Boolean = false, val shadowEnabled: Boolean = true, val alignment: String = "Center", val animation: String = "Fade")
-data class FilterAdjustmentSet(val filterId: String? = null, val brightness: Float = 1f, val contrast: Float = 1f, val saturation: Float = 1f, val exposure: Float = 0f, val temperature: Float = 0f, val sharpness: Float = 0f, val vignette: Float = 0f)
+data class FilterAdjustmentSet(val filterId: String? = null, val gpuImageFilterClass: String? = null, val brightness: Float = 1f, val contrast: Float = 1f, val saturation: Float = 1f, val exposure: Float = 0f, val temperature: Float = 0f, val sharpness: Float = 0f, val vignette: Float = 0f)
 data class Keyframe(val id: String = UUID.randomUUID().toString(), val timeMs: Long, val property: KeyframeProperty, val value: Float)
 data class CanvasBackground(val color: String = "#09090B", val blurEnabled: Boolean = false, val blurStrength: Float = 0f)
 data class Transition(val id: String = UUID.randomUUID().toString(), val type: TransitionType, val fromClipId: String, val toClipId: String, val durationMs: Long, val boundaryMs: Long)

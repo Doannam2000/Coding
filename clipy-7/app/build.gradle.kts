@@ -69,7 +69,8 @@ dependencies {
   implementation("io.coil-kt:coil-compose:2.7.0")
   implementation("androidx.media3:media3-exoplayer:1.8.0")
   implementation("androidx.media3:media3-ui:1.8.0")
-  implementation(libs.gpuimage)
+  implementation("androidx.compose.material:material-icons-extended")
+  implementation(project(":gpuimage-core"))
   // Tooling
   debugImplementation(libs.androidx.compose.ui.tooling)
   // Instrumented tests

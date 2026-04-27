@@ -19,19 +19,26 @@ import java.io.File
 
 @Composable
 fun MainNavigation(repository: DataRepository) {
-  val context = LocalContext.current
-  val backStack = rememberNavBackStack(Main)
-  val tempFileManager = remember(context) { DefaultTempFileManager(File(context.cacheDir, "exports")) }
-  val mainViewModel: MainScreenViewModel = viewModel { MainScreenViewModel(repository, tempFileManager) }
+    val context = LocalContext.current
+    val backStack = rememberNavBackStack(Main)
+    val tempFileManager =
+        remember(context) { DefaultTempFileManager(File(context.cacheDir, "exports")) }
+    val mainViewModel: MainScreenViewModel =
+        viewModel { MainScreenViewModel(repository, tempFileManager) }
 
-  NavDisplay(
-    backStack = backStack,
-    onBack = { backStack.removeLastOrNull() },
-    entryProvider =
-      entryProvider {
-        entry<Main> {
-          MainScreen(onItemClick = { navKey -> backStack.add(navKey) }, modifier = Modifier.safeDrawingPadding().padding(16.dp), viewModel = mainViewModel)
-        }
-      },
-  )
+    NavDisplay(
+        backStack = backStack,
+        onBack = { backStack.removeLastOrNull() },
+        entryProvider =
+            entryProvider {
+                entry<Main> {
+                    MainScreen(
+                        onItemClick = { navKey -> backStack.add(navKey) },
+                        modifier = Modifier
+                            .safeDrawingPadding(),
+                        viewModel = mainViewModel
+                    )
+                }
+            },
+    )
 }
