@@ -235,7 +235,8 @@ class DefaultMediaSessionManager(
             project = renderProject,
             outputFileName = config.outputFileName,
             timeline = timeline,
-            jobId = job.id
+            jobId = job.id,
+            config = config.renderConfig
         )
         addJob(job)
         mutableEvents.emit(MediaSessionEvent.RenderStarted(job, request))

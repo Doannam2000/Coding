@@ -34,15 +34,6 @@ enum class AspectPreset(
     SixteenNine("16:9", 16f / 9f)
 }
 
-enum class ExportResolutionPreset(
-    val label: String,
-    val longEdge: Int
-) {
-    Hd("720p", 1280),
-    FullHd("1080p", 1920),
-    QuadHd("1440p", 2560)
-}
-
 data class ClipAdjustments(
     val trimStartMs: Long = 0L,
     val trimEndMs: Long = 0L,

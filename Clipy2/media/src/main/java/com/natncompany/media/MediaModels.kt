@@ -301,7 +301,8 @@ data class RenderRequest(
     val project: VideoProject,
     val outputFileName: String,
     val timeline: Timeline = project.timeline,
-    val jobId: String = project.id
+    val jobId: String = project.id,
+    val config: RenderConfig = RenderConfig(outputFileName)
 )
 
 data class RenderConfig(

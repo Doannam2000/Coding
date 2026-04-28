@@ -25,8 +25,6 @@ class ClipyAppState {
         private set
     var aspectPreset by mutableStateOf(AspectPreset.NineSixteen)
         private set
-    var exportResolutionPreset by mutableStateOf(ExportResolutionPreset.FullHd)
-        private set
     var activeTool by mutableStateOf(EditorTool.Trim)
         private set
     var selectedClipId by mutableStateOf<String?>(null)
@@ -118,18 +116,9 @@ class ClipyAppState {
         activeTool = tool
     }
 
-    fun updateStatus(message: String) {
-        statusMessage = message
-    }
-
     fun updateAspectPreset(preset: AspectPreset) {
         aspectPreset = preset
         statusMessage = "Canvas ${preset.label}"
-    }
-
-    fun updateExportResolution(preset: ExportResolutionPreset) {
-        exportResolutionPreset = preset
-        statusMessage = "Export ${preset.label}"
     }
 
     fun updateSelectedTrim(startMs: Long, endMs: Long) {

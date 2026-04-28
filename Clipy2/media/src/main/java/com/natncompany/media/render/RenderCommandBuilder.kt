@@ -8,7 +8,7 @@ import com.natncompany.media.TimelineClip
 import java.util.Locale
 
 internal object RenderCommandBuilder {
-    fun build(request: RenderRequest, outputPath: String, config: RenderConfig = RenderConfig(request.outputFileName)): String {
+    fun build(request: RenderRequest, outputPath: String, config: RenderConfig = request.config): String {
         val sequence = buildSequence(request)
         if (sequence.isEmpty()) {
             return listOf(
@@ -55,17 +55,11 @@ internal object RenderCommandBuilder {
                             "-t", durationSec,
                             "-i", quoted(entry.asset.cachedPath)
                         )
+                        tokens += listOf("-f", "lavfi", "-t", durationSec, "-i", quoted("anullsrc=r=48000:cl=stereo"))
 
                         filterParts += "[$inputIndex:v]scale=${config.targetWidth}:${config.targetHeight}:force_original_aspect_ratio=decrease,pad=${config.targetWidth}:${config.targetHeight}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=${config.fps}[v$inputIndex]"
-                        val hasAudio = entry.asset.type == AssetType.Video
-                        if (hasAudio) {
-                            concatInputs += "[v$inputIndex][$inputIndex:a]"
-                        } else {
-                            tokens += listOf("-f", "lavfi", "-t", durationSec, "-i", quoted("anullsrc=r=48000:cl=stereo"))
-                            concatInputs += "[v$inputIndex][${inputIndex + 1}:a]"
-                            inputIndex += 1
-                        }
-                        inputIndex += 1
+                        concatInputs += "[v$inputIndex][${inputIndex + 1}:a]"
+                        inputIndex += 2
                     }
                     AssetType.Audio, null -> Unit
                 }

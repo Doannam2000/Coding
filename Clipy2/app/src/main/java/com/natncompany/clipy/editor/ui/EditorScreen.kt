@@ -1,5 +1,6 @@
 package com.natncompany.clipy.editor.ui
 
+import android.annotation.SuppressLint
 import android.graphics.Color.parseColor
 import android.net.Uri
 import android.widget.ImageView
@@ -42,6 +43,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -77,6 +80,7 @@ import com.natncompany.clipy.editor.AspectPreset
 import com.natncompany.clipy.editor.ClipDraft
 import com.natncompany.clipy.editor.ClipyAppState
 import com.natncompany.clipy.editor.EditorTool
+import com.natncompany.clipy.editor.ExportResolutionPreset
 import com.natncompany.clipy.editor.HomeFeature
 import com.natncompany.clipy.editor.MediaKind
 import com.natncompany.clipy.editor.backgroundOptions
@@ -216,6 +220,7 @@ fun EditorScreen(
     appState: ClipyAppState,
     onBack: () -> Unit,
     onNext: () -> Unit,
+    isExporting: Boolean = false,
     onImportMore: () -> Unit
 ) {
     Box(
@@ -237,8 +242,11 @@ fun EditorScreen(
                     statusMessage = appState.statusMessage,
                     modifier = Modifier.fillMaxSize()
                 )
-                FloatingNextButton(
-                    onClick = onNext,
+                EditorTopActions(
+                    resolutionPreset = appState.exportResolutionPreset,
+                    onResolutionSelected = appState::updateExportResolution,
+                    onExportClick = onNext,
+                    isExporting = isExporting,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(top = 38.dp, end = 12.dp)
@@ -287,13 +295,80 @@ private fun EditorTitleBar(onBack: () -> Unit) {
 }
 
 @Composable
-private fun FloatingNextButton(
-    onClick: () -> Unit,
+private fun EditorTopActions(
+    resolutionPreset: ExportResolutionPreset,
+    onResolutionSelected: (ExportResolutionPreset) -> Unit,
+    onExportClick: () -> Unit,
+    isExporting: Boolean,
     modifier: Modifier = Modifier
 ) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        ResolutionButton(
+            selected = resolutionPreset,
+            onSelected = onResolutionSelected
+        )
+        FloatingExportButton(
+            onClick = onExportClick,
+            isExporting = isExporting
+        )
+    }
+}
+
+@Composable
+private fun ResolutionButton(
+    selected: ExportResolutionPreset,
+    onSelected: (ExportResolutionPreset) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Surface(
+            modifier = Modifier.size(width = 76.dp, height = 30.dp),
+            shape = RoundedCornerShape(4.dp),
+            color = EditorPanelRaised.copy(alpha = 0.94f),
+            shadowElevation = 2.dp
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable { expanded = true },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = selected.label,
+                    color = EditorTextPrimary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            ExportResolutionPreset.entries.forEach { preset ->
+                DropdownMenuItem(
+                    text = { Text(preset.label) },
+                    onClick = {
+                        onSelected(preset)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FloatingExportButton(
+    onClick: () -> Unit,
+    isExporting: Boolean
+) {
     Surface(
-        modifier = modifier
-            .size(width = 68.dp, height = 30.dp),
+        modifier = Modifier.size(width = 68.dp, height = 30.dp),
         shape = RoundedCornerShape(4.dp),
         color = EditorAccentGreen,
         shadowElevation = 2.dp
@@ -301,11 +376,11 @@ private fun FloatingNextButton(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clickable(onClick = onClick),
+                .clickable(enabled = !isExporting, onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "Next 1/2",
+                text = if (isExporting) "Exporting" else "Export",
                 color = Color.White,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold
@@ -314,6 +389,7 @@ private fun FloatingNextButton(
     }
 }
 
+@SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 private fun EditorPreviewPane(
     clip: ClipDraft?,

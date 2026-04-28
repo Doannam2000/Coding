@@ -9,7 +9,8 @@ data class MediaImportInput(
 
 data class MediaExportConfig(
     val outputFileName: String,
-    val timeline: Timeline? = null
+    val timeline: Timeline? = null,
+    val renderConfig: RenderConfig = RenderConfig(outputFileName)
 )
 
 data class MediaSessionState(

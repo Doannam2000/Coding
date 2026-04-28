@@ -14,17 +14,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.natncompany.clipy.editor.HomeFeature
 import com.natncompany.clipy.editor.editorFeatures
+import com.natncompany.clipy.editor.exportWithMediaPipeline
 import com.natncompany.clipy.editor.rememberClipyAppState
 import com.natncompany.clipy.editor.EditorScreen as AppScreen
 import com.natncompany.clipy.editor.ui.EditorScreen as EditorScreenView
 import com.natncompany.clipy.editor.ui.ExportScreen
 import com.natncompany.clipy.editor.ui.HomeScreen
 import com.natncompany.clipy.ui.theme.ClipyTheme
+import kotlinx.coroutines.launch
 
 @Composable
 fun ClipyApp() {
     val context = LocalContext.current
     val appState = rememberClipyAppState()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var isExporting by remember { mutableStateOf(false) }
     var pendingFeature by remember { mutableStateOf(editorFeatures.first()) }
     val pickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(20)
@@ -67,7 +71,30 @@ fun ClipyApp() {
                 AppScreen.Editor -> EditorScreenView(
                     appState = appState,
                     onBack = { appState.goHome() },
-                    onNext = { appState.openExport() },
+                    onNext = {
+                        if (isExporting) return@EditorScreenView
+                        if (appState.clips.isEmpty()) {
+                            appState.updateStatus("No media selected")
+                            return@EditorScreenView
+                        }
+                        isExporting = true
+                        appState.updateStatus("Preparing export")
+                        scope.launch {
+                            val result = appState.exportWithMediaPipeline(context) { progress ->
+                                appState.updateStatus(progress.message)
+                            }
+                            when (result) {
+                                is com.natncompany.media.MediaResult.Success -> {
+                                    appState.updateStatus("Saved to Movies/Clipy")
+                                }
+                                is com.natncompany.media.MediaResult.Failure -> {
+                                    appState.updateStatus(result.error.message)
+                                }
+                            }
+                            isExporting = false
+                        }
+                    },
+                    isExporting = isExporting,
                     onImportMore = {
                         pendingFeature = HomeFeature(
                             title = "Add",
