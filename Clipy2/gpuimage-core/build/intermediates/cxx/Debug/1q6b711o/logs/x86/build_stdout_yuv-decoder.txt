@@ -1,0 +1,2 @@
+ninja: Entering directory `D:\Code\Clipy2\gpuimage-core\.cxx\Debug\1q6b711o\x86'
+ninja: no work to do.

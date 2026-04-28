@@ -1,0 +1,36 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.natncompany.media.test.media-mergeDebugUnitTestResources-8:/values-am/values-am.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\DDWAN\\.gradle\\caches\\9.1.0\\transforms\\91571679d86e215f185d8037b3642ef7\\workspace\\transformed\\core-1.8.0\\res\\values-am\\values-am.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "100",
+                        "endOffsets": "151"
+                    },
+                    "to": {
+                        "startLines": "11",
+                        "startColumns": "4",
+                        "startOffsets": "668",
+                        "endColumns": "100",
+                        "endOffsets": "764"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\DDWAN\\.gradle\\caches\\9.1.0\\transforms\\6d42fde82cbe7f7cda75a940346fc4eb\\workspace\\transformed\\media3-exoplayer-1.5.1\\res\\values-am\\values-am.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9,10",
+                        "startColumns": "4,4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,117,175,237,297,369,432,521,602",
+                        "endColumns": "61,57,61,59,71,62,88,80,65",
+                        "endOffsets": "112,170,232,292,364,427,516,597,663"
+                    }
+                }
+            ]
+        }
+    ]
+}

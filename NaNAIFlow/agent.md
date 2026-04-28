@@ -21,6 +21,9 @@ Muc dich: ghi lai cac chuc nang va thay doi quan trong cua Android Telegram Agen
 
 ### 2026-04-25
 
+- `added`: Them `/refactor <job_id> [|extra instruction]` de bot tu dong refactor project cu theo agent.md: tach component/model/function/viewmodel, dua string vao `strings.xml`, va sinh full locale translations.
+- `added`: Them `/refactorprompt` de tra ve prompt refactor mau khi can dung thu cong.
+- `changed`: Stage `code` nay tu dong chuyen sang `refactor_prompt` khi active task duoc tag `[refactor]`.
 - `fixed`: Live CLI log khong con cat JSON event qua som truoc khi format, nen Telegram khong con hien raw `tool_use`/`tool_result` metadata.
 - `changed`: Live CLI log cho `codex`/`opencode` nay chi tom tat phan can thiet (tool, status, command, output/error) va bo qua noise nhu `sessionID`, `timestamp`, `callID`, reasoning.
 - `changed`: Live CLI log gui gan het gioi han 4096 ky tu cua Telegram thay vi tu cat ngan quanh 320 ky tu.

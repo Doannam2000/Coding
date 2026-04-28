@@ -361,6 +361,14 @@ Output schema:
 
 Rules:
 - Keep the app buildable on Windows with Gradle wrapper.
+- Before making any code changes, you MUST read `{workspace_path / 'agent.md'}` inside this job workspace and treat it as the source of truth for project rules.
+- Immediately after that, you MUST read `{workspace_path / 'project.md'}` inside this job workspace and use it as the source of truth for project-specific scope, context, and implementation direction.
+- Do not rely on any other agent.md outside this workspace unless the workspace agent.md explicitly tells you to.
+- Do not rely on any other project.md outside this workspace unless the workspace project.md explicitly tells you to.
+- You MUST follow the workspace agent.md file for ALL code quality rules including component separation, string resources, auto-translation, ViewModel/Model separation, and no hardcoded values. This is not optional.
+- You MUST keep the implementation aligned with the workspace project.md file for the current app scope, user needs, and planned structure.
+- Every user-facing string MUST be in res/values/strings.xml and auto-translated into all 65 locales listed in agent.md.
+- Every screen MUST have a dedicated ViewModel and use sealed class UiState.
 - Add concise comments only where logic would otherwise be unclear.
 - Do not edit secrets or environment files.
 - Implement the requested features first before adding extras.
@@ -374,10 +382,11 @@ Rules:
 """.strip()
 
 
-def repair_prompt(job: dict, context: dict, package_name: str, verify_log: str) -> str:
+def repair_prompt(job: dict, context: dict, package_name: str, verify_log: str, workspace_path: Path) -> str:
     return f"""
 You are repairing an Android Kotlin app after verification failed.
 Work only in the existing project.
+Project folder: {workspace_path}
 
 Product brief:
 {_json(context['stages']['idea'])}
@@ -406,14 +415,21 @@ Return strict JSON only after edits. No markdown fences.
     - Focus only on the reported failures.
     - Preserve the chosen architecture and design direction.
     - Keep the app buildable with Gradle wrapper commands.
+    - Before making any code changes, you MUST read `{workspace_path / 'agent.md'}` inside this job workspace and treat it as the source of truth for project rules.
+    - Immediately after that, you MUST read `{workspace_path / 'project.md'}` inside this job workspace and use it as the source of truth for project-specific scope, context, and implementation direction.
+    - Do not rely on any other agent.md outside this workspace unless the workspace agent.md explicitly tells you to.
+    - Do not rely on any other project.md outside this workspace unless the workspace project.md explicitly tells you to.
+    - You MUST follow the workspace agent.md code quality rules: no hardcoded strings, component separation, ViewModel per screen, auto-translate new strings into all 65 locales.
+    - You MUST keep the repair aligned with the workspace project.md file and preserve the intended app scope and behavior.
     - Preserve mandatory app system flow: Splash -> Intro -> Main App, plus Settings/Language/Exit paths.
     """.strip()
 
 
-def review_prompt(job: dict, context: dict) -> str:
+def review_prompt(job: dict, context: dict, workspace_path: Path) -> str:
     return f"""
 You are the review agent for an autonomous Android Kotlin app builder.
 Review the current output and decide whether the agent should stop or loop back for more work.
+Project folder: {workspace_path}
 
 User request:
 {job['request_text']}
@@ -459,6 +475,89 @@ Rules:
 - Set `next_stage` to the earliest stage that should be revisited.
 - Use `plan` for scope/flow changes, `design` for UX/UI direction changes, `code` for implementation gaps, `verify` only if more verification is needed without code changes.
 - Keep action items concrete so the next stage can use them directly.
+- Before reviewing, you MUST read `{workspace_path / 'agent.md'}` inside this job workspace and treat it as the source of truth for project rules.
+- Immediately after that, you MUST read `{workspace_path / 'project.md'}` inside this job workspace and use it as the source of truth for project-specific scope, context, and implementation direction.
+- Do not rely on any other agent.md outside this workspace unless the workspace agent.md explicitly tells you to.
+- Do not rely on any other project.md outside this workspace unless the workspace project.md explicitly tells you to.
 - Explicitly check whether the final output still matches the requested app idea, style direction, font direction, and feature priorities.
+- Explicitly check whether the final output remains aligned with the workspace project.md summary, feature scope, screens, and constraints.
 - Explicitly verify mandatory app system flow: Splash -> Intro -> Main App and the presence/quality of Settings, Language selection, and Exit path.
+- Explicitly verify workspace agent.md compliance: no hardcoded strings, component separation, ViewModel per screen, auto-translated strings in all 65 locales, no SharedPreferences, proper file structure (data/, domain/, ui/, viewmodel/, di/).
 """.strip()
+
+def refactor_prompt(job: dict, context: dict, package_name: str, workspace_path: Path) -> str:
+    return f"""
+You are the refactoring agent for an existing Android Kotlin app.
+Your job is to improve code quality and enforce architectural standards WITHOUT changing app behavior.
+
+Project folder: {workspace_path}
+Package name: {package_name}
+
+MANDATORY REFACTORING SCOPE:
+
+1. Component separation
+- Split large Screen composables into smaller reusable composables under ui/components/.
+- Extract repeated UI patterns into shared components.
+- Keep Screen composables clean: only layout + ViewModel wiring.
+- Name components clearly: purpose-based (e.g. AppTopBar, PrimaryButton, EmptyStateView).
+
+2. ViewModel + Model separation
+- Every screen MUST have a dedicated ViewModel.
+- Move business logic out of composables into ViewModels.
+- Define typed data models (data class) in a model/ package - never use Map or raw JSON as state.
+- Use sealed class UiState for screen state: Loading / Success / Empty / Error.
+
+3. String resources - NO HARDCODED TEXT
+- Find ALL hardcoded user-facing strings in Kotlin files.
+- Move every single one to res/values/strings.xml with a descriptive key.
+- Replace in Compose with stringResource(R.string.key_name).
+- Replace in non-Compose code with context.getString(R.string.key_name).
+
+4. Auto-translate all new strings into ALL these locales:
+af, am, ar, be, bg, bn, bs, ca, co, cs, da, de, el, es, et, eu, fa, fi, fr, fy, ga, gl, gu, haw, hi, hr, ht, hu, hy, id, in, is, it, iw, ja, ka, ko, ky, lb, lo, lt, lv, mg, mk, mn, ms, nl, no, pl, pt, ro, ru, sk, sl, sm, sq, sr, sv, tg, th, tl, tr, uk, uz, vi, zh
+- Create values-{locale}/strings.xml for each.
+- Keep string keys identical across all locales.
+- Escape XML special characters.
+- Preserve brand names and technical terms when needed.
+
+5. Theme and design tokens
+- Replace hardcoded colors with theme color references.
+- Replace hardcoded dimensions with spacing constants or dimension resources.
+
+6. Architecture cleanup
+- Remove SharedPreferences usage; migrate to DataStore Preferences.
+- Ensure Hilt dependency injection is used.
+- Ensure proper file structure: data/, domain/, ui/, viewmodel/, di/.
+
+7. Localization safety
+- Verify layouts handle RTL (Arabic, Persian, Hebrew).
+- Add maxLines, softWrap, TextOverflow.Ellipsis where text might overflow.
+- Do not rely on fixed text width.
+
+Return strict JSON only. No markdown fences.
+Output schema:
+{{
+  "summary": "...",
+  "files_touched": ["..."],
+  "hardcoded_strings_extracted": ["R.string.xxx = ..."],
+  "locales_generated": ["af", "am", "..."],
+  "components_created": ["..."],
+  "viewmodels_created": ["..."],
+  "models_created": ["..."],
+  "remaining_risks": ["..."]
+}}
+
+Rules:
+- Do NOT change app behavior or add new features.
+- Focus only on refactoring for quality, maintainability, and i18n readiness.
+- Keep the app buildable on Windows with Gradle wrapper.
+- Before making any code changes, you MUST read `{workspace_path / 'agent.md'}` inside this job workspace and treat it as the source of truth for project rules.
+- Immediately after that, you MUST read `{workspace_path / 'project.md'}` inside this job workspace and use it as the source of truth for project-specific scope, context, and implementation direction.
+- Do not rely on any other agent.md outside this workspace unless the workspace agent.md explicitly tells you to.
+- Do not rely on any other project.md outside this workspace unless the workspace project.md explicitly tells you to.
+- You MUST follow the workspace agent.md file for ALL code quality rules including component separation, string resources, auto-translation, ViewModel/Model separation, and no hardcoded values. This is not optional.
+- You MUST preserve the app scope and intended behavior described by the workspace project.md file while refactoring.
+- Every user-facing string MUST be in res/values/strings.xml and auto-translated into all 65 locales listed in agent.md.
+- Every screen MUST have a dedicated ViewModel and use sealed class UiState.
+""".strip()
+

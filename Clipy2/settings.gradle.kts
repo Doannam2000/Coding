@@ -21,3 +21,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "Clipy"
 include(":app")
+include(":video-editor")
+include(":media")
+include(":gpuimage")
+project(":gpuimage").projectDir = file("gpuimage-core")

@@ -44,6 +44,8 @@ def main() -> None:
             {"command": "tasks", "description": "Show active/pending tasks for a job"},
             {"command": "cleartask", "description": "Clear active and pending tasks"},
             {"command": "fixbug", "description": "Queue a follow-up bug-fix task"},
+            {"command": "refactor", "description": "Auto-refactor project to comply with agent.md"},
+            {"command": "refactorprompt", "description": "Show reusable refactor prompt template"},
             {"command": "deletejob", "description": "Delete job from database"},
             {"command": "approve", "description": "Approve current stage"},
             {"command": "reject", "description": "Reject stage with feedback"},

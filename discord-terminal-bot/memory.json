@@ -1,6 +1,20 @@
 {
   "projects": [
     {
+      "path": "D:\\Code\\Clipy2",
+      "name": "Clipy2",
+      "type": "android",
+      "applicationId": "com.natncompany.clipy",
+      "lastAccessed": "2026-04-27T16:13:37.864Z",
+      "commands": [
+        "/addFolder",
+        "set \"GRADLE_USER_HOME=D:\\Code\\clipy-7\\.gradle-user-home\" && gradlew.bat help"
+      ],
+      "lastActivity": "2026-04-27T16:13:37.864Z",
+      "preferredCLI": "opencode",
+      "preferredModel": "codexer/gpt-5.5"
+    },
+    {
       "path": "D:\\Code\\clipy-7",
       "name": "clipy-7",
       "type": "android",
@@ -11,7 +25,7 @@
       ],
       "lastActivity": "2026-04-26T04:54:02.457Z",
       "preferredCLI": "opencode",
-      "preferredModel": "codexer/gpt-5.5"
+      "preferredModel": "opencode/big-pickle"
     },
     {
       "path": "D:\\Code\\VideCodingB",
@@ -170,6 +184,16 @@
     }
   ],
   "recentCommands": [
+    {
+      "command": "set \"GRADLE_USER_HOME=D:\\Code\\clipy-7\\.gradle-user-home\" && gradlew.bat help",
+      "cwd": "D:\\Code\\Clipy2",
+      "exitCode": 0,
+      "duration": 104399,
+      "timestamp": "2026-04-27T16:13:37.864Z",
+      "userId": "1212281184",
+      "channelId": "1212281184",
+      "output": "10.\n\nYou can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.\n\nFor more on this, please refer to https://docs.gradle.org/9.1.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.\r\n\r\nBUILD SUCCESSFUL in 1m 44s\r\n1 actionable task: 1 executed\r\nConsider enabling configuration cache to speed up this build: https://docs.gradle.org/9.1.0/userguide/configuration_cache_enabling.html\r\n"
+    },
     {
       "command": "set \"ANDROID_SERIAL=emulator-5554\" && set \"GRADLE_USER_HOME=D:\\Code\\VideCodingB\\.gradle-user-home\" && echo Using Android device emulator-5554 && gradlew.bat installDebug && adb -s emulator-5554 shell monkey -p com.nantcompany.lifeflow -c android.intent.category.LAUNCHER 1 & timeout /t 2 /nobreak >nul & adb -s emulator-5554 shell pidof com.nantcompany.lifeflow >nul 2>&1 && (echo App launch verified on device emulator-5554 via pidof. & exit /b 0) & timeout /t 2 /nobreak >nul & adb -s emulator-5554 shell pidof com.nantcompany.lifeflow >nul 2>&1 && (echo App launch verified on device emulator-5554 via pidof retry 1. & exit /b 0) & timeout /t 2 /nobreak >nul & adb -s emulator-5554 shell pidof com.nantcompany.lifeflow >nul 2>&1 && (echo App launch verified on device emulator-5554 via pidof retry 2. & exit /b 0) & adb -s emulator-5554 shell dumpsys activity activities | findstr /i \"com.nantcompany.lifeflow\" >nul 2>&1 && (echo App launch verified on device emulator-5554 via dumpsys. & exit /b 0) & echo App launch could not be verified on device emulator-5554. The device is connected, but the app process was not detected after launch. & exit /b 1",
       "cwd": "D:\\Code\\VideCodingB",
@@ -1159,16 +1183,6 @@
       "userId": "1212281184",
       "channelId": "1212281184",
       "output": "com.nantcompany.lifeflow, -c, android.intent.category.LAUNCHER, 1]\r\nERR:  arg: \"-p\"\r\nERR:  arg: \"com.nantcompany.lifeflow\"\r\n arg: \"-c\"\r\n arg: \"android.intent.category.LAUNCHER\"\r\n arg: \"1\"\r\ndata=\"com.nantcompany.lifeflow\"\r\ndata=\"android.intent.category.LAUNCHER\"\r\nEvents injected: 1\r\n## Network stats: elapsed time=64ms (0ms mobile, 0ms wifi, 64ms not connected)\r\nERR: ERROR: Input redirection is not supported, exiting the process immediately.\r\nApp launch verified on device R5CX40VGQHP via pidof. \r\n"
-    },
-    {
-      "command": "set \"ANDROID_SERIAL=R5CX40VGQHP\" && set \"GRADLE_USER_HOME=D:\\Code\\VideCodingB\\.gradle-user-home\" && echo Using Android device R5CX40VGQHP && gradlew.bat installDebug && adb -s R5CX40VGQHP shell monkey -p com.nantcompany.lifeflow -c android.intent.category.LAUNCHER 1 & timeout /t 2 /nobreak >nul & adb -s R5CX40VGQHP shell pidof com.nantcompany.lifeflow >nul 2>&1 && (echo App launch verified on device R5CX40VGQHP via pidof. & exit /b 0) & timeout /t 2 /nobreak >nul & adb -s R5CX40VGQHP shell pidof com.nantcompany.lifeflow >nul 2>&1 && (echo App launch verified on device R5CX40VGQHP via pidof retry 1. & exit /b 0) & timeout /t 2 /nobreak >nul & adb -s R5CX40VGQHP shell pidof com.nantcompany.lifeflow >nul 2>&1 && (echo App launch verified on device R5CX40VGQHP via pidof retry 2. & exit /b 0) & adb -s R5CX40VGQHP shell dumpsys activity activities | findstr /i \"com.nantcompany.lifeflow\" >nul 2>&1 && (echo App launch verified on device R5CX40VGQHP via dumpsys. & exit /b 0) & echo App launch could not be verified on device R5CX40VGQHP. The device is connected, but the app process was not detected after launch. & exit /b 1",
-      "cwd": "D:\\Code\\VideCodingB",
-      "exitCode": 0,
-      "duration": 13953,
-      "timestamp": "2026-04-21T07:49:43.182Z",
-      "userId": "1212281184",
-      "channelId": "1212281184",
-      "output": "m.nantcompany.lifeflow, -c, android.intent.category.LAUNCHER, 1]\r\nERR:  arg: \"-p\"\r\nERR:  arg: \"com.nantcompany.lifeflow\"\r\n arg: \"-c\"\r\n arg: \"android.intent.category.LAUNCHER\"\r\n arg: \"1\"\r\ndata=\"com.nantcompany.lifeflow\"\r\ndata=\"android.intent.category.LAUNCHER\"\r\nEvents injected: 1\r\n## Network stats: elapsed time=136ms (0ms mobile, 0ms wifi, 136ms not connected)\r\nERR: ERROR: Input redirection is not supported, exiting the process immediately.\r\nApp launch verified on device R5CX40VGQHP via pidof. \r\n"
     }
   ],
   "defaultModel": "codexer/gpt-5.5",
@@ -1196,6 +1210,45 @@
     }
   ],
   "aiUsageHistory": [
+    {
+      "timestamp": "2026-04-27T16:25:18.369Z",
+      "cli": "opencode",
+      "model": "codexer/gpt-5.5",
+      "mode": "chat",
+      "channelId": "1212281184",
+      "userId": "1212281184",
+      "cwd": "D:\\Code\\Clipy2",
+      "inputTokens": 17504,
+      "outputTokens": 781,
+      "totalTokens": 18285,
+      "cost": 0
+    },
+    {
+      "timestamp": "2026-04-27T16:16:06.571Z",
+      "cli": "opencode",
+      "model": "codexer/gpt-5.5",
+      "mode": "chat",
+      "channelId": "1212281184",
+      "userId": "1212281184",
+      "cwd": "D:\\Code\\Clipy2",
+      "inputTokens": 12459,
+      "outputTokens": 27,
+      "totalTokens": 12486,
+      "cost": 0
+    },
+    {
+      "timestamp": "2026-04-27T16:12:00.705Z",
+      "cli": "opencode",
+      "model": "opencode/big-pickle",
+      "mode": "chat",
+      "channelId": "1212281184",
+      "userId": "1212281184",
+      "cwd": "D:\\Code\\clipy-7",
+      "inputTokens": 10306,
+      "outputTokens": 36,
+      "totalTokens": 12182,
+      "cost": 0
+    },
     {
       "timestamp": "2026-04-26T08:36:07.241Z",
       "cli": "opencode",
@@ -5078,10 +5131,10 @@
     "discordChannels": []
   },
   "botStats": {
-    "totalCommands": 221,
-    "totalProjects": 5,
-    "uptime": "189h",
+    "totalCommands": 222,
+    "totalProjects": 6,
+    "uptime": "228h",
     "startTime": "2026-04-18T11:27:06.085Z"
   },
-  "lastUpdated": "2026-04-26T08:36:07.241Z"
+  "lastUpdated": "2026-04-28T00:13:24.006Z"
 }

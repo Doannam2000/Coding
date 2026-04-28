@@ -14,7 +14,7 @@ from typing import Any
 from .config import Settings
 from .db import BotDatabase, STAGES, WIZARD_FIELDS
 from .opencode import OpenCodeClient, run_powershell
-from .prompts import code_prompt, design_prompt, idea_prompt, plan_prompt, repair_prompt, review_prompt
+from .prompts import code_prompt, design_prompt, idea_prompt, plan_prompt, refactor_prompt, repair_prompt, review_prompt
 from .telegram_api import TelegramClient
 
 
@@ -908,7 +908,7 @@ class JobRunner:
             self._ensure_workspace_docs(job, context)
             payload = self.opencode.run_json_prompt_with_progress(
                 workdir=workspace,
-                prompt=code_prompt(job, context, package_name, workspace, job.get("rejection_feedback")),
+                prompt=self._resolve_code_prompt(job, context, package_name, workspace),
                 model=model_for_job,
                 timeout_seconds=max(self.settings.open_code_timeout_seconds, self.CODE_STAGE_MIN_TIMEOUT_SECONDS),
                 on_progress=lambda message: self._report_progress(job, stage_name, message),
@@ -1014,7 +1014,13 @@ class JobRunner:
 
             repair_result = self.opencode.run_json_prompt_with_progress(
                 workdir=workspace,
-                prompt=repair_prompt(job, job["context"], self._determine_existing_package_name(workspace) or self._package_name(job), failed_log[-6000:]),
+                prompt=repair_prompt(
+                    job,
+                    job["context"],
+                    self._determine_existing_package_name(workspace) or self._package_name(job),
+                    failed_log[-6000:],
+                    workspace,
+                ),
                 model=model_for_job,
                 timeout_seconds=max(self.settings.open_code_timeout_seconds, self.REPAIR_STAGE_MIN_TIMEOUT_SECONDS),
                 on_progress=lambda message: self._report_progress(job, "verify", message),
@@ -1056,7 +1062,7 @@ class JobRunner:
         self._report_progress(job, "review", f"Running review iteration {review_count}")
         payload = self.opencode.run_json_prompt_with_progress(
             workdir=Path(job["workspace_path"]),
-            prompt=review_prompt(job, context),
+            prompt=review_prompt(job, context, Path(job["workspace_path"])),
             model=model_for_job,
             timeout_seconds=max(self.settings.open_code_timeout_seconds, self.REVIEW_STAGE_MIN_TIMEOUT_SECONDS),
             on_progress=lambda message: self._report_progress(job, "review", message),
@@ -1239,6 +1245,23 @@ class JobRunner:
             "summary": "Initialized git repository for generated Android project",
         }
 
+    def _refactor_instruction(self, extra_request: str | None = None) -> str:
+        base = (
+            "Refactor the existing Android project to comply with agent.md. "
+            "Mandatory scope: split large screens into reusable components; separate component/model/function/viewmodel responsibilities; "
+            "move all user-facing strings out of Kotlin into strings.xml; auto-translate all new and extracted strings into locales af, am, ar, be, bg, bn, bs, ca, co, cs, da, de, el, es, et, eu, fa, fi, fr, fy, ga, gl, gu, haw, hi, hr, ht, hu, hy, id, in, is, it, iw, ja, ka, ko, ky, lb, lo, lt, lv, mg, mk, mn, ms, nl, no, pl, pt, ro, ru, sk, sl, sm, sq, sr, sv, tg, th, tl, tr, uk, uz, vi, zh; "
+            "do not hardcode user-facing strings; use dedicated ViewModel per screen; use sealed UiState; replace SharedPreferences with DataStore where present; "
+            "replace hardcoded colors/dimensions with theme/design tokens; preserve app behavior while improving architecture and localization safety."
+        )
+        extra = (extra_request or "").strip()
+        return f"{base} Additional request: {extra}" if extra else base
+
+    def _resolve_code_prompt(self, job: dict[str, Any], context: dict[str, Any], package_name: str, workspace: Path) -> str:
+        active_task = str(context.get("active_task") or "").strip() if isinstance(context, dict) else ""
+        if active_task.lower().startswith("[refactor]"):
+            return refactor_prompt(job, context, package_name, workspace)
+        return code_prompt(job, context, package_name, workspace, job.get("rejection_feedback"))
+
     def _resolve_git_target_root(self, job: dict[str, Any], workspace: Path) -> Path:
         repo_root = git_repo_root(workspace)
         if repo_root is not None:
@@ -1407,6 +1430,7 @@ class CommandRouter:
         "/editapp",
         "/buildbyprompt",
         "/fixbug",
+        "/refactor",
     )
 
     def __init__(self, settings: Settings, db: BotDatabase, telegram: TelegramClient, worker: JobRunner | None = None) -> None:
@@ -1600,6 +1624,10 @@ class CommandRouter:
             self._clear_task(chat_id, normalized)
         elif normalized.startswith("/fixbug"):
             self._fix_bug(chat_id, normalized)
+        elif normalized.startswith("/refactorprompt"):
+            self._refactor_prompt(chat_id, normalized)
+        elif normalized.startswith("/refactor"):
+            self._refactor(chat_id, normalized)
         elif normalized.startswith("/deletejob"):
             self._delete_job(chat_id, normalized)
         elif normalized.startswith("/cancel"):
@@ -1663,6 +1691,8 @@ class CommandRouter:
             "/tasks <job_id>\n"
             "/cleartask <job_id>\n"
             "/fixbug <job_id>|<bug description>\n"
+            "/refactor <job_id> [|extra instruction]\n"
+            "/refactorprompt\n"
             "/deletejob <job_id>\n"
             "/approve <job_id>\n"
             "/reject <job_id>|<feedback>\n"
@@ -1809,6 +1839,63 @@ class CommandRouter:
             f"Bug-fix task queued for job #{job_id}: {bug_text}\n"
             "Bot will run it automatically after current task completes.",
             reply_markup=self._job_action_markup(job_id, include_approval=False),
+        )
+
+    def _refactor(self, chat_id: int, text: str) -> None:
+        _, _, raw_args = text.partition(" ")
+        raw_args = raw_args.strip()
+        if not raw_args:
+            self.telegram.send_message(chat_id, "Usage: /refactor <job_id> [|extra instruction]")
+            return
+
+        if "|" in raw_args:
+            job_raw, extra_instruction = [part.strip() for part in raw_args.split("|", 1)]
+        else:
+            job_raw, extra_instruction = raw_args, ""
+
+        if not job_raw.isdigit():
+            self.telegram.send_message(chat_id, "Usage: /refactor <job_id> [|extra instruction]")
+            return
+
+        job_id = int(job_raw)
+        job = self.db.get_job(job_id)
+        if job is None:
+            self.telegram.send_message(chat_id, "Job not found")
+            return
+
+        instruction = self.worker._refactor_instruction(extra_instruction) if self.worker is not None else extra_instruction
+        updated, should_activate_now = self.db.add_follow_up_task(job_id, instruction, tag="refactor")
+        if updated is None:
+            self.telegram.send_message(chat_id, "Job not found")
+            return
+
+        if should_activate_now:
+            activated = self.db.activate_next_task(job_id)
+            if activated is None:
+                self.telegram.send_message(chat_id, "Job not found")
+                return
+            self.telegram.send_message_with_markup(
+                chat_id,
+                f"Refactor task queued and activated for job #{job_id}.\n"
+                f"Job moved to stage `{activated['current_stage']}` with status `{activated['status']}`.\n"
+                "Bot will enforce component/model/function/viewmodel separation, strings.xml extraction, and full locale translation from agent.md.",
+                reply_markup=self._job_action_markup(job_id, include_approval=False),
+            )
+            return
+
+        self.telegram.send_message_with_markup(
+            chat_id,
+            f"Refactor task queued for job #{job_id}.\n"
+            "Bot will automatically enforce agent.md architecture, no hardcoded strings, and full locale translation after the current task completes.",
+            reply_markup=self._job_action_markup(job_id, include_approval=False),
+        )
+
+    def _refactor_prompt(self, chat_id: int, text: str) -> None:
+        self.telegram.send_message_many(
+            chat_id,
+            "Refactor prompt template:\n"
+            "Refactor this existing Android project to fully comply with agent.md.\n"
+            "Mandatory: split large screens into reusable components, separate component/model/function/viewmodel responsibilities, move all user-facing strings into strings.xml, auto-translate all new strings into locales af, am, ar, be, bg, bn, bs, ca, co, cs, da, de, el, es, et, eu, fa, fi, fr, fy, ga, gl, gu, haw, hi, hr, ht, hu, hy, id, in, is, it, iw, ja, ka, ko, ky, lb, lo, lt, lv, mg, mk, mn, ms, nl, no, pl, pt, ro, ru, sk, sl, sm, sq, sr, sv, tg, th, tl, tr, uk, uz, vi, zh, use a dedicated ViewModel per screen, sealed UiState, DataStore instead of SharedPreferences, theme/design tokens instead of hardcoded colors and dimensions, and preserve app behavior while improving architecture and localization safety."
         )
 
     def _delete_job(self, chat_id: int, text: str) -> None:
@@ -2373,7 +2460,7 @@ class CommandRouter:
                     return {"status": "failed", "error": f"job {job['id']} not found"}
 
                 context = current_job["context"]
-                review_prompt_text = review_prompt(current_job, context)
+                review_prompt_text = review_prompt(current_job, context, workspace)
                 if strict_mode:
                     review_prompt_text += (
                         "\n\nSTRICT REVIEW MODE:\n"
