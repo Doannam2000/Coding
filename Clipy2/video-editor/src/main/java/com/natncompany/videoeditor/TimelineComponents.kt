@@ -4,7 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,7 +35,7 @@ import com.natncompany.media.TrackType
 import kotlin.math.roundToInt
 
 @Composable
-internal fun TrackRow(
+fun TrackRow(
     track: TimelineTrack,
     selectedClipId: String?,
     pixelsPerMs: Float,
@@ -79,7 +83,7 @@ internal fun TrackRow(
 }
 
 @Composable
-internal fun ClipBlock(
+fun ClipBlock(
     clip: TimelineClip,
     selected: Boolean,
     enabled: Boolean,
@@ -105,29 +109,22 @@ internal fun ClipBlock(
 
     Box(
         modifier = modifier
-            .height(52.dp)
+            .height(48.dp)
             .width(widthPx.dp)
             .offset { IntOffset(startPx, 0) }
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(clip.blockColor(selected).copy(alpha = blockAlpha))
             .border(
                 width = if (selected) 2.dp else 1.dp,
-                color = if (selected) Color.White else Color.White.copy(alpha = 0.12f),
-                shape = RoundedCornerShape(10.dp)
+                color = if (selected) Color(0xFF5B8DEF) else Color.White.copy(alpha = 0.14f),
+                shape = RoundedCornerShape(12.dp)
             )
-            .clickable(enabled = enabled, onClick = onSelected)
+            .pointerInput(clip.id, enabled) {
+                if (!enabled) return@pointerInput
+                detectTapGestures(onTap = { onSelected() })
+            }
             .pointerInput(clip.id, enabled, pixelsPerMs) {
                 if (!enabled) return@pointerInput
-
-                var draggedPx = 0f
-                detectDragGestures(
-                    onDragStart = { onSelected() },
-                    onDrag = { change, dragAmount ->
-                        change.consume()
-                        draggedPx += dragAmount.x
-                        onDragged((draggedPx / pixelsPerMs).toLong())
-                    }
-                )
             },
         contentAlignment = Alignment.Center
     ) {
@@ -137,14 +134,31 @@ internal fun ClipBlock(
             pixelsPerMs = pixelsPerMs,
             onDrag = onTrimStartDragged
         )
-        Text(
-            text = clip.metadata.label ?: clip.assetType.name,
-            modifier = Modifier.padding(horizontal = 18.dp),
-            color = Color.White,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.labelMedium
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 5.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                repeat(8) { index ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(13.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(Color.White.copy(alpha = if (index % 2 == 0) 0.16f else 0.08f))
+                    )
+                }
+            }
+            Text(
+                text = clip.metadata.label ?: clip.assetType.name,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
         TrimHandle(
             modifier = Modifier.align(Alignment.CenterEnd),
             enabled = enabled,
@@ -164,8 +178,8 @@ private fun TrimHandle(
     Box(
         modifier = modifier
             .fillMaxHeight()
-            .width(14.dp)
-            .background(Color.Black.copy(alpha = if (enabled) 0.28f else 0.14f))
+            .width(24.dp)
+            .background(Color.Black.copy(alpha = if (enabled) 0.38f else 0.14f))
             .pointerInput(enabled, pixelsPerMs) {
                 if (!enabled) return@pointerInput
 

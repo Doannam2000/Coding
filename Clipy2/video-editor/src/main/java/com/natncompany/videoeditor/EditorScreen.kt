@@ -5,30 +5,44 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -64,10 +78,27 @@ import com.natncompany.media.TimelineTrack
 import com.natncompany.media.TrackType
 import kotlin.math.roundToInt
 
+private val ScreenBackground = Color(0xFF0B0D12)
+private val TopBarBackground = Color(0xFF11141A)
+private val CardBackground = Color(0xFF151820)
+private val CardInnerBackground = Color(0xFF0F1218)
+private val StrokeColor = Color(0xFF2A2F3A)
+private val PrimaryBlue = Color(0xFF5B8DEF)
+private val PrimaryBlueSelected = Color(0xFF4D7FE0)
+private val TextPrimary = Color(0xFFFFFFFF)
+private val TextSecondary = Color(0xFFAAB0BD)
+private val TextDisabled = Color(0xFF6F7683)
+private val PlayheadAccent = Color(0xFFFF5C7A)
+
 @Composable
 fun EditorScreen(
     viewModel: EditorViewModel,
     onBack: () -> Unit,
+    onExportClick: (() -> Unit)? = null,
+    exportButtonLabel: String = "Export",
+    qualityLabel: String? = null,
+    qualityOptions: List<String> = emptyList(),
+    onQualitySelected: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -87,30 +118,39 @@ fun EditorScreen(
     Scaffold(
         modifier = modifier,
         topBar = {
-            EditorTopBar(
-                projectName = state.project?.name ?: "Untitled project",
+            VideoEditorTopBar(
                 onBack = onBack,
-                onExport = { showExportDialog = true }
+                onExport = onExportClick ?: { showExportDialog = true },
+                exportButtonLabel = exportButtonLabel,
+                qualityLabel = qualityLabel,
+                qualityOptions = qualityOptions,
+                onQualitySelected = onQualitySelected
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = Color(0xFF101217)
+        containerColor = ScreenBackground
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             PreviewArea(
                 state = state,
                 onSurfaceChanged = viewModel::setSurface,
-                onPlayPause = { viewModel.onAction(EditorAction.PlayPause) },
-                onSeekStart = { viewModel.onAction(EditorAction.Seek(0L)) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
+                    .weight(1f, fill = false)
+            )
+            PlaybackControls(
+                isPlaying = state.isPlaying,
+                position = state.position,
+                duration = state.duration,
+                onPlayPause = { viewModel.onAction(EditorAction.PlayPause) },
+                onSeekStart = { viewModel.onAction(EditorAction.Seek(0L)) }
             )
             TimelineAndTools(
                 state = state,
@@ -133,7 +173,11 @@ fun EditorScreen(
                 onFilter = { viewModel.onAction(EditorAction.SelectTool(EditorTool.Filter)) },
                 onSpeed = { viewModel.onAction(EditorAction.SelectTool(EditorTool.Speed)) },
                 onVolume = { viewModel.onAction(EditorAction.SelectTool(EditorTool.Volume)) },
-                onAction = viewModel::onAction
+                onAction = viewModel::onAction,
+                onDismissToolPanel = viewModel::dismissToolPanel,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 228.dp, max = 276.dp)
             )
         }
     }
@@ -242,26 +286,67 @@ private fun ExportDialog(
 }
 
 @Composable
-private fun EditorTopBar(projectName: String, onBack: () -> Unit, onExport: () -> Unit) {
-    Surface(color = Color(0xFF181B22), tonalElevation = 2.dp) {
+private fun VideoEditorTopBar(
+    onBack: () -> Unit,
+    onExport: () -> Unit,
+    exportButtonLabel: String,
+    qualityLabel: String?,
+    qualityOptions: List<String>,
+    onQualitySelected: (String) -> Unit
+) {
+    var qualityExpanded by remember { mutableStateOf(false) }
+    Surface(color = TopBarBackground) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
-                .padding(horizontal = 12.dp),
+                .systemBarsPadding()
+                .height(72.dp)
+                .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            TextButton(onClick = onBack) { Text("Back") }
+            TextButton(
+                onClick = onBack,
+                modifier = Modifier.size(44.dp),
+                contentPadding = PaddingValues(0.dp)
+            ) { Text("‹", color = TextPrimary, style = MaterialTheme.typography.headlineSmall) }
             Text(
-                text = projectName,
+                text = "Edit",
                 modifier = Modifier.weight(1f),
-                color = Color.White,
+                color = TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
             )
-            Button(onClick = onExport) { Text("Export") }
+            if (qualityLabel != null && qualityOptions.isNotEmpty()) {
+                Box {
+                    OutlinedButton(
+                        onClick = { qualityExpanded = true },
+                        modifier = Modifier.size(width = 96.dp, height = 44.dp),
+                        shape = RoundedCornerShape(999.dp),
+                        border = BorderStroke(1.dp, StrokeColor),
+                        contentPadding = PaddingValues(horizontal = 10.dp)
+                    ) { Text(qualityLabel, maxLines = 1, color = TextPrimary) }
+                    DropdownMenu(expanded = qualityExpanded, onDismissRequest = { qualityExpanded = false }) {
+                        qualityOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option) },
+                                onClick = {
+                                    onQualitySelected(option)
+                                    qualityExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+            Button(
+                onClick = onExport,
+                modifier = Modifier.size(width = 104.dp, height = 48.dp),
+                shape = RoundedCornerShape(999.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue, contentColor = TextPrimary),
+                contentPadding = PaddingValues(horizontal = 14.dp)
+            ) { Text(exportButtonLabel, maxLines = 1) }
         }
     }
 }
@@ -270,32 +355,78 @@ private fun EditorTopBar(projectName: String, onBack: () -> Unit, onExport: () -
 private fun PreviewArea(
     state: EditorUiState,
     onSurfaceChanged: (android.view.Surface?) -> Unit,
-    onPlayPause: () -> Unit,
-    onSeekStart: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(modifier = modifier, shape = RoundedCornerShape(18.dp), color = Color(0xFF080A0F)) {
-        Column(modifier = Modifier.fillMaxSize()) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(max = 430.dp),
+        shape = RoundedCornerShape(24.dp),
+        color = CardBackground,
+        border = BorderStroke(1.dp, StrokeColor)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
+            contentAlignment = Alignment.Center
+        ) {
             PreviewPanel(
                 state = state,
                 onSurfaceChanged = onSurfaceChanged,
-                onPlayPause = onPlayPause,
-                modifier = Modifier.weight(1f).fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth(0.58f)
+                    .aspectRatio(9f / 16f)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(CardInnerBackground)
             )
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Button(onClick = onPlayPause) { Text(if (state.isPlaying) "Pause" else "Play") }
-                Text(
-                    text = "${state.position.formatTime()} / ${state.duration.formatTime()}",
-                    color = Color.White.copy(alpha = 0.82f),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(Modifier.weight(1f))
-                OutlinedButton(onClick = onSeekStart) { Text("Start") }
-            }
+        }
+    }
+}
+
+@Composable
+private fun PlaybackControls(
+    isPlaying: Boolean,
+    position: Long,
+    duration: Long,
+    onPlayPause: () -> Unit,
+    onSeekStart: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = CardBackground,
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, StrokeColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Button(
+                onClick = onPlayPause,
+                modifier = Modifier.height(44.dp).widthIn(min = 76.dp),
+                shape = RoundedCornerShape(999.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlueSelected, contentColor = TextPrimary),
+                contentPadding = PaddingValues(horizontal = 14.dp)
+            ) { Text(if (isPlaying) "Pause" else "Play") }
+            Text(
+                text = "${position.formatTime()} / ${duration.formatTime()}",
+                color = TextSecondary,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1
+            )
+            Spacer(Modifier.weight(1f))
+            OutlinedButton(
+                onClick = onSeekStart,
+                modifier = Modifier.height(44.dp),
+                shape = RoundedCornerShape(999.dp),
+                border = BorderStroke(1.dp, StrokeColor),
+                contentPadding = PaddingValues(horizontal = 16.dp)
+            ) { Text("Start", color = TextPrimary) }
         }
     }
 }
@@ -304,7 +435,6 @@ private fun PreviewArea(
 private fun PreviewPanel(
     state: EditorUiState,
     onSurfaceChanged: (android.view.Surface?) -> Unit,
-    onPlayPause: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
@@ -331,9 +461,86 @@ private fun PreviewPanel(
             LoadingOverlay(state.importProgress, state.exportProgress)
         }
 
-        if (state.project != null && state.previewError == null) {
-            Button(onClick = onPlayPause) { Text(if (state.isPlaying) "Pause" else "Play") }
+        if (state.activeTool == EditorTool.Filter) {
+            state.selectedClip?.let { clip ->
+                FilterPreviewOverlay(clip)
+            }
         }
+    }
+}
+
+@Composable
+private fun FilterPreviewOverlay(clip: com.natncompany.media.TimelineClip) {
+    val filterName = clip.effect.parameters["filterName"].orEmpty().ifBlank { "Original" }
+    val hasAdjustments = filterName != "Original" ||
+        clip.transform.brightness != 0f ||
+        clip.transform.contrast != 1f ||
+        clip.transform.saturation != 1f ||
+        clip.transform.blur != 0f
+    if (!hasAdjustments) return
+
+    val tint = filterName.previewTint()
+    if (tint != Color.Transparent) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(tint)
+        )
+    }
+    if (clip.transform.brightness != 0f) {
+        val brightnessColor = if (clip.transform.brightness > 0f) Color.White else Color.Black
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(brightnessColor.copy(alpha = kotlin.math.abs(clip.transform.brightness).coerceIn(0f, 1f) * 0.28f))
+        )
+    }
+    if (clip.transform.saturation != 1f) {
+        val alpha = kotlin.math.abs(clip.transform.saturation - 1f).coerceIn(0f, 1f) * 0.18f
+        val saturationColor = if (clip.transform.saturation > 1f) Color(0xFFFF4D6D) else Color.Gray
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(saturationColor.copy(alpha = alpha))
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = if (clip.transform.contrast > 1f) 0.04f else 0.12f))
+    )
+    Surface(
+        modifier = Modifier
+            .padding(12.dp),
+        shape = RoundedCornerShape(999.dp),
+        color = Color.Black.copy(alpha = 0.62f)
+    ) {
+        Text(
+            text = "Filter: $filterName",
+            color = Color.White,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+        )
+    }
+}
+
+private fun String.previewTint(): Color {
+    return when (this) {
+        "Sepia" -> Color(0xB06B3F12)
+        "Mono", "Monochrome", "Luminance" -> Color(0x8A808080)
+        "Invert", "Solarize" -> Color.White.copy(alpha = 0.32f)
+        "RGB Warm", "Exposure", "Gamma", "White Balance" -> Color(0x55FFB74D)
+        "RGB Cool", "False Color", "CGA" -> Color(0x554A90E2)
+        "Hue Shift", "Vignette" -> Color(0x554A148C)
+        "Sketch", "Sobel Edge", "Sobel Threshold", "Threshold Edge", "Directional Edge", "Laplacian" -> Color.Black.copy(alpha = 0.42f)
+        "Pixel", "Posterize", "Halftone", "Crosshatch" -> Color(0x4456C271)
+        "Emboss", "Sharpen" -> Color.White.copy(alpha = 0.16f)
+        "Gaussian Blur", "Box Blur", "Bilateral Blur", "Zoom Blur" -> Color.White.copy(alpha = 0.20f)
+        "Haze" -> Color.White.copy(alpha = 0.26f)
+        "Kuwahara", "Toon", "Smooth Toon" -> Color(0x44AFD800)
+        "Swirl", "Bulge", "Glass Sphere", "Sphere" -> Color(0x44FF7AB6)
+        else -> Color.Transparent
     }
 }
 
@@ -406,47 +613,61 @@ private fun TimelineAndTools(
     onFilter: () -> Unit,
     onSpeed: () -> Unit,
     onVolume: () -> Unit,
-    onAction: (EditorAction) -> Unit
+    onAction: (EditorAction) -> Unit,
+    onDismissToolPanel: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    var zoom by remember { mutableFloatStateOf(1f) }
+    var zoom by remember { mutableFloatStateOf(0.35f) }
 
-    Surface(shape = RoundedCornerShape(18.dp), color = Color(0xFF181B22)) {
-        Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Timeline", color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Text(state.position.formatTime(), color = Color.White.copy(alpha = 0.7f))
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(22.dp),
+        color = CardBackground,
+        border = BorderStroke(1.dp, StrokeColor)
+    ) {
+        Box(modifier = Modifier.fillMaxSize().padding(10.dp)) {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Timeline", color = TextPrimary, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text(state.position.formatTime(), color = TextSecondary)
+                }
+                TimelinePanel(
+                    timeline = state.timeline,
+                    selectedClipId = state.selectedClipId,
+                    duration = state.duration,
+                    position = state.position,
+                    zoom = zoom,
+                    onZoomChange = { zoom = it.coerceIn(0.2f, 4f) },
+                    onClipSelected = onClipSelected,
+                    onClipMoved = onClipMoved,
+                    onClipTrimStart = onClipTrimStart,
+                    onClipTrimEnd = onClipTrimEnd,
+                    onScrub = onScrub
+                )
+                ToolPanel(
+                    hasSelection = state.selectedClipId != null,
+                    activeTool = state.activeTool,
+                    onImport = onImport,
+                    onSplit = onSplit,
+                    onDelete = onDelete,
+                    onDuplicate = onDuplicate,
+                    onTrim = onTrim,
+                    onCrop = onCrop,
+                    onRotate = onRotate,
+                    onFilter = onFilter,
+                    onSpeed = onSpeed,
+                    onVolume = onVolume
+                )
             }
-            TimelinePanel(
-                timeline = state.timeline,
-                selectedClipId = state.selectedClipId,
-                duration = state.duration,
-                position = state.position,
-                zoom = zoom,
-                onZoomChange = { zoom = it.coerceIn(0.5f, 4f) },
-                onClipSelected = onClipSelected,
-                onClipMoved = onClipMoved,
-                onClipTrimStart = onClipTrimStart,
-                onClipTrimEnd = onClipTrimEnd,
-                onScrub = onScrub
-            )
-            ToolPanel(
-                hasSelection = state.selectedClipId != null,
-                activeTool = state.activeTool,
-                onImport = onImport,
-                onSplit = onSplit,
-                onDelete = onDelete,
-                onDuplicate = onDuplicate,
-                onTrim = onTrim,
-                onCrop = onCrop,
-                onRotate = onRotate,
-                onFilter = onFilter,
-                onSpeed = onSpeed,
-                onVolume = onVolume
-            )
             SelectedToolPanel(
                 activeTool = state.activeTool,
                 selectedClip = state.selectedClip,
-                onAction = onAction
+                onAction = onAction,
+                onDismiss = onDismissToolPanel,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .heightIn(max = 180.dp)
+                    .fillMaxWidth()
             )
         }
     }
@@ -469,28 +690,26 @@ private fun TimelinePanel(
     val timelineDuration = duration.coerceAtLeast(1L)
     val scrollState = rememberScrollState()
     val pixelsPerMs = 0.052f * zoom
-    val timelineWidth = ((timelineDuration * pixelsPerMs).roundToInt().coerceAtLeast(640)).dp
+    val timelineWidth = ((timelineDuration * pixelsPerMs).roundToInt().coerceAtLeast(360)).dp
     val tracks = timeline.tracks
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Zoom", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium)
-            OutlinedButton(onClick = { onZoomChange(zoom - 0.25f) }) { Text("-") }
-            Text("${(zoom * 100).roundToInt()}%", color = Color.White.copy(alpha = 0.82f), style = MaterialTheme.typography.labelMedium)
-            OutlinedButton(onClick = { onZoomChange(zoom + 0.25f) }) { Text("+") }
-        }
-
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(((tracks.size.coerceAtLeast(1) * 64) + 28).dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFF101217))
-                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                .background(CardInnerBackground)
+                .border(1.dp, StrokeColor, RoundedCornerShape(12.dp))
+                .pointerInput(zoom) {
+                    detectTransformGestures { _, _, gestureZoom, _ ->
+                        onZoomChange(zoom * gestureZoom)
+                    }
+                }
         ) {
-            Column(modifier = Modifier.width(76.dp).fillMaxHeight().padding(vertical = 12.dp)) {
+            Column(modifier = Modifier.width(64.dp).fillMaxHeight().padding(vertical = 10.dp)) {
                 tracks.ifEmpty { listOf(TimelineTrack(id = "empty", type = TrackType.Video)) }.forEach { track ->
-                    TrackLabel(track = track, modifier = Modifier.height(64.dp))
+                    TrackLabel(track = track, modifier = Modifier.height(56.dp))
                 }
             }
 
@@ -506,8 +725,8 @@ private fun TimelinePanel(
                         .fillMaxHeight()
                         .clickable { onClipSelected(null) }
                         .pointerInput(pixelsPerMs, scrollState.value) {
-                            detectDragGestures { change, _ ->
-                                val targetMs = ((change.position.x + scrollState.value) / pixelsPerMs).toLong()
+                            detectTapGestures { offset ->
+                                val targetMs = ((offset.x + scrollState.value) / pixelsPerMs).toLong()
                                 onScrub(targetMs.coerceIn(0L, timelineDuration))
                             }
                         }
@@ -526,8 +745,8 @@ private fun TimelinePanel(
                             selectedClipId = selectedClipId,
                             pixelsPerMs = pixelsPerMs,
                             modifier = Modifier
-                                .padding(top = (12 + index * 64).dp)
-                                .height(52.dp)
+                                .padding(top = (10 + index * 64).dp)
+                                .height(48.dp)
                                 .fillMaxWidth(),
                             onClipSelected = onClipSelected,
                             onClipDragged = { clip, deltaMs ->
@@ -546,10 +765,19 @@ private fun TimelinePanel(
 
                     Box(
                         modifier = Modifier
+                            .align(Alignment.TopStart)
                             .offset { IntOffset((position * pixelsPerMs).roundToInt(), 0) }
                             .width(2.dp)
                             .fillMaxHeight()
-                            .background(Color(0xFFFF4D6D))
+                            .background(PlayheadAccent)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .offset { IntOffset((position * pixelsPerMs).roundToInt() - 4, 0) }
+                            .size(10.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(PlayheadAccent)
                     )
                 }
             }
@@ -562,7 +790,7 @@ private fun TrackLabel(track: TimelineTrack, modifier: Modifier = Modifier) {
     Box(modifier = modifier.fillMaxWidth().padding(horizontal = 10.dp), contentAlignment = Alignment.CenterStart) {
         Text(
             text = track.type.name,
-            color = Color.White.copy(alpha = if (track.isEnabled) 0.76f else 0.36f),
+            color = if (track.isEnabled) TextSecondary else TextDisabled,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.labelMedium
@@ -585,22 +813,80 @@ private fun ToolPanel(
     onSpeed: () -> Unit,
     onVolume: () -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    val tools = remember(activeTool, hasSelection) {
+        listOf(
+            Triple(EditorTool.Trim, onTrim, hasSelection),
+            Triple(EditorTool.Crop, onCrop, hasSelection),
+            Triple(EditorTool.Rotate, onRotate, hasSelection),
+            Triple(EditorTool.Filter, onFilter, hasSelection),
+            Triple(EditorTool.Speed, onSpeed, hasSelection),
+            Triple(EditorTool.Volume, onVolume, hasSelection)
+        )
+    }
+    LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(vertical = 2.dp)
     ) {
-        Button(onClick = onImport, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF56C271))) {
-            Text(EditorTool.Import.label)
+        item { EditorToolChip(label = "Import", badge = "+", selected = false, enabled = true, onClick = onImport) }
+        item { EditorToolChip(label = "Split", badge = "SP", selected = false, enabled = hasSelection, onClick = onSplit) }
+        item { EditorToolChip(label = "Delete", badge = "DL", selected = false, enabled = hasSelection, onClick = onDelete) }
+        item { EditorToolChip(label = "Copy", badge = "CP", selected = false, enabled = hasSelection, onClick = onDuplicate) }
+        items(tools, key = { it.first.name }) { (tool, action, enabled) ->
+            EditorToolChip(
+                label = tool.label,
+                badge = toolBadge(tool),
+                selected = activeTool == tool,
+                enabled = enabled,
+                onClick = action
+            )
         }
-        ToolButton(tool = EditorTool.Split, selected = false, enabled = hasSelection, onClick = onSplit)
-        ToolButton(tool = EditorTool.Delete, selected = false, enabled = hasSelection, onClick = onDelete)
-        ToolButton(tool = EditorTool.Duplicate, selected = false, enabled = hasSelection, onClick = onDuplicate)
-        ToolButton(tool = EditorTool.Trim, selected = activeTool == EditorTool.Trim, enabled = hasSelection, onClick = onTrim)
-        ToolButton(tool = EditorTool.Crop, selected = activeTool == EditorTool.Crop, enabled = hasSelection, onClick = onCrop)
-        ToolButton(tool = EditorTool.Rotate, selected = activeTool == EditorTool.Rotate, enabled = hasSelection, onClick = onRotate)
-        ToolButton(tool = EditorTool.Filter, selected = activeTool == EditorTool.Filter, enabled = hasSelection, onClick = onFilter)
-        ToolButton(tool = EditorTool.Speed, selected = activeTool == EditorTool.Speed, enabled = hasSelection, onClick = onSpeed)
-        ToolButton(tool = EditorTool.Volume, selected = activeTool == EditorTool.Volume, enabled = hasSelection, onClick = onVolume)
+    }
+}
+
+@Composable
+private fun EditorToolChip(
+    label: String,
+    badge: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val background by animateColorAsState(if (selected) PrimaryBlueSelected else Color.Transparent, label = "toolBg")
+    val border = if (selected) PrimaryBlue else StrokeColor
+    Surface(
+        modifier = Modifier
+            .height(54.dp)
+            .widthIn(min = 64.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        color = background,
+        border = BorderStroke(1.dp, border)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(badge, color = if (enabled) TextPrimary else TextDisabled, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+            Text(label, color = if (enabled) TextSecondary else TextDisabled, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        }
+    }
+}
+
+private fun toolBadge(tool: EditorTool): String {
+    return when (tool) {
+        EditorTool.Trim -> "TR"
+        EditorTool.Crop -> "CR"
+        EditorTool.Rotate -> "RT"
+        EditorTool.Filter -> "FX"
+        EditorTool.Speed -> "1X"
+        EditorTool.Split -> "SP"
+        EditorTool.Volume -> "VO"
+        EditorTool.Import -> "+"
+        EditorTool.Delete -> "DL"
+        EditorTool.Duplicate -> "CP"
     }
 }
 
@@ -621,41 +907,83 @@ private fun ToolButton(tool: EditorTool, selected: Boolean, enabled: Boolean, on
 private fun SelectedToolPanel(
     activeTool: EditorTool?,
     selectedClip: com.natncompany.media.TimelineClip?,
-    onAction: (EditorAction) -> Unit
+    onAction: (EditorAction) -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     if (selectedClip == null || activeTool == null) return
 
-    when (activeTool) {
-        EditorTool.Filter -> FilterToolPanel(onAction = onAction)
-        EditorTool.Crop, EditorTool.Rotate -> CropRotateToolPanel(onAction = onAction)
-        EditorTool.Volume -> VolumeToolPanel(
-            volume = selectedClip.audio.volume,
-            muted = selectedClip.audio.isMuted,
-            onAction = onAction
-        )
-        else -> Unit
-    }
-}
-
-@Composable
-private fun FilterToolPanel(onAction: (EditorAction) -> Unit) {
-    ToolDetailSurface(title = "Filter") {
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            ClipFilter.entries.forEach { filter ->
-                OutlinedButton(onClick = { onAction(EditorAction.ApplyFilter(filter)) }) {
-                    Text(filter.label)
-                }
-            }
+    Box(modifier = modifier) {
+        when (activeTool) {
+            EditorTool.Filter -> FilterToolPanel(selectedClip = selectedClip, onAction = onAction, onDismiss = onDismiss)
+            EditorTool.Crop, EditorTool.Rotate -> CropRotateToolPanel(onAction = onAction, onDismiss = onDismiss)
+            EditorTool.Volume -> VolumeToolPanel(
+                volume = selectedClip.audio.volume,
+                muted = selectedClip.audio.isMuted,
+                onAction = onAction,
+                onDismiss = onDismiss
+            )
+            else -> Unit
         }
     }
 }
 
 @Composable
-private fun CropRotateToolPanel(onAction: (EditorAction) -> Unit) {
-    ToolDetailSurface(title = "Crop / Rotate") {
+private fun FilterToolPanel(
+    selectedClip: com.natncompany.media.TimelineClip,
+    onAction: (EditorAction) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ToolDetailSurface(title = "Filter", onDismiss = onDismiss) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                legacyFilterOptions.forEach { filter ->
+                    OutlinedButton(onClick = { onAction(EditorAction.ApplyNamedFilter(filter)) }) {
+                        Text(filter)
+                    }
+                }
+            }
+            FilterSlider(
+                label = "Brightness",
+                value = selectedClip.transform.brightness,
+                onValueChange = { onAction(EditorAction.SetBrightness(it)) }
+            )
+            FilterSlider(
+                label = "Contrast",
+                value = selectedClip.transform.contrast - 1f,
+                onValueChange = { onAction(EditorAction.SetContrast(it)) }
+            )
+            FilterSlider(
+                label = "Saturation",
+                value = selectedClip.transform.saturation - 1f,
+                onValueChange = { onAction(EditorAction.SetSaturation(it)) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun FilterSlider(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("$label ${String.format(java.util.Locale.US, "%.2f", value)}", color = Color.White.copy(alpha = 0.82f), style = MaterialTheme.typography.labelMedium)
+        Slider(
+            value = value.coerceIn(-1f, 1f),
+            onValueChange = onValueChange,
+            valueRange = -1f..1f
+        )
+    }
+}
+
+@Composable
+private fun CropRotateToolPanel(onAction: (EditorAction) -> Unit, onDismiss: () -> Unit) {
+    ToolDetailSurface(title = "Crop / Rotate", onDismiss = onDismiss) {
         Row(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -672,9 +1000,10 @@ private fun CropRotateToolPanel(onAction: (EditorAction) -> Unit) {
 private fun VolumeToolPanel(
     volume: Float,
     muted: Boolean,
-    onAction: (EditorAction) -> Unit
+    onAction: (EditorAction) -> Unit,
+    onDismiss: () -> Unit
 ) {
-    ToolDetailSurface(title = "Volume") {
+    ToolDetailSurface(title = "Volume", onDismiss = onDismiss) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -702,6 +1031,7 @@ private fun VolumeToolPanel(
 @Composable
 private fun ToolDetailSurface(
     title: String,
+    onDismiss: () -> Unit,
     content: @Composable () -> Unit
 ) {
     Surface(
@@ -714,7 +1044,10 @@ private fun ToolDetailSurface(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(title, color = Color.White, fontWeight = FontWeight.SemiBold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Button(onClick = onDismiss, modifier = Modifier.height(30.dp)) { Text("✓") }
+            }
             content()
         }
     }

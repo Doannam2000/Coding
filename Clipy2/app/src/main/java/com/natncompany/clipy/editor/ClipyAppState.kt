@@ -122,6 +122,67 @@ class ClipyAppState {
         statusMessage = message
     }
 
+    fun applyEditedTimeline(timeline: com.natncompany.media.Timeline) {
+        applyEditedProject(null, timeline)
+    }
+
+    fun applyEditedProject(
+        project: com.natncompany.media.VideoProject?,
+        timeline: com.natncompany.media.Timeline = project?.timeline ?: com.natncompany.media.Timeline()
+    ) {
+        val originalById = clips.associateBy { it.id }
+        val assetsById = project?.assets.orEmpty().associateBy { it.id }
+        val ordered = timeline.tracks
+            .flatMap { it.clips }
+            .sortedBy { it.timelineStartMs }
+            .mapNotNull { edited ->
+                val asset = assetsById[edited.assetId]
+                val original = originalById[edited.id]
+                    ?: originalById[edited.assetId]
+                    ?: originalById[edited.id.substringBefore("-split-")]
+                val base = original ?: asset?.let { imported ->
+                    ClipDraft(
+                        id = edited.id,
+                        displayName = imported.displayName,
+                        uriString = imported.sourceUri,
+                        mediaKind = when (imported.type) {
+                            com.natncompany.media.AssetType.Image -> MediaKind.Image
+                            else -> MediaKind.Video
+                        },
+                        sourceDurationMs = edited.sourceDurationMs.coerceAtLeast(imported.durationMs ?: edited.sourceEndMs),
+                        adjustments = ClipAdjustments(trimEndMs = edited.sourceEndMs)
+                    )
+                } ?: return@mapNotNull null
+                base.copy(
+                    id = edited.id,
+                    displayName = asset?.displayName ?: base.displayName,
+                    uriString = asset?.sourceUri ?: base.uriString,
+                    mediaKind = when (asset?.type) {
+                        com.natncompany.media.AssetType.Image -> MediaKind.Image
+                        com.natncompany.media.AssetType.Video -> MediaKind.Video
+                        else -> base.mediaKind
+                    },
+                    sourceDurationMs = edited.sourceDurationMs.coerceAtLeast(base.sourceDurationMs),
+                    adjustments = base.adjustments.copy(
+                        trimStartMs = edited.sourceStartMs,
+                        trimEndMs = edited.sourceEndMs,
+                        volume = edited.audio.volume,
+                        brightness = edited.transform.brightness,
+                        contrast = edited.transform.contrast - 1f,
+                        saturation = edited.transform.saturation - 1f,
+                        filterName = edited.effect.parameters["filterName"]
+                            ?: if (edited.transform.blur > 0f) "Box Blur" else base.adjustments.filterName
+                    )
+                )
+            }
+        if (ordered.isNotEmpty() || timeline.tracks.all { it.clips.isEmpty() }) {
+            clips.clear()
+            clips.addAll(ordered)
+        }
+        selectedClipId = timeline.selectedClipIds.firstOrNull()?.takeIf { selected -> clips.any { it.id == selected } }
+            ?: selectedClipId?.takeIf { selected -> clips.any { it.id == selected } }
+    }
+
     fun updateAspectPreset(preset: AspectPreset) {
         aspectPreset = preset
         statusMessage = "Canvas ${preset.label}"

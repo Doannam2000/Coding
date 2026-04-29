@@ -26,6 +26,8 @@ class EditorViewModel(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(EditorUiState())
     val uiState: StateFlow<EditorUiState> = _uiState.asStateFlow()
+    private var previewSurface: Surface? = null
+    private var preparedProjectId: String? = null
 
     init {
         viewModelScope.launch {
@@ -47,6 +49,11 @@ class EditorViewModel(
                         previewError = preview.error,
                         criticalErrorMessage = preview.error ?: current.criticalErrorMessage
                     )
+                }
+                val projectId = state.currentProject?.id
+                if (projectId != null && previewSurface != null && !preview.isPrepared && preparedProjectId != projectId) {
+                    preparedProjectId = projectId
+                    launchMediaCall { mediaSessionManager.preparePreview(previewSurface) }
                 }
             }
         }
@@ -74,7 +81,13 @@ class EditorViewModel(
     fun pause() = launchMediaCall { mediaSessionManager.pause() }
     fun seekTo(positionMs: Long) = launchMediaCall { mediaSessionManager.seekTo(positionMs.coerceAtLeast(0L)) }
     fun scrubTo(positionMs: Long) = launchMediaCall { mediaSessionManager.scrubTo(positionMs.coerceAtLeast(0L)) }
-    fun setSurface(surface: Surface?) = launchMediaCall { mediaSessionManager.preparePreview(surface) }
+    fun setSurface(surface: Surface?) {
+        previewSurface = surface
+        preparedProjectId = null
+        if (_uiState.value.project != null) {
+            launchMediaCall { mediaSessionManager.preparePreview(surface) }
+        }
+    }
     fun clearSnackbarError() = _uiState.update { it.copy(snackbarErrorMessage = null) }
     fun clearCriticalError() = _uiState.update { it.copy(criticalErrorMessage = null) }
 
@@ -120,6 +133,10 @@ class EditorViewModel(
 
     fun volumeSelectedClip() = selectTool(EditorTool.Volume)
 
+    fun dismissToolPanel() {
+        _uiState.update { it.copy(activeTool = null) }
+    }
+
     fun onAction(action: EditorAction) {
         when (action) {
             EditorAction.PlayPause -> if (_uiState.value.isPlaying) pause() else play()
@@ -143,6 +160,25 @@ class EditorViewModel(
                         ClipFilter.Blur -> clip.transform.copy(blur = 0.25f)
                     }
                 )
+            }
+            is EditorAction.ApplyNamedFilter -> updateSelectedClip { clip ->
+                clip.copy(
+                    effect = clip.effect.copy(
+                        parameters = clip.effect.parameters + ("filterName" to action.filterName)
+                    ),
+                    transform = clip.transform.copy(
+                        blur = if (action.filterName == "Box Blur" || action.filterName == "Gaussian Blur") 0.25f else clip.transform.blur
+                    )
+                )
+            }
+            is EditorAction.SetBrightness -> updateSelectedClip { clip ->
+                clip.copy(transform = clip.transform.copy(brightness = action.brightness.coerceIn(-1f, 1f)))
+            }
+            is EditorAction.SetContrast -> updateSelectedClip { clip ->
+                clip.copy(transform = clip.transform.copy(contrast = (1f + action.contrast).coerceIn(0f, 2f)))
+            }
+            is EditorAction.SetSaturation -> updateSelectedClip { clip ->
+                clip.copy(transform = clip.transform.copy(saturation = (1f + action.saturation).coerceIn(0f, 2f)))
             }
             EditorAction.RotateLeft -> updateSelectedClip { clip ->
                 clip.copy(transform = clip.transform.copy(rotationDegrees = normalizeRotation(clip.transform.rotationDegrees - 90f)))

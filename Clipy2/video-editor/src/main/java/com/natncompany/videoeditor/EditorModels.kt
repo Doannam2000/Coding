@@ -70,6 +70,10 @@ sealed class EditorAction {
     data class Import(val uris: List<Uri>) : EditorAction()
     data class SelectTool(val tool: EditorTool) : EditorAction()
     data class ApplyFilter(val filter: ClipFilter) : EditorAction()
+    data class ApplyNamedFilter(val filterName: String) : EditorAction()
+    data class SetBrightness(val brightness: Float) : EditorAction()
+    data class SetContrast(val contrast: Float) : EditorAction()
+    data class SetSaturation(val saturation: Float) : EditorAction()
     data object RotateLeft : EditorAction()
     data object RotateRight : EditorAction()
     data object FlipHorizontal : EditorAction()
@@ -83,6 +87,51 @@ enum class ClipFilter(val label: String) {
     Contrast("Contrast"),
     Blur("Blur")
 }
+
+val legacyFilterOptions = listOf(
+    "Original",
+    "Sepia",
+    "Mono",
+    "Monochrome",
+    "Luminance",
+    "Invert",
+    "Solarize",
+    "Posterize",
+    "CGA",
+    "False Color",
+    "RGB Warm",
+    "RGB Cool",
+    "Hue Shift",
+    "Gamma",
+    "Exposure",
+    "White Balance",
+    "Highlight Shadow",
+    "Sketch",
+    "Toon",
+    "Smooth Toon",
+    "Sobel Edge",
+    "Sobel Threshold",
+    "Threshold Edge",
+    "Directional Edge",
+    "Laplacian",
+    "Luma Threshold",
+    "Crosshatch",
+    "Halftone",
+    "Pixel",
+    "Emboss",
+    "Sharpen",
+    "Gaussian Blur",
+    "Box Blur",
+    "Bilateral Blur",
+    "Vignette",
+    "Haze",
+    "Kuwahara",
+    "Swirl",
+    "Bulge",
+    "Glass Sphere",
+    "Sphere",
+    "Zoom Blur"
+)
 
 internal fun Timeline.findClipTrack(clipId: String?): TimelineTrack? {
     if (clipId == null) return null

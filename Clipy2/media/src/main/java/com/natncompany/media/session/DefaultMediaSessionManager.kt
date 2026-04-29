@@ -27,6 +27,11 @@ import com.natncompany.media.VideoProject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,6 +55,8 @@ class DefaultMediaSessionManager(
 ) : MediaSessionManager {
     private val mutableState = MutableStateFlow(MediaSessionState())
     private val mutableEvents = MutableSharedFlow<MediaSessionEvent>(extraBufferCapacity = 64)
+    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private var previewSyncJob: Job? = null
 
     override val state = mutableState.asStateFlow()
     override val events: Flow<MediaSessionEvent> = mutableEvents.asSharedFlow()
@@ -171,11 +178,13 @@ class DefaultMediaSessionManager(
         }
     }
 
-    override suspend fun play(): MediaResult<Unit> = delegatePreview { previewController.play() }
+    override suspend fun play(): MediaResult<Unit> = delegatePreview { previewController.play() }.also { result ->
+        if (result is MediaResult.Success) startPreviewSync()
+    }
 
-    override suspend fun pause(): MediaResult<Unit> = delegatePreview { previewController.pause() }
+    override suspend fun pause(): MediaResult<Unit> = delegatePreview { previewController.pause() }.also { stopPreviewSync() }
 
-    override suspend fun stop(): MediaResult<Unit> = delegatePreview { previewController.stop() }
+    override suspend fun stop(): MediaResult<Unit> = delegatePreview { previewController.stop() }.also { stopPreviewSync() }
 
     override suspend fun seekTo(positionMs: Long): MediaResult<Unit> = delegatePreview { previewController.seek(positionMs) }
 
@@ -319,6 +328,22 @@ class DefaultMediaSessionManager(
 
     private fun syncPreviewState() {
         mutableState.update { it.copy(previewState = previewController.state.value) }
+    }
+
+    private fun startPreviewSync() {
+        if (previewSyncJob?.isActive == true) return
+        previewSyncJob = scope.launch {
+            while (true) {
+                syncPreviewState()
+                delay(250)
+            }
+        }
+    }
+
+    private fun stopPreviewSync() {
+        previewSyncJob?.cancel()
+        previewSyncJob = null
+        syncPreviewState()
     }
 
     private fun updateLastError(error: MediaError) {

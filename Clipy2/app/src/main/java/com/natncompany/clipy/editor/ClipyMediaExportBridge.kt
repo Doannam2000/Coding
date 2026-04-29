@@ -183,7 +183,7 @@ suspend fun ClipyAppState.exportWithMediaPipeline(
     }
 }
 
-private fun ClipyAppState.buildTimeline(assets: List<Asset>): Timeline {
+fun ClipyAppState.buildMediaTimeline(assets: List<Asset> = emptyList()): Timeline {
     var cursorMs = 0L
     val timelineClips = clips.mapIndexed { index, clip ->
         val asset = assets.getOrNull(index)
@@ -242,6 +242,8 @@ private fun ClipyAppState.renderSize(): RenderSize {
         AspectPreset.SixteenNine -> RenderSize(longEdge, (longEdge * 9 / 16).roundToEven())
     }
 }
+
+private fun ClipyAppState.buildTimeline(assets: List<Asset>): Timeline = buildMediaTimeline(assets)
 
 private fun ClipyAppState.exportVideoBitrate(): Int {
     return when (exportResolutionPreset) {

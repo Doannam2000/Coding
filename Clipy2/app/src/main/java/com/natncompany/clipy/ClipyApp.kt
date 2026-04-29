@@ -16,9 +16,9 @@ import com.natncompany.clipy.editor.HomeFeature
 import com.natncompany.clipy.editor.editorFeatures
 import com.natncompany.clipy.editor.rememberClipyAppState
 import com.natncompany.clipy.editor.EditorScreen as AppScreen
-import com.natncompany.clipy.editor.ui.EditorScreen as EditorScreenView
 import com.natncompany.clipy.editor.ui.ExportScreen
 import com.natncompany.clipy.editor.ui.HomeScreen
+import com.natncompany.clipy.editor.ui.VideoEditorScreenAdapter
 import com.natncompany.clipy.ui.theme.ClipyTheme
 
 @Composable
@@ -64,25 +64,11 @@ fun ClipyApp() {
                     }
                 )
 
-                AppScreen.Editor -> EditorScreenView(
+                AppScreen.Editor -> VideoEditorScreenAdapter(
                     appState = appState,
                     onBack = { appState.goHome() },
                     onNext = {
                         appState.openExport()
-                    },
-                    onImportMore = {
-                        pendingFeature = HomeFeature(
-                            title = "Add",
-                            shortLabel = "+",
-                            defaultTool = appState.activeTool,
-                            defaultAspect = appState.aspectPreset,
-                            replaceTimeline = false
-                        )
-                        pickerLauncher.launch(
-                            PickVisualMediaRequest(
-                                mediaType = ActivityResultContracts.PickVisualMedia.ImageAndVideo
-                            )
-                        )
                     }
                 )
 

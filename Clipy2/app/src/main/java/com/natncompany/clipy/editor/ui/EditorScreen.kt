@@ -83,6 +83,7 @@ import com.natncompany.clipy.editor.ExportResolutionPreset
 import com.natncompany.clipy.editor.HomeFeature
 import com.natncompany.clipy.editor.MediaKind
 import com.natncompany.clipy.editor.backgroundOptions
+import com.natncompany.clipy.editor.buildMediaTimeline
 import com.natncompany.clipy.editor.buildExportPlan
 import com.natncompany.clipy.editor.buildPreviewPlan
 import com.natncompany.clipy.editor.buildVideoEditorSession
@@ -91,6 +92,9 @@ import com.natncompany.clipy.editor.filterOptions
 import com.natncompany.clipy.editor.formatDuration
 import com.natncompany.clipy.filter.GpuImagePreview
 import com.natncompany.videoeditor.PipelineStage
+import com.natncompany.videoeditor.ReusableEditorTool
+import com.natncompany.videoeditor.VideoEditorToolBar
+import com.natncompany.videoeditor.VideoEditorTimelineStrip
 
 private val HomeBackground = Color(0xFF323232)
 private val EditorPanelBackground = Color(0xFF242728)
@@ -105,7 +109,7 @@ private val EditorTextMuted = Color(0xFF999CB0)
 private val EditorUnselected = Color(0xFF4D4F51)
 private val EditorBottomTrayHeight = 296.dp
 private val EditorToolbarHeight = 50.dp
-private val SelectedStripHeight = 62.dp
+private val SelectedStripHeight = 96.dp
 private val TimelineCardWidth = 84.dp
 private val TimelineCardHeight = 58.dp
 
@@ -598,24 +602,22 @@ private fun SelectedMediaStrip(
     appState: ClipyAppState,
     onImportMore: () -> Unit
 ) {
+    val timeline = appState.buildMediaTimeline()
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(SelectedStripHeight),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        LazyRow(
+        VideoEditorTimelineStrip(
+            timeline = timeline,
+            selectedClipId = appState.selectedClipId,
+            durationMs = appState.projectDurationMs,
+            positionMs = 0L,
+            onClipSelected = { clipId -> clipId?.let(appState::selectClip) },
             modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            items(appState.clips, key = { it.id }) { clip ->
-                TimelineClipCard(
-                    clip = clip,
-                    isSelected = clip.id == appState.selectedClipId,
-                    onClick = { appState.selectClip(clip.id) }
-                )
-            }
-        }
+            zoom = 0.72f
+        )
         Spacer(modifier = Modifier.width(4.dp))
         Box(
             modifier = Modifier
@@ -699,69 +701,21 @@ private fun EditorToolBar(
     activeTool: EditorTool,
     onToolSelected: (EditorTool) -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(EditorToolbarBackground)
-    ) {
-        LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(EditorToolbarHeight),
-            contentPadding = PaddingValues(start = 6.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            items(EditorTool.entries) { tool ->
-                EditorToolItem(
-                    tool = tool,
-                    isSelected = tool == activeTool,
-                    onClick = { onToolSelected(tool) }
-                )
-            }
-        }
-    }
+    VideoEditorToolBar(
+        tools = EditorTool.entries.map { it.toReusableEditorTool() },
+        selectedToolId = activeTool.name,
+        onToolSelected = { selected ->
+            EditorTool.entries.firstOrNull { it.name == selected.id }?.let(onToolSelected)
+        },
+        modifier = Modifier.fillMaxWidth()
+    )
 }
 
-@Composable
-private fun EditorToolItem(
-    tool: EditorTool,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    val accentColor = if (isSelected) EditorAccentBlue else EditorUnselected
-    val textColor = if (isSelected) Color.White else EditorTextMuted
-
-    Column(
-        modifier = Modifier
-            .widthIn(min = 52.dp)
-            .height(EditorToolbarHeight)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 3.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(width = 22.dp, height = 18.dp)
-                .clip(RoundedCornerShape(4.dp))
-                .background(accentColor),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = toolBadge(tool),
-                color = Color.White,
-                fontSize = 8.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        Text(
-            text = tool.label,
-            color = textColor,
-            fontSize = 9.sp,
-            maxLines = 1
-        )
-    }
-}
+private fun EditorTool.toReusableEditorTool(): ReusableEditorTool = ReusableEditorTool(
+    id = name,
+    label = label,
+    badge = toolBadge(this)
+)
 
 private fun toolBadge(tool: EditorTool): String {
     return when (tool) {
