@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.natncompany.media.test.media-mergeDebugUnitTestResources-8:/values-v18/values-v18.xml",
+            "outputFile": "com.natncompany.media.test.media-mergeDebugUnitTestResources-7:/values-v18/values-v18.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\DDWAN\\.gradle\\caches\\9.1.0\\transforms\\70bc6a89dd16f7bcf3883132e1fbfc51\\workspace\\transformed\\core-1.6.1\\res\\values-v18\\values.xml",
+                    "source": "C:\\Users\\DDWAN\\.gradle\\caches\\9.1.0\\transforms\\f3f26faa23c13aaf89038cf5589a1227\\workspace\\transformed\\core-1.6.1\\res\\values-v18\\values.xml",
                     "from": {
                         "startLines": "4,12",
                         "startColumns": "0,0",

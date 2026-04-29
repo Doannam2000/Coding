@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.natncompany.media.test.media-mergeDebugUnitTestResources-8:/values/values.xml",
+            "outputFile": "com.natncompany.media.test.media-mergeDebugUnitTestResources-7:/values/values.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\DDWAN\\.gradle\\caches\\9.1.0\\transforms\\91571679d86e215f185d8037b3642ef7\\workspace\\transformed\\core-1.8.0\\res\\values\\values.xml",
+                    "source": "C:\\Users\\DDWAN\\.gradle\\caches\\9.1.0\\transforms\\ecabb7b0d962f0f8383c7531b26c941f\\workspace\\transformed\\core-1.8.0\\res\\values\\values.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,89,90,94,95,96,97,103,113,146,167,200",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4",
@@ -23,7 +23,7 @@
                     }
                 },
                 {
-                    "source": "C:\\Users\\DDWAN\\.gradle\\caches\\9.1.0\\transforms\\ba116534ed9f8fb585852babdd596e39\\workspace\\transformed\\lifecycle-runtime-2.3.1\\res\\values\\values.xml",
+                    "source": "C:\\Users\\DDWAN\\.gradle\\caches\\9.1.0\\transforms\\e7be6084510f8b6afbdf448cf334bd96\\workspace\\transformed\\lifecycle-runtime-2.3.1\\res\\values\\values.xml",
                     "from": {
                         "startLines": "2",
                         "startColumns": "4",
@@ -37,6 +37,42 @@
                         "startOffsets": "4925",
                         "endColumns": "42",
                         "endOffsets": "4963"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\DDWAN\\.gradle\\caches\\9.1.0\\transforms\\857c46f889659d6936d29ffc320514d8\\workspace\\transformed\\media3-exoplayer-1.5.1\\res\\values\\values.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9,10",
+                        "startColumns": "4,4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,125,187,252,316,393,458,548,632",
+                        "endColumns": "69,61,64,63,76,64,89,83,68",
+                        "endOffsets": "120,182,247,311,388,453,543,627,696"
+                    },
+                    "to": {
+                        "startLines": "84,85,86,87,88,89,90,91,92",
+                        "startColumns": "4,4,4,4,4,4,4,4,4",
+                        "startOffsets": "5038,5108,5170,5235,5299,5376,5441,5531,5615",
+                        "endColumns": "69,61,64,63,76,64,89,83,68",
+                        "endOffsets": "5103,5165,5230,5294,5371,5436,5526,5610,5679"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\DDWAN\\.gradle\\caches\\9.1.0\\transforms\\f3f26faa23c13aaf89038cf5589a1227\\workspace\\transformed\\core-1.6.1\\res\\values\\values.xml",
+                    "from": {
+                        "startLines": "4,11",
+                        "startColumns": "0,0",
+                        "startOffsets": "142,510",
+                        "endLines": "10,17",
+                        "endColumns": "8,8",
+                        "endOffsets": "509,875"
+                    },
+                    "to": {
+                        "startLines": "105,112",
+                        "startColumns": "4,4",
+                        "startOffsets": "6513,6885",
+                        "endLines": "111,118",
+                        "endColumns": "8,8",
+                        "endOffsets": "6880,7250"
                     }
                 },
                 {
@@ -56,42 +92,6 @@
                         "endLines": "197",
                         "endColumns": "24",
                         "endOffsets": "10610"
-                    }
-                },
-                {
-                    "source": "C:\\Users\\DDWAN\\.gradle\\caches\\9.1.0\\transforms\\6d42fde82cbe7f7cda75a940346fc4eb\\workspace\\transformed\\media3-exoplayer-1.5.1\\res\\values\\values.xml",
-                    "from": {
-                        "startLines": "2,3,4,5,6,7,8,9,10",
-                        "startColumns": "4,4,4,4,4,4,4,4,4",
-                        "startOffsets": "55,125,187,252,316,393,458,548,632",
-                        "endColumns": "69,61,64,63,76,64,89,83,68",
-                        "endOffsets": "120,182,247,311,388,453,543,627,696"
-                    },
-                    "to": {
-                        "startLines": "84,85,86,87,88,89,90,91,92",
-                        "startColumns": "4,4,4,4,4,4,4,4,4",
-                        "startOffsets": "5038,5108,5170,5235,5299,5376,5441,5531,5615",
-                        "endColumns": "69,61,64,63,76,64,89,83,68",
-                        "endOffsets": "5103,5165,5230,5294,5371,5436,5526,5610,5679"
-                    }
-                },
-                {
-                    "source": "C:\\Users\\DDWAN\\.gradle\\caches\\9.1.0\\transforms\\70bc6a89dd16f7bcf3883132e1fbfc51\\workspace\\transformed\\core-1.6.1\\res\\values\\values.xml",
-                    "from": {
-                        "startLines": "4,11",
-                        "startColumns": "0,0",
-                        "startOffsets": "142,510",
-                        "endLines": "10,17",
-                        "endColumns": "8,8",
-                        "endOffsets": "509,875"
-                    },
-                    "to": {
-                        "startLines": "105,112",
-                        "startColumns": "4,4",
-                        "startOffsets": "6513,6885",
-                        "endLines": "111,118",
-                        "endColumns": "8,8",
-                        "endOffsets": "6880,7250"
                     }
                 }
             ]

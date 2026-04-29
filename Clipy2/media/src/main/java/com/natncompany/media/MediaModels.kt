@@ -254,6 +254,7 @@ data class ClipTransform(
     val flipVertical: Boolean = false,
     val brightness: Float = 0f,
     val contrast: Float = 1f,
+    val saturation: Float = 1f,
     val blur: Float = 0f
 )
 

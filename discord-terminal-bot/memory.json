@@ -1211,6 +1211,58 @@
   ],
   "aiUsageHistory": [
     {
+      "timestamp": "2026-04-28T19:34:21.933Z",
+      "cli": "opencode",
+      "model": "codexer/gpt-5.5",
+      "mode": "chat",
+      "channelId": "1212281184",
+      "userId": "1212281184",
+      "cwd": "D:\\Code\\Clipy2",
+      "inputTokens": 33565,
+      "outputTokens": 140,
+      "totalTokens": 33705,
+      "cost": 0
+    },
+    {
+      "timestamp": "2026-04-28T18:21:10.096Z",
+      "cli": "opencode",
+      "model": "codexer/gpt-5.5",
+      "mode": "chat",
+      "channelId": "1212281184",
+      "userId": "1212281184",
+      "cwd": "D:\\Code\\Clipy2",
+      "inputTokens": 19014,
+      "outputTokens": 230,
+      "totalTokens": 19244,
+      "cost": 0
+    },
+    {
+      "timestamp": "2026-04-28T17:28:56.166Z",
+      "cli": "opencode",
+      "model": "codexer/gpt-5.5",
+      "mode": "chat",
+      "channelId": "1212281184",
+      "userId": "1212281184",
+      "cwd": "D:\\Code\\Clipy2",
+      "inputTokens": 16285,
+      "outputTokens": 228,
+      "totalTokens": 16513,
+      "cost": 0
+    },
+    {
+      "timestamp": "2026-04-28T16:49:17.297Z",
+      "cli": "opencode",
+      "model": "codexer/gpt-5.5",
+      "mode": "chat",
+      "channelId": "1212281184",
+      "userId": "1212281184",
+      "cwd": "D:\\Code\\Clipy2",
+      "inputTokens": 45988,
+      "outputTokens": 740,
+      "totalTokens": 46728,
+      "cost": 0
+    },
+    {
       "timestamp": "2026-04-27T16:25:18.369Z",
       "cli": "opencode",
       "model": "codexer/gpt-5.5",
@@ -5133,8 +5185,8 @@
   "botStats": {
     "totalCommands": 222,
     "totalProjects": 6,
-    "uptime": "228h",
+    "uptime": "248h",
     "startTime": "2026-04-18T11:27:06.085Z"
   },
-  "lastUpdated": "2026-04-28T00:13:24.006Z"
+  "lastUpdated": "2026-04-28T19:34:21.933Z"
 }

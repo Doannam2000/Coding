@@ -56,7 +56,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -92,7 +91,6 @@ import com.natncompany.clipy.editor.filterOptions
 import com.natncompany.clipy.editor.formatDuration
 import com.natncompany.clipy.filter.GpuImagePreview
 import com.natncompany.videoeditor.PipelineStage
-import kotlinx.coroutines.launch
 
 private val HomeBackground = Color(0xFF323232)
 private val EditorPanelBackground = Color(0xFF242728)
@@ -220,7 +218,6 @@ fun EditorScreen(
     appState: ClipyAppState,
     onBack: () -> Unit,
     onNext: () -> Unit,
-    isExporting: Boolean = false,
     onImportMore: () -> Unit
 ) {
     Box(
@@ -246,7 +243,6 @@ fun EditorScreen(
                     resolutionPreset = appState.exportResolutionPreset,
                     onResolutionSelected = appState::updateExportResolution,
                     onExportClick = onNext,
-                    isExporting = isExporting,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(top = 38.dp, end = 12.dp)
@@ -299,7 +295,6 @@ private fun EditorTopActions(
     resolutionPreset: ExportResolutionPreset,
     onResolutionSelected: (ExportResolutionPreset) -> Unit,
     onExportClick: () -> Unit,
-    isExporting: Boolean,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -312,8 +307,7 @@ private fun EditorTopActions(
             onSelected = onResolutionSelected
         )
         FloatingExportButton(
-            onClick = onExportClick,
-            isExporting = isExporting
+            onClick = onExportClick
         )
     }
 }
@@ -364,8 +358,7 @@ private fun ResolutionButton(
 
 @Composable
 private fun FloatingExportButton(
-    onClick: () -> Unit,
-    isExporting: Boolean
+    onClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier.size(width = 68.dp, height = 30.dp),
@@ -376,11 +369,11 @@ private fun FloatingExportButton(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clickable(enabled = !isExporting, onClick = onClick),
+                .clickable(onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = if (isExporting) "Exporting" else "Export",
+                text = "Next",
                 color = Color.White,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold
@@ -1200,222 +1193,200 @@ private fun MetricPill(
 @Composable
 fun ExportScreen(
     appState: ClipyAppState,
-    onBack: () -> Unit
+    onBackHome: () -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val scope = rememberCoroutineScope()
-    val session = appState.buildVideoEditorSession()
-    val previewPlan = appState.buildPreviewPlan()
-    val exportPlan = appState.buildExportPlan()
     var isExporting by remember { mutableStateOf(false) }
     var exportProgress by remember { mutableFloatStateOf(0f) }
-    var exportMessage by remember { mutableStateOf("Ready to export") }
+    var exportMessage by remember { mutableStateOf("Preparing export") }
     var exportOutputPath by remember { mutableStateOf<String?>(null) }
+    var exportFinished by remember { mutableStateOf(false) }
+    var exportFailed by remember { mutableStateOf(false) }
+    val progressPercent = (exportProgress.coerceIn(0f, 1f) * 100).toInt()
+
+    LaunchedEffect(Unit) {
+        if (isExporting || exportFinished) return@LaunchedEffect
+        isExporting = true
+        exportFailed = false
+        exportProgress = 0f
+        exportOutputPath = null
+        exportMessage = "Preparing export"
+        val result = appState.exportWithMediaPipeline(context) { progress ->
+            exportProgress = progress.progressPercent / 100f
+            exportMessage = progress.message
+            exportOutputPath = progress.outputPath ?: exportOutputPath
+        }
+        when (result) {
+            is com.natncompany.media.MediaResult.Success -> {
+                exportProgress = 1f
+                exportOutputPath = result.value.ifBlank { exportOutputPath }
+                exportMessage = "Export completed"
+                appState.updateStatus("Saved to Movies/Clipy")
+            }
+            is com.natncompany.media.MediaResult.Failure -> {
+                exportFailed = true
+                exportMessage = result.error.message
+                appState.updateStatus(result.error.message)
+            }
+        }
+        isExporting = false
+        exportFinished = true
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(HomeBackground)
-            .padding(20.dp)
+            .padding(horizontal = 24.dp, vertical = 28.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(22.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Spacer(modifier = Modifier.weight(1f))
+
+            Text(
+                text = if (exportFinished && !exportFailed) "Export completed" else "Exporting video",
+                color = EditorTextPrimary,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            ExportProgressThumb(
+                clip = appState.selectedClip ?: appState.clips.firstOrNull(),
+                aspectPreset = appState.aspectPreset,
+                progress = exportProgress,
+                progressPercent = progressPercent,
+                isFailed = exportFailed,
+                modifier = Modifier
+                    .fillMaxWidth(0.72f)
+                    .heightIn(max = 430.dp)
+            )
+
+            Text(
+                text = exportMessage,
+                color = if (exportFailed) Color(0xFFFF8A8A) else EditorTextSecondary,
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            exportOutputPath?.takeIf { exportFinished && !exportFailed }?.let { path ->
                 Text(
-                    text = "Export",
-                    color = EditorTextPrimary,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "Step 2/2",
+                    text = path,
                     color = EditorAccentGreen,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
                 )
-            }
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp),
-                color = EditorPanelBackground
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    MetricPill(label = "Project", value = appState.projectName)
-                    MetricPill(label = "Clips", value = appState.clips.size.toString())
-                    MetricPill(label = "Duration", value = appState.projectDurationLabel)
-                    MetricPill(label = "Canvas", value = appState.aspectPreset.label)
-                    MetricPill(label = "Preview", value = previewPlan.engine.name)
-                    MetricPill(label = "Export", value = exportPlan.primaryEngine.name)
-                }
-            }
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp),
-                color = EditorPanelRaised.copy(alpha = 0.96f)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = "Video editor pipeline",
-                        color = EditorTextPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = exportMessage,
-                        color = EditorTextSecondary,
-                        fontSize = 12.sp
-                    )
-                    LinearProgressIndicator(
-                        progress = { exportProgress.coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth(),
-                        color = EditorAccentGreen,
-                        trackColor = EditorPanelBackground
-                    )
-                    exportOutputPath?.let { path ->
-                        Text(
-                            text = path,
-                            color = EditorAccentGreen,
-                            fontSize = 11.sp,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp),
-                color = EditorPanelBackground
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = "Realtime preview plan",
-                        color = EditorTextPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    PipelineStageRow(stages = previewPlan.stages)
-                }
-            }
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp),
-                color = EditorPanelBackground
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = "Export plan",
-                        color = EditorTextPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    PipelineStageRow(stages = exportPlan.stages)
-                    Text(
-                        text = "Fallback: ${exportPlan.fallbackEngine?.name ?: "None"}",
-                        color = EditorTextSecondary,
-                        fontSize = 12.sp
-                    )
-                }
-            }
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp),
-                color = EditorPanelRaised.copy(alpha = 0.96f)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "Timeline clips",
-                        color = EditorTextPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    session.timeline.clips.forEach { clip ->
-                        MetricPill(
-                            label = clip.displayName,
-                            value = "${clip.mediaType.name} ${formatDuration(clip.outputDurationMs)}"
-                        )
-                    }
-                }
             }
 
             Spacer(modifier = Modifier.weight(1f))
 
-            Button(
-                onClick = {
-                    if (isExporting) return@Button
-                    isExporting = true
-                    exportProgress = 0f
-                    exportOutputPath = null
-                    exportMessage = "Preparing export"
-                    scope.launch {
-                        val result = appState.exportWithMediaPipeline(context) { progress ->
-                            exportProgress = progress.progressPercent / 100f
-                            exportMessage = progress.message
-                            exportOutputPath = progress.outputPath ?: exportOutputPath
-                        }
-                        when (result) {
-                            is com.natncompany.media.MediaResult.Success -> {
-                                exportProgress = 1f
-                                exportOutputPath = result.value.ifBlank { exportOutputPath }
-                                exportMessage = if (exportOutputPath.isNullOrBlank()) {
-                                    "Export completed"
-                                } else {
-                                    "Export completed"
-                                }
-                            }
-                            is com.natncompany.media.MediaResult.Failure -> {
-                                exportMessage = result.error.message
-                            }
-                        }
-                        isExporting = false
-                    }
-                },
-                enabled = !isExporting,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = EditorAccentGreen,
-                    contentColor = Color.White
-                )
-            ) {
-                Text(if (isExporting) "Exporting..." else "Export Video")
+            if (exportFinished) {
+                Button(
+                    onClick = onBackHome,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = EditorAccentGreen,
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text("Back to Home")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExportProgressThumb(
+    clip: ClipDraft?,
+    aspectPreset: AspectPreset,
+    progress: Float,
+    progressPercent: Int,
+    isFailed: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier.aspectRatio(aspectPreset.previewAspectRatio),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(parseColor(clip?.adjustments?.backgroundHex ?: "#11161D"))),
+            contentAlignment = Alignment.Center
+        ) {
+            when {
+                clip == null -> EmptyPreview()
+                clip.mediaKind == MediaKind.Video -> ExportVideoPlaceholder(clip = clip)
+                else -> ImagePreview(uri = Uri.parse(clip.uriString))
             }
 
-            Button(
-                onClick = onBack,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = EditorAccentBlue,
-                    contentColor = Color.White
-                )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.42f))
+            )
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("Back to Editor")
+                Text(
+                    text = if (isFailed) "Failed" else "$progressPercent%",
+                    color = Color.White,
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                LinearProgressIndicator(
+                    progress = { progress.coerceIn(0f, 1f) },
+                    modifier = Modifier
+                        .fillMaxWidth(0.72f)
+                        .height(5.dp)
+                        .clip(RoundedCornerShape(999.dp)),
+                    color = if (isFailed) Color(0xFFFF8A8A) else EditorAccentGreen,
+                    trackColor = Color.White.copy(alpha = 0.22f)
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun ExportVideoPlaceholder(clip: ClipDraft) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(EditorPreviewBackground),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(18.dp)
+        ) {
+            Text(
+                text = "Video",
+                color = EditorTextPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = clip.displayName,
+                color = EditorTextSecondary,
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

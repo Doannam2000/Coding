@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.natncompany.media.DefaultTimelineEditorTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-04-28T08:47:28.825Z" hostname="DESKTOP-8JL89QB" time="0.031">
-  <properties/>
-  <testcase name="splitClip creates second clip and keeps ordering" classname="com.natncompany.media.DefaultTimelineEditorTest" time="0.026"/>
-  <testcase name="validateTimeline rejects duplicate clip ids across tracks" classname="com.natncompany.media.DefaultTimelineEditorTest" time="0.001"/>
-  <testcase name="addClip rejects overlapping clips on non overlap track" classname="com.natncompany.media.DefaultTimelineEditorTest" time="0.004"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

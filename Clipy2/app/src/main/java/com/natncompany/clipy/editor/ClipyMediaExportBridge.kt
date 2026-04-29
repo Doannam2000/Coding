@@ -16,6 +16,8 @@ import com.natncompany.media.MediaExportConfig
 import com.natncompany.media.MediaImportInput
 import com.natncompany.media.MediaResult
 import com.natncompany.media.MediaSessionEvent
+import com.natncompany.media.ClipTransform
+import com.natncompany.media.ClipEffect
 import com.natncompany.media.RenderConfig
 import com.natncompany.media.Timeline
 import com.natncompany.media.TimelineClip
@@ -135,7 +137,8 @@ suspend fun ClipyAppState.exportWithMediaPipeline(
                 renderConfig = RenderConfig(
                     outputFileName = outputName,
                     targetWidth = renderSize.width,
-                    targetHeight = renderSize.height
+                    targetHeight = renderSize.height,
+                    videoBitrate = exportVideoBitrate()
                 )
             )
         )) {
@@ -197,6 +200,15 @@ private fun ClipyAppState.buildTimeline(assets: List<Asset>): Timeline {
             sourceStartMs = sourceStart,
             sourceEndMs = sourceEnd,
             sourceDurationMs = clip.sourceDurationMs,
+            transform = ClipTransform(
+                brightness = clip.adjustments.brightness,
+                contrast = 1f + clip.adjustments.contrast,
+                saturation = 1f + clip.adjustments.saturation,
+                blur = if (clip.adjustments.filterName == "Box Blur" || clip.adjustments.filterName == "Gaussian Blur") 0.25f else 0f
+            ),
+            effect = ClipEffect(
+                parameters = mapOf("ffmpegFilter" to clip.adjustments.filterName.toFfmpegFilter())
+            ),
             audio = com.natncompany.media.ClipAudio(volume = clip.adjustments.volume)
         ).also {
             cursorMs += it.visibleDurationMs
@@ -228,6 +240,35 @@ private fun ClipyAppState.renderSize(): RenderSize {
         AspectPreset.OneOne -> RenderSize(longEdge, longEdge)
         AspectPreset.FourFive -> RenderSize((longEdge * 4 / 5).roundToEven(), longEdge)
         AspectPreset.SixteenNine -> RenderSize(longEdge, (longEdge * 9 / 16).roundToEven())
+    }
+}
+
+private fun ClipyAppState.exportVideoBitrate(): Int {
+    return when (exportResolutionPreset) {
+        ExportResolutionPreset.Hd -> 5_000_000
+        ExportResolutionPreset.FullHd -> 10_000_000
+        ExportResolutionPreset.QuadHd -> 18_000_000
+    }
+}
+
+private fun String.toFfmpegFilter(): String {
+    return when (this) {
+        "Sepia" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131"
+        "Mono", "Luminance" -> "format=gray"
+        "Invert" -> "negate"
+        "Posterize" -> "elbg=codebook_length=32"
+        "RGB Warm" -> "colorbalance=rs=.08:bs=-.08"
+        "RGB Cool" -> "colorbalance=rs=-.08:bs=.08"
+        "Hue Shift" -> "hue=h=90"
+        "Gamma" -> "eq=gamma=1.35"
+        "Exposure" -> "eq=brightness=.08"
+        "Sharpen" -> "unsharp=5:5:0.8:3:3:0.4"
+        "Sketch" -> "edgedetect=mode=colormix"
+        "Sobel Edge", "Directional Edge" -> "sobel"
+        "Emboss" -> "convolution=-2:-1:0:-1:1:1:0:1:2"
+        "Pixel" -> "scale=iw/16:ih/16,scale=iw*16:ih*16:flags=neighbor"
+        "Solarize" -> "curves=preset=negative"
+        else -> ""
     }
 }
 

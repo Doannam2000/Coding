@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.natncompany.media.test.media-mergeDebugUnitTestResources-8:/values-en-rXC/values-en-rXC.xml",
+            "outputFile": "com.natncompany.media.test.media-mergeDebugUnitTestResources-7:/values-en-rXC/values-en-rXC.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\DDWAN\\.gradle\\caches\\9.1.0\\transforms\\91571679d86e215f185d8037b3642ef7\\workspace\\transformed\\core-1.8.0\\res\\values-en-rXC\\values-en-rXC.xml",
+                    "source": "C:\\Users\\DDWAN\\.gradle\\caches\\9.1.0\\transforms\\ecabb7b0d962f0f8383c7531b26c941f\\workspace\\transformed\\core-1.8.0\\res\\values-en-rXC\\values-en-rXC.xml",
                     "from": {
                         "startLines": "2",
                         "startColumns": "4",

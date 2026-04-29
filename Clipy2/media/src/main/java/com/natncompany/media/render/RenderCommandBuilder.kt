@@ -6,6 +6,7 @@ import com.natncompany.media.RenderConfig
 import com.natncompany.media.RenderRequest
 import com.natncompany.media.TimelineClip
 import java.util.Locale
+import kotlin.math.roundToInt
 
 internal object RenderCommandBuilder {
     fun build(request: RenderRequest, outputPath: String, config: RenderConfig = request.config): String {
@@ -45,7 +46,7 @@ internal object RenderCommandBuilder {
                         tokens += listOf("-loop", "1", "-t", durationSec, "-i", quoted(entry.asset.cachedPath))
                         tokens += listOf("-f", "lavfi", "-t", durationSec, "-i", quoted("anullsrc=r=48000:cl=stereo"))
 
-                        filterParts += "[$inputIndex:v]scale=${config.targetWidth}:${config.targetHeight}:force_original_aspect_ratio=decrease,pad=${config.targetWidth}:${config.targetHeight}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=${config.fps}[v$inputIndex]"
+                        filterParts += buildVideoFilter(inputIndex, entry.clip, config)
                         concatInputs += "[v$inputIndex][${inputIndex + 1}:a]"
                         inputIndex += 2
                     }
@@ -57,7 +58,7 @@ internal object RenderCommandBuilder {
                         )
                         tokens += listOf("-f", "lavfi", "-t", durationSec, "-i", quoted("anullsrc=r=48000:cl=stereo"))
 
-                        filterParts += "[$inputIndex:v]scale=${config.targetWidth}:${config.targetHeight}:force_original_aspect_ratio=decrease,pad=${config.targetWidth}:${config.targetHeight}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=${config.fps}[v$inputIndex]"
+                        filterParts += buildVideoFilter(inputIndex, entry.clip, config)
                         concatInputs += "[v$inputIndex][${inputIndex + 1}:a]"
                         inputIndex += 2
                     }
@@ -88,7 +89,9 @@ internal object RenderCommandBuilder {
             "-map", quoted("[outa]"),
             "-c:v", "libx264",
             "-preset", "fast",
-            "-crf", "23",
+            "-b:v", config.videoBitrate.toString(),
+            "-maxrate", (config.videoBitrate * 1.35f).toInt().toString(),
+            "-bufsize", (config.videoBitrate * 2).toString(),
             "-pix_fmt", "yuv420p",
             "-c:a", "aac",
             "-b:a", config.audioBitrate.toString(),
@@ -160,6 +163,31 @@ internal object RenderCommandBuilder {
     }
 
     private fun quoted(value: String): String = "\"$value\""
+
+    private fun buildVideoFilter(inputIndex: Int, clip: TimelineClip?, config: RenderConfig): String {
+        val filters = mutableListOf(
+            "scale=${config.targetWidth}:${config.targetHeight}:force_original_aspect_ratio=decrease:flags=lanczos",
+            "pad=${config.targetWidth}:${config.targetHeight}:(ow-iw)/2:(oh-ih)/2:color=black",
+            "setsar=1",
+            "fps=${config.fps}"
+        )
+        clip?.transform?.let { transform ->
+            filters += clip.effect.parameters["ffmpegFilter"].orEmpty()
+                .split(',')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+            if (transform.brightness != 0f || transform.contrast != 1f || transform.saturation != 1f) {
+                filters += "eq=brightness=${transform.brightness.coerceIn(-1f, 1f).toFfmpegDecimal()}:contrast=${transform.contrast.coerceIn(0f, 2f).toFfmpegDecimal()}:saturation=${transform.saturation.coerceIn(0f, 3f).toFfmpegDecimal()}"
+            }
+            if (transform.blur > 0f) {
+                val radius = (transform.blur.coerceIn(0f, 1f) * 10f).roundToInt().coerceAtLeast(1)
+                filters += "boxblur=${radius}:1"
+            }
+        }
+        return "[$inputIndex:v]${filters.joinToString(",")}[v$inputIndex]"
+    }
+
+    private fun Float.toFfmpegDecimal(): String = String.format(Locale.US, "%.3f", this)
 
     private fun Long.toSecondsString(): String = String.format(Locale.US, "%.3f", this / 1000.0)
 }

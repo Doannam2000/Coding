@@ -27,7 +27,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.media3.common)
     implementation(libs.androidx.media3.exoplayer)
-    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
+    compileOnly(files("libs/ffmpeg-kit-full-gpl-5.1.LTS-16K-full.aar"))
     implementation(project(":gpuimage"))
 
     testImplementation(libs.junit)
