@@ -5,7 +5,6 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -80,15 +79,17 @@ import kotlin.math.roundToInt
 
 private val ScreenBackground = Color(0xFF0B0D12)
 private val TopBarBackground = Color(0xFF11141A)
-private val CardBackground = Color(0xFF151820)
+private val CardBackground = Color(0xFF13161D)
 private val CardInnerBackground = Color(0xFF0F1218)
-private val StrokeColor = Color(0xFF2A2F3A)
+private val StrokeColor = Color(0xFF232833)
 private val PrimaryBlue = Color(0xFF5B8DEF)
 private val PrimaryBlueSelected = Color(0xFF4D7FE0)
 private val TextPrimary = Color(0xFFFFFFFF)
 private val TextSecondary = Color(0xFFAAB0BD)
 private val TextDisabled = Color(0xFF6F7683)
 private val PlayheadAccent = Color(0xFFFF5C7A)
+private val PanelSurface = Color(0xFF171C25)
+private val PanelSurfaceElevated = Color(0xFF1D2430)
 
 @Composable
 fun EditorScreen(
@@ -102,85 +103,15 @@ fun EditorScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
-    var showExportDialog by remember { mutableStateOf(false) }
-    val snackbarHostState = remember { SnackbarHostState() }
-    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris: List<Uri> ->
-        if (uris.isNotEmpty()) viewModel.onAction(EditorAction.Import(uris))
-    }
-
-    LaunchedEffect(state.snackbarErrorMessage) {
-        state.snackbarErrorMessage?.let { message ->
-            snackbarHostState.showSnackbar(message)
-            viewModel.clearSnackbarError()
-        }
-    }
-
-    Scaffold(
-        modifier = modifier,
-        topBar = {
-            VideoEditorTopBar(
-                onBack = onBack,
-                onExport = onExportClick ?: { showExportDialog = true },
-                exportButtonLabel = exportButtonLabel,
-                qualityLabel = qualityLabel,
-                qualityOptions = qualityOptions,
-                onQualitySelected = onQualitySelected
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = ScreenBackground
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            PreviewArea(
-                state = state,
-                onSurfaceChanged = viewModel::setSurface,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f, fill = false)
-            )
-            PlaybackControls(
-                isPlaying = state.isPlaying,
-                position = state.position,
-                duration = state.duration,
-                onPlayPause = { viewModel.onAction(EditorAction.PlayPause) },
-                onSeekStart = { viewModel.onAction(EditorAction.Seek(0L)) }
-            )
-            TimelineAndTools(
-                state = state,
-                onClipSelected = { viewModel.onAction(EditorAction.SelectClip(it)) },
-                onScrub = { viewModel.onAction(EditorAction.Seek(it)) },
-                onClipMoved = { trackId, clipId, newStartMs -> viewModel.onAction(EditorAction.MoveClip(trackId, clipId, newStartMs)) },
-                onClipTrimStart = { trackId, clipId, newSourceStartMs ->
-                    viewModel.onAction(EditorAction.TrimClip(trackId, clipId, newSourceStartMs = newSourceStartMs))
-                },
-                onClipTrimEnd = { trackId, clipId, newSourceEndMs ->
-                    viewModel.onAction(EditorAction.TrimClip(trackId, clipId, newSourceEndMs = newSourceEndMs))
-                },
-                onImport = { importLauncher.launch(arrayOf("video/*", "audio/*", "image/*")) },
-                onSplit = { viewModel.onAction(EditorAction.Split) },
-                onDelete = { viewModel.onAction(EditorAction.Delete) },
-                onDuplicate = viewModel::duplicateSelectedClip,
-                onTrim = { viewModel.onAction(EditorAction.SelectTool(EditorTool.Trim)) },
-                onCrop = { viewModel.onAction(EditorAction.SelectTool(EditorTool.Crop)) },
-                onRotate = { viewModel.onAction(EditorAction.SelectTool(EditorTool.Rotate)) },
-                onFilter = { viewModel.onAction(EditorAction.SelectTool(EditorTool.Filter)) },
-                onSpeed = { viewModel.onAction(EditorAction.SelectTool(EditorTool.Speed)) },
-                onVolume = { viewModel.onAction(EditorAction.SelectTool(EditorTool.Volume)) },
-                onAction = viewModel::onAction,
-                onDismissToolPanel = viewModel::dismissToolPanel,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 228.dp, max = 276.dp)
-            )
-        }
-    }
+    VideoEditScreen(
+        viewModel = viewModel,
+        onBack = onBack,
+        onNext = onExportClick ?: {},
+        onResolutionClick = { if (qualityOptions.isNotEmpty()) onQualitySelected(qualityOptions.first()) },
+        exportButtonLabel = exportButtonLabel,
+        qualityLabel = qualityLabel ?: "1080p",
+        modifier = modifier
+    )
 
     state.criticalErrorMessage?.let { message ->
         AlertDialog(
@@ -191,15 +122,6 @@ fun EditorScreen(
         )
     }
 
-    if (showExportDialog) {
-        ExportDialog(
-            exportProgress = state.exportProgress,
-            exportResultPath = state.exportResultPath,
-            onDismiss = { showExportDialog = false },
-            onExport = { quality -> viewModel.onAction(EditorAction.Export(quality)) },
-            onCancelExport = viewModel::cancelExport
-        )
-    }
 }
 
 @Composable
@@ -300,7 +222,7 @@ private fun VideoEditorTopBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .systemBarsPadding()
-                .height(72.dp)
+                .height(68.dp)
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -361,14 +283,14 @@ private fun PreviewArea(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(max = 430.dp),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(18.dp),
         color = CardBackground,
         border = BorderStroke(1.dp, StrokeColor)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp),
+                .padding(8.dp),
             contentAlignment = Alignment.Center
         ) {
             PreviewPanel(
@@ -377,7 +299,7 @@ private fun PreviewArea(
                 modifier = Modifier
                     .fillMaxWidth(0.58f)
                     .aspectRatio(9f / 16f)
-                    .clip(RoundedCornerShape(22.dp))
+                    .clip(RoundedCornerShape(16.dp))
                     .background(CardInnerBackground)
             )
         }
@@ -395,13 +317,13 @@ private fun PlaybackControls(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = CardBackground,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, StrokeColor)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
+                .height(52.dp)
                 .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -461,10 +383,8 @@ private fun PreviewPanel(
             LoadingOverlay(state.importProgress, state.exportProgress)
         }
 
-        if (state.activeTool == EditorTool.Filter) {
-            state.selectedClip?.let { clip ->
-                FilterPreviewOverlay(clip)
-            }
+        state.selectedClip?.let { clip ->
+            FilterPreviewOverlay(clip)
         }
     }
 }
@@ -621,11 +541,11 @@ private fun TimelineAndTools(
 
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(16.dp),
         color = CardBackground,
         border = BorderStroke(1.dp, StrokeColor)
     ) {
-        Box(modifier = Modifier.fillMaxSize().padding(10.dp)) {
+        Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Timeline", color = TextPrimary, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -666,7 +586,7 @@ private fun TimelineAndTools(
                 onDismiss = onDismissToolPanel,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .heightIn(max = 180.dp)
+                    .heightIn(max = 260.dp)
                     .fillMaxWidth()
             )
         }
@@ -771,14 +691,6 @@ private fun TimelinePanel(
                             .fillMaxHeight()
                             .background(PlayheadAccent)
                     )
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .offset { IntOffset((position * pixelsPerMs).roundToInt() - 4, 0) }
-                            .size(10.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(PlayheadAccent)
-                    )
                 }
             }
         }
@@ -825,17 +737,16 @@ private fun ToolPanel(
     }
     LazyRow(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(vertical = 2.dp)
     ) {
-        item { EditorToolChip(label = "Import", badge = "+", selected = false, enabled = true, onClick = onImport) }
-        item { EditorToolChip(label = "Split", badge = "SP", selected = false, enabled = hasSelection, onClick = onSplit) }
-        item { EditorToolChip(label = "Delete", badge = "DL", selected = false, enabled = hasSelection, onClick = onDelete) }
-        item { EditorToolChip(label = "Copy", badge = "CP", selected = false, enabled = hasSelection, onClick = onDuplicate) }
+        item { EditorToolChip(label = "Import", selected = false, enabled = true, onClick = onImport) }
+        item { EditorToolChip(label = "Split", selected = false, enabled = hasSelection, onClick = onSplit) }
+        item { EditorToolChip(label = "Delete", selected = false, enabled = hasSelection, onClick = onDelete) }
+        item { EditorToolChip(label = "Copy", selected = false, enabled = hasSelection, onClick = onDuplicate) }
         items(tools, key = { it.first.name }) { (tool, action, enabled) ->
             EditorToolChip(
                 label = tool.label,
-                badge = toolBadge(tool),
                 selected = activeTool == tool,
                 enabled = enabled,
                 onClick = action
@@ -847,46 +758,25 @@ private fun ToolPanel(
 @Composable
 private fun EditorToolChip(
     label: String,
-    badge: String,
     selected: Boolean,
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    val background by animateColorAsState(if (selected) PrimaryBlueSelected else Color.Transparent, label = "toolBg")
+    val background = if (selected) PrimaryBlueSelected.copy(alpha = 0.22f) else Color.Transparent
     val border = if (selected) PrimaryBlue else StrokeColor
     Surface(
         modifier = Modifier
-            .height(54.dp)
-            .widthIn(min = 64.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .height(46.dp)
+            .widthIn(min = 62.dp)
+            .clip(RoundedCornerShape(12.dp))
             .clickable(enabled = enabled, onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(12.dp),
         color = background,
         border = BorderStroke(1.dp, border)
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(badge, color = if (enabled) TextPrimary else TextDisabled, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(label, color = if (enabled) TextSecondary else TextDisabled, style = MaterialTheme.typography.labelSmall, maxLines = 1)
         }
-    }
-}
-
-private fun toolBadge(tool: EditorTool): String {
-    return when (tool) {
-        EditorTool.Trim -> "TR"
-        EditorTool.Crop -> "CR"
-        EditorTool.Rotate -> "RT"
-        EditorTool.Filter -> "FX"
-        EditorTool.Speed -> "1X"
-        EditorTool.Split -> "SP"
-        EditorTool.Volume -> "VO"
-        EditorTool.Import -> "+"
-        EditorTool.Delete -> "DL"
-        EditorTool.Duplicate -> "CP"
     }
 }
 
@@ -941,8 +831,13 @@ private fun FilterToolPanel(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 legacyFilterOptions.forEach { filter ->
-                    OutlinedButton(onClick = { onAction(EditorAction.ApplyNamedFilter(filter)) }) {
-                        Text(filter)
+                    OutlinedButton(
+                        onClick = { onAction(EditorAction.ApplyNamedFilter(filter)) },
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, StrokeColor),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Text(filter, color = TextPrimary)
                     }
                 }
             }
@@ -988,10 +883,30 @@ private fun CropRotateToolPanel(onAction: (EditorAction) -> Unit, onDismiss: () 
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            OutlinedButton(onClick = { onAction(EditorAction.RotateLeft) }) { Text("Rotate left") }
-            OutlinedButton(onClick = { onAction(EditorAction.RotateRight) }) { Text("Rotate right") }
-            OutlinedButton(onClick = { onAction(EditorAction.FlipHorizontal) }) { Text("Flip horizontal") }
-            OutlinedButton(onClick = { onAction(EditorAction.FlipVertical) }) { Text("Flip vertical") }
+            OutlinedButton(
+                onClick = { onAction(EditorAction.RotateLeft) },
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, StrokeColor),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            ) { Text("Rotate left", color = TextPrimary) }
+            OutlinedButton(
+                onClick = { onAction(EditorAction.RotateRight) },
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, StrokeColor),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            ) { Text("Rotate right", color = TextPrimary) }
+            OutlinedButton(
+                onClick = { onAction(EditorAction.FlipHorizontal) },
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, StrokeColor),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            ) { Text("Flip horizontal", color = TextPrimary) }
+            OutlinedButton(
+                onClick = { onAction(EditorAction.FlipVertical) },
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, StrokeColor),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            ) { Text("Flip vertical", color = TextPrimary) }
         }
     }
 }
@@ -1036,17 +951,37 @@ private fun ToolDetailSurface(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color(0xFF101217),
-        shape = RoundedCornerShape(14.dp),
-        tonalElevation = 1.dp
+        color = PanelSurface,
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, StrokeColor),
+        tonalElevation = 2.dp
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Button(onClick = onDismiss, modifier = Modifier.height(30.dp)) { Text("✓") }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(PanelSurfaceElevated)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    title,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f)
+                )
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.height(36.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue, contentColor = TextPrimary),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
+                ) { Text("Apply") }
             }
             content()
         }

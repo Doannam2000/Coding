@@ -2,6 +2,7 @@ package com.natncompany.videoeditor
 
 import android.net.Uri
 import com.natncompany.media.MediaExportConfig
+import com.natncompany.media.Crop
 import com.natncompany.media.RenderConfig
 import com.natncompany.media.Timeline
 import com.natncompany.media.TimelineClip
@@ -22,7 +23,9 @@ data class EditorUiState(
     val previewError: String? = null,
     val snackbarErrorMessage: String? = null,
     val criticalErrorMessage: String? = null,
-    val exportResultPath: String? = null
+    val exportResultPath: String? = null,
+    val canUndo: Boolean = false,
+    val canRedo: Boolean = false
 ) {
     val selectedClip: TimelineClip?
         get() = timeline.findClip(selectedClipId)
@@ -50,7 +53,13 @@ enum class EditorTool(val label: String) {
     Rotate("Rotate"),
     Filter("Filter"),
     Speed("Speed"),
-    Volume("Volume")
+    Volume("Volume"),
+    Text("Text"),
+    Sticker("Sticker"),
+    Music("Music"),
+    Background("Background"),
+    Canvas("Canvas"),
+    Effects("Effects")
 }
 
 sealed class EditorAction {
@@ -65,6 +74,8 @@ sealed class EditorAction {
         val newSourceEndMs: Long? = null
     ) : EditorAction()
     data object Split : EditorAction()
+    data object Undo : EditorAction()
+    data object Redo : EditorAction()
     data object Delete : EditorAction()
     data class Export(val quality: ExportQuality = ExportQuality.High) : EditorAction()
     data class Import(val uris: List<Uri>) : EditorAction()
@@ -80,6 +91,8 @@ sealed class EditorAction {
     data object FlipVertical : EditorAction()
     data class SetVolume(val volume: Float) : EditorAction()
     data class SetMuted(val muted: Boolean) : EditorAction()
+    data class SetCrop(val crop: Crop, val label: String) : EditorAction()
+    data class SetSpeed(val speed: Float) : EditorAction()
 }
 
 enum class ClipFilter(val label: String) {

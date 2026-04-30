@@ -106,6 +106,7 @@ fun ClipBlock(
         muted -> 0.68f
         else -> 1f
     }
+    val thumbCount = (widthPx / 24).coerceIn(3, 18)
 
     Box(
         modifier = modifier
@@ -125,6 +126,12 @@ fun ClipBlock(
             }
             .pointerInput(clip.id, enabled, pixelsPerMs) {
                 if (!enabled) return@pointerInput
+                var draggedPx = 0f
+                detectDragGestures { change, dragAmount ->
+                    change.consume()
+                    draggedPx += dragAmount.x
+                    onDragged((draggedPx / pixelsPerMs).toLong())
+                }
             },
         contentAlignment = Alignment.Center
     ) {
@@ -141,7 +148,7 @@ fun ClipBlock(
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                repeat(8) { index ->
+                repeat(thumbCount) { index ->
                     Box(
                         modifier = Modifier
                             .weight(1f)

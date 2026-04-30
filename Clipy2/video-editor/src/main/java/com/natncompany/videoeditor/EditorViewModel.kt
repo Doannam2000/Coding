@@ -47,7 +47,9 @@ class EditorViewModel(
                         importProgress = state.activeImportJobs.lastOrNull()?.progressPercent,
                         exportProgress = state.activeRenderJobs.lastOrNull()?.progressPercent,
                         previewError = preview.error,
-                        criticalErrorMessage = preview.error ?: current.criticalErrorMessage
+                        criticalErrorMessage = preview.error ?: current.criticalErrorMessage,
+                        canUndo = timeline.history.undoStack.isNotEmpty(),
+                        canRedo = timeline.history.redoStack.isNotEmpty()
                     )
                 }
                 val projectId = state.currentProject?.id
@@ -148,6 +150,8 @@ class EditorViewModel(
                 action.newSourceEndMs?.let { trimClipEnd(action.trackId, action.clipId, it) }
             }
             EditorAction.Split -> splitSelectedClip()
+            EditorAction.Undo -> undo()
+            EditorAction.Redo -> redo()
             EditorAction.Delete -> deleteSelectedClip()
             is EditorAction.Export -> exportVideo(action.quality)
             is EditorAction.Import -> importMedia(action.uris)
@@ -198,6 +202,15 @@ class EditorViewModel(
             is EditorAction.SetMuted -> updateSelectedClip { clip ->
                 clip.copy(audio = clip.audio.copy(isMuted = action.muted))
             }
+            is EditorAction.SetCrop -> updateSelectedClip { clip ->
+                clip.copy(
+                    transform = clip.transform.copy(crop = action.crop),
+                    effect = clip.effect.copy(parameters = clip.effect.parameters + ("cropLabel" to action.label))
+                )
+            }
+            is EditorAction.SetSpeed -> updateSelectedClip { clip ->
+                clip.copy(effect = clip.effect.copy(parameters = clip.effect.parameters + ("speed" to action.speed.toString())))
+            }
         }
     }
 
@@ -224,6 +237,14 @@ class EditorViewModel(
     }
 
     fun cancelExport() = launchMediaCall { mediaSessionManager.cancelAllJobs() }
+
+    fun undo() {
+        applyTimelineResult(timelineEditor.undo(_uiState.value.timeline))
+    }
+
+    fun redo() {
+        applyTimelineResult(timelineEditor.redo(_uiState.value.timeline))
+    }
 
     private fun applyTimelineResult(result: MediaResult<Timeline>) {
         when (result) {
@@ -265,7 +286,23 @@ class EditorViewModel(
         }
 
     private fun selectTool(tool: EditorTool) {
-        if (_uiState.value.selectedClipId == null) return
+        val state = _uiState.value
+        if (state.selectedClipId != null) {
+            _uiState.update { it.copy(activeTool = tool) }
+            return
+        }
+
+        val firstClipId = state.timeline.tracks.firstOrNull()?.clips?.firstOrNull()?.id
+        if (firstClipId != null) {
+            _uiState.update { current ->
+                current.copy(
+                    selectedClipId = firstClipId,
+                    activeTool = tool
+                )
+            }
+            return
+        }
+
         _uiState.update { it.copy(activeTool = tool) }
     }
 
