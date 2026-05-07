@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.natncompany.media.render.RenderCommandBuilderTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-04-29T07:31:04.972Z" hostname="DESKTOP-8JL89QB" time="0.029">
-  <properties/>
-  <testcase name="build applies clip filter transforms to export command" classname="com.natncompany.media.render.RenderCommandBuilderTest" time="0.029"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

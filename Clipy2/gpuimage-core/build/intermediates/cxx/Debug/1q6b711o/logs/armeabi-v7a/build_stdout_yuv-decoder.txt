@@ -1,2 +1,0 @@
-ninja: Entering directory `D:\Code\Clipy2\gpuimage-core\.cxx\Debug\1q6b711o\armeabi-v7a'
-ninja: no work to do.
