@@ -2,13 +2,14 @@ package com.nantcompany.clipy.theme
 
 import androidx.compose.ui.graphics.Color
 
-val ClipyPrimary = Color(0xFF0F0F0F)
-val ClipySecondary = Color(0xFF1C1C1E)
-val ClipyBackground = Color(0xFF09090B)
-val ClipySurface = Color(0xFF16181D)
-val ClipySurfaceVariant = Color(0xFF10141C)
-val ClipyAccent = Color(0xFF2563EB)
-val ClipyOnDark = Color(0xFFF5F7FA)
-val ClipyMuted = Color(0xFF9AA4B2)
-val ClipySuccess = Color(0xFF77E6A7)
-val ClipyError = Color(0xFFFF7A90)
+val ClipyDarkPrimary = Color(0xFF4FC3F7)
+val ClipyDarkSecondary = Color(0xFF80DEEA)
+val ClipyDarkBackground = Color(0xFF0E1116)
+val ClipyDarkSurface = Color(0xFF161B22)
+val ClipyDarkOnSurface = Color(0xFFE8EEF4)
+
+val ClipyLightPrimary = Color(0xFF0369A1)
+val ClipyLightSecondary = Color(0xFF0F766E)
+val ClipyLightBackground = Color(0xFFF5F7FA)
+val ClipyLightSurface = Color(0xFFFFFFFF)
+val ClipyLightOnSurface = Color(0xFF111827)
