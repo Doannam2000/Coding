@@ -1,4 +1,4 @@
-plugins {
+﻿plugins {
     alias(libs.plugins.android.library)
 }
 
@@ -19,5 +19,7 @@ android {
 dependencies {
     implementation(project(":edit"))
     implementation(libs.androidx.core.ktx)
-    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
+    implementation(files("libs/ffmpeg-kit-full-gpl-5.1.LTS-16K-full.aar"))
+    implementation("com.arthenica:smart-exception-java:0.2.1")
 }
+

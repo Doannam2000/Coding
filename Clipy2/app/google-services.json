@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "950158968930",
+    "project_id": "clipy2",
+    "storage_bucket": "clipy2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:950158968930:android:fe82e0ba530a09888be93b",
+        "android_client_info": {
+          "package_name": "com.natncompany.clipy"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBkDmqjWY_Y-ls3WSQ1bADc1bL7F87hmNg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

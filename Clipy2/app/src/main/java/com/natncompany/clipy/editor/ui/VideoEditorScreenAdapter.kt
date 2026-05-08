@@ -29,6 +29,7 @@ import com.natncompany.media.TrackType
 import com.natncompany.media.VideoProject
 import com.natncompany.videoeditor.EditorViewModel
 import kotlinx.coroutines.flow.collectLatest
+import java.util.UUID
 
 private data class ImportedClipAsset(
     val clipId: String,
@@ -102,7 +103,7 @@ private suspend fun openAndImportProject(
     sessionManager: com.natncompany.media.MediaSessionManager
 ): List<ImportedClipAsset> {
     val project = VideoProject(
-        id = "clipy_editor_${appState.projectName}_${appState.clips.size}".sanitizeProjectId(),
+        id = buildEditorProjectId(appState.projectName),
         name = appState.projectName,
         rootCachePath = ""
     )
@@ -167,8 +168,11 @@ private fun ClipyAppState.toVideoEditorTimeline(assets: List<ImportedClipAsset>)
     )
 }
 
-private fun String.sanitizeProjectId(): String {
-    return lowercase()
+private fun buildEditorProjectId(projectName: String): String {
+    val slug = projectName
+        .lowercase()
         .replace(Regex("[^a-z0-9_-]+"), "_")
+        .trim('_')
         .ifBlank { "clipy_editor" }
+    return "${slug}_${UUID.randomUUID()}"
 }

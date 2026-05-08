@@ -11,9 +11,13 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,9 +27,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.natncompany.clipy.R
 import com.natncompany.clipy.editor.ClipyAppState
 import com.natncompany.clipy.editor.HomeFeature
 import com.natncompany.clipy.editor.ExportResolutionPreset
+import com.natncompany.clipy.editor.exportWithMediaPipeline
+import com.natncompany.media.MediaResult
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
@@ -60,7 +69,7 @@ fun HomeScreen(
             ) {
                 Column {
                     Text(
-                        text = "Welcome to",
+                        text = stringResource(R.string.home_welcome),
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.White.copy(alpha = 0.6f)
                     )
@@ -103,12 +112,12 @@ fun HomeScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Continue Editing",
+                                text = stringResource(R.string.home_continue_editing),
                                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                                 color = Color.White
                             )
                             Text(
-                                text = "$clipCount clips • $durationLabel",
+                                text = stringResource(R.string.home_clip_count_duration, clipCount, durationLabel),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Color.White.copy(alpha = 0.8f)
                             )
@@ -125,7 +134,7 @@ fun HomeScreen(
             }
 
             Text(
-                text = "Create New",
+                text = stringResource(R.string.home_create_new),
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = Color.White,
                 modifier = Modifier.padding(bottom = 16.dp)
@@ -160,7 +169,7 @@ fun HomeScreen(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFFFFD700))
                         Text(
-                            text = "Try AI Magic Effects",
+                            text = stringResource(R.string.home_ai_magic_effects),
                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                             color = Color.White
                         )
@@ -218,21 +227,71 @@ fun FeatureItem(feature: HomeFeature, onClick: () -> Unit) {
     }
 }
 
+private enum class ExportUiState {
+    Idle,
+    Running,
+    Completed
+}
+
 @Composable
 fun ExportScreen(
     appState: ClipyAppState,
     onBackHome: () -> Unit
 ) {
-    var isExporting by remember { mutableStateOf(false) }
-    var exportProgress by remember { mutableStateOf(0f) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var exportUiState by rememberSaveable { mutableStateOf(ExportUiState.Idle.name) }
+    var exportProgress by rememberSaveable { mutableStateOf(0f) }
+    var exportMessage by rememberSaveable { mutableStateOf(context.getString(R.string.export_ready)) }
+    var exportError by rememberSaveable { mutableStateOf<String?>(null) }
+    var exportOutputPath by rememberSaveable { mutableStateOf<String?>(null) }
+    val isExporting = exportUiState == ExportUiState.Running.name
+    val isCompleted = exportUiState == ExportUiState.Completed.name
+    val isIdle = exportUiState == ExportUiState.Idle.name
 
-    LaunchedEffect(isExporting) {
-        if (isExporting) {
-            for (i in 1..100) {
-                kotlinx.coroutines.delay(50)
-                exportProgress = i / 100f
+    fun startExport() {
+        if (isExporting) return
+        if (appState.clips.isEmpty()) {
+            exportError = context.getString(R.string.export_no_media)
+            exportMessage = context.getString(R.string.export_failed)
+            exportOutputPath = null
+            return
+        }
+        exportUiState = ExportUiState.Running.name
+        exportProgress = 0f
+        exportMessage = context.getString(R.string.export_preparing)
+        exportError = null
+        exportOutputPath = null
+        scope.launch {
+            try {
+                when (val result = appState.exportWithMediaPipeline(
+                    context = context,
+                    onProgress = { progress ->
+                        exportProgress = progress.progressPercent.coerceIn(0, 100) / 100f
+                        exportMessage = progress.message
+                    }
+                )) {
+                    is MediaResult.Success -> {
+                        exportProgress = 1f
+                        exportMessage = context.getString(R.string.export_saved_to_movies)
+                        exportOutputPath = result.value
+                        exportUiState = ExportUiState.Completed.name
+                    }
+                    is MediaResult.Failure -> {
+                        exportError = result.error.message
+                        exportMessage = context.getString(R.string.export_failed)
+                        exportUiState = ExportUiState.Completed.name
+                    }
+                }
+            } catch (_: CancellationException) {
+                exportError = context.getString(R.string.export_cancelled)
+                exportMessage = context.getString(R.string.export_cancelled)
+                exportUiState = ExportUiState.Idle.name
+            } catch (_: Throwable) {
+                exportError = context.getString(R.string.export_unexpected_error)
+                exportMessage = context.getString(R.string.export_failed)
+                exportUiState = ExportUiState.Completed.name
             }
-            isExporting = false
         }
     }
 
@@ -248,10 +307,10 @@ fun ExportScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBackHome) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.export_back), tint = Color.White)
                 }
                 Text(
-                    text = "Export Project",
+                    text = stringResource(R.string.export_project_title),
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                     color = Color.White,
                     modifier = Modifier.padding(start = 8.dp)
@@ -260,15 +319,14 @@ fun ExportScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            if (!isExporting) {
+            if (isIdle) {
                 Text(
-                    text = "Export Settings",
+                    text = stringResource(R.string.export_settings),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = Color.White
                 )
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Resolution Selector
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
@@ -277,12 +335,11 @@ fun ExportScreen(
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         Text(
-                            text = "Resolution",
+                            text = stringResource(R.string.export_resolution),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White.copy(alpha = 0.6f)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
-                        
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -312,7 +369,6 @@ fun ExportScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Info Card
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
@@ -326,7 +382,7 @@ fun ExportScreen(
                     ) {
                         Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFF5B8DEF))
                         Text(
-                            text = "High resolution export might take longer depending on your device performance.",
+                            text = stringResource(R.string.export_resolution_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.6f)
                         )
@@ -336,7 +392,7 @@ fun ExportScreen(
                 Spacer(modifier = Modifier.weight(1f))
 
                 Button(
-                    onClick = { isExporting = true },
+                    onClick = { startExport() },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(64.dp),
@@ -344,12 +400,11 @@ fun ExportScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B8DEF))
                 ) {
                     Text(
-                        text = "Start Export",
+                        text = stringResource(R.string.export_start),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
                 }
             } else {
-                // Exporting State
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -371,33 +426,76 @@ fun ExportScreen(
                             color = Color.White
                         )
                     }
-                    Spacer(modifier = Modifier.height(48.dp))
+                    Spacer(modifier = Modifier.height(32.dp))
                     Text(
-                        text = "Exporting your masterpiece...",
+                        text = exportMessage,
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = Color.White
                     )
-                    Text(
-                        text = "Please keep the app open",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.6f),
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
+                    exportOutputPath?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                    exportError?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFFFF6B6B),
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
                 }
-                
-                OutlinedButton(
-                    onClick = { isExporting = false },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(64.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    border = BorderStroke(1.dp, Color(0xFF2A2D35))
-                ) {
-                    Text(
-                        text = "Cancel",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White
-                    )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { if (!isExporting) onBackHome() },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(64.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(1.dp, Color(0xFF2A2D35))
+                    ) {
+                        Text(
+                            text = if (exportError == null && exportOutputPath != null) stringResource(R.string.export_done) else stringResource(R.string.export_back),
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                    }
+                    if (isCompleted) {
+                        Button(
+                            onClick = { startExport() },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(64.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B8DEF))
+                        ) {
+                            Text(
+                                text = stringResource(R.string.export_again),
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = {},
+                            enabled = false,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(64.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            border = BorderStroke(1.dp, Color(0xFF2A2D35))
+                        ) {
+                            Text(
+                                text = stringResource(R.string.exporting),
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White
+                            )
+                        }
+                    }
                 }
             }
         }

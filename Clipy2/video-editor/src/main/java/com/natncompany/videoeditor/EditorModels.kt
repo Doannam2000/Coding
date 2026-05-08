@@ -3,6 +3,10 @@ package com.natncompany.videoeditor
 import android.net.Uri
 import com.natncompany.media.MediaExportConfig
 import com.natncompany.media.Crop
+import com.natncompany.media.ClipEffect
+import com.natncompany.media.EditHistory
+import com.natncompany.media.EditOperation
+import com.natncompany.media.EditOperationType
 import com.natncompany.media.RenderConfig
 import com.natncompany.media.Timeline
 import com.natncompany.media.TimelineClip
@@ -25,7 +29,8 @@ data class EditorUiState(
     val criticalErrorMessage: String? = null,
     val exportResultPath: String? = null,
     val canUndo: Boolean = false,
-    val canRedo: Boolean = false
+    val canRedo: Boolean = false,
+    val isComparingOriginal: Boolean = false
 ) {
     val selectedClip: TimelineClip?
         get() = timeline.findClip(selectedClipId)
@@ -93,6 +98,8 @@ sealed class EditorAction {
     data class SetMuted(val muted: Boolean) : EditorAction()
     data class SetCrop(val crop: Crop, val label: String) : EditorAction()
     data class SetSpeed(val speed: Float) : EditorAction()
+    data object StartComparingOriginal : EditorAction()
+    data object StopComparingOriginal : EditorAction()
 }
 
 enum class ClipFilter(val label: String) {
@@ -155,6 +162,43 @@ internal fun Timeline.findClip(clipId: String?): TimelineClip? {
     if (clipId == null) return null
     return tracks.asSequence().flatMap { it.clips.asSequence() }.firstOrNull { it.id == clipId }
 }
+
+internal fun Timeline.withRecordedAdjustment(
+    before: Timeline,
+    clipId: String,
+    trackId: String,
+    details: String
+): Timeline {
+    val operation = EditOperation(
+        type = EditOperationType.Adjust,
+        before = before.withoutHistoryForEditor(),
+        after = withoutHistoryForEditor(),
+        clipId = clipId,
+        trackId = trackId,
+        details = details
+    )
+    return copy(
+        history = EditHistory(
+            undoStack = before.history.undoStack + operation,
+            redoStack = emptyList()
+        )
+    )
+}
+
+internal fun Timeline.withoutHistoryForEditor(): Timeline = copy(history = EditHistory())
+
+internal fun TimelineClip.speedMultiplier(): Float =
+    effect.parameters[ClipEffectParameterSpeed]?.toFloatOrNull()?.coerceIn(0.25f, 3f) ?: 1f
+
+internal fun TimelineClip.cropLabel(): String =
+    effect.parameters[ClipEffectParameterCropLabel] ?: "Original"
+
+internal fun ClipEffect.withParameter(key: String, value: String): ClipEffect =
+    copy(parameters = parameters + (key to value))
+
+internal const val ClipEffectParameterFilterName = "filterName"
+internal const val ClipEffectParameterCropLabel = "cropLabel"
+internal const val ClipEffectParameterSpeed = "speed"
 
 internal fun Timeline.toDefaultExportConfig(
     outputFileName: String,

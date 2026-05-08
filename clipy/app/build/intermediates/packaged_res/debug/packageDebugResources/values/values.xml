@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="launcher_background">#111827</color>
+    <string name="app_name">Clipy</string>
+    <style name="Theme.Clipy" parent="android:Theme.Material.Light.NoActionBar"/>
+</resources>

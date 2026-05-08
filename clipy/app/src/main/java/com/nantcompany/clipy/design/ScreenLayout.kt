@@ -12,11 +12,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
+private fun EmptyLayoutContent() {}
+
+@Composable
 fun ScreenLayout(
     title: String,
     subtitle: String,
     primaryActionLabel: String,
-    onPrimaryAction: () -> Unit
+    onPrimaryAction: () -> Unit,
+    content: @Composable () -> Unit = ::EmptyLayoutContent
 ) {
     Column(
         modifier = Modifier
@@ -26,6 +30,7 @@ fun ScreenLayout(
     ) {
         Text(text = title, style = MaterialTheme.typography.headlineSmall)
         Text(text = subtitle, style = MaterialTheme.typography.bodyMedium)
+        content()
         Button(onClick = onPrimaryAction) {
             Text(primaryActionLabel)
         }

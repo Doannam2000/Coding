@@ -16,9 +16,9 @@ import com.natncompany.clipy.editor.HomeFeature
 import com.natncompany.clipy.editor.editorFeatures
 import com.natncompany.clipy.editor.rememberClipyAppState
 import com.natncompany.clipy.editor.EditorScreen as AppScreen
-import com.natncompany.clipy.editor.ui.ExportScreen
-import com.natncompany.clipy.editor.ui.HomeScreen
 import com.natncompany.clipy.editor.ui.VideoEditorScreenAdapter
+import com.natncompany.clipy.ui.ExportScreen
+import com.natncompany.clipy.ui.HomeScreen
 import com.natncompany.clipy.ui.theme.ClipyTheme
 
 @Composable

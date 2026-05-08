@@ -3,6 +3,7 @@ package com.nantcompany.clipy.home
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -23,16 +24,19 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text("Clipy Studio", style = MaterialTheme.typography.headlineSmall)
-        Text("Dark video editor workspace with focused tools.", style = MaterialTheme.typography.bodyMedium)
+        Text("Pick media first, then run editing tools.", style = MaterialTheme.typography.bodyMedium)
 
-        Button(onClick = { onNavigate(AppRoute.PICK_VIDEO) }) { Text("Pick Video") }
-        Button(onClick = { onNavigate(AppRoute.PICK_MULTIPLE_VIDEOS) }) { Text("Pick Multiple Videos") }
-        Button(onClick = { onNavigate(AppRoute.PICK_IMAGES) }) { Text("Pick Images") }
-        Button(onClick = { onNavigate(AppRoute.PICK_AUDIO) }) { Text("Pick Audio (Soon)") }
-        Button(onClick = { onNavigate(AppRoute.CUT_VIDEO) }) { Text("Cut") }
-        Button(onClick = { onNavigate(AppRoute.COMPRESS_VIDEO) }) { Text("Compress") }
-        Button(onClick = { onNavigate(AppRoute.MERGE_VIDEO) }) { Text("Merge") }
-        Button(onClick = { onNavigate(AppRoute.EXTRACT_AUDIO) }) { Text("Extract Audio") }
-        Button(onClick = { onNavigate(AppRoute.SLIDESHOW) }) { Text("Slideshow") }
+        Text("Import", style = MaterialTheme.typography.titleSmall)
+        Button(modifier = Modifier.fillMaxWidth(), onClick = { onNavigate(AppRoute.PICK_VIDEO) }) { Text("Pick Video") }
+        Button(modifier = Modifier.fillMaxWidth(), onClick = { onNavigate(AppRoute.PICK_MULTIPLE_VIDEOS) }) { Text("Pick Multiple Videos") }
+        Button(modifier = Modifier.fillMaxWidth(), onClick = { onNavigate(AppRoute.PICK_IMAGES) }) { Text("Pick Images") }
+        Button(modifier = Modifier.fillMaxWidth(), onClick = { onNavigate(AppRoute.PICK_AUDIO) }) { Text("Pick Audio") }
+
+        Text("Tools", style = MaterialTheme.typography.titleSmall)
+        Button(modifier = Modifier.fillMaxWidth(), onClick = { onNavigate(AppRoute.CUT_VIDEO) }) { Text("Cut") }
+        Button(modifier = Modifier.fillMaxWidth(), onClick = { onNavigate(AppRoute.COMPRESS_VIDEO) }) { Text("Compress") }
+        Button(modifier = Modifier.fillMaxWidth(), onClick = { onNavigate(AppRoute.MERGE_VIDEO) }) { Text("Merge") }
+        Button(modifier = Modifier.fillMaxWidth(), onClick = { onNavigate(AppRoute.EXTRACT_AUDIO) }) { Text("Extract Audio") }
+        Button(modifier = Modifier.fillMaxWidth(), onClick = { onNavigate(AppRoute.SLIDESHOW) }) { Text("Slideshow") }
     }
 }

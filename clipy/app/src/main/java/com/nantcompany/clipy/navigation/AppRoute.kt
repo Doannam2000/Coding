@@ -14,6 +14,7 @@ enum class AppRoute(val title: String) {
     PROCESSING("Processing"),
     RESULT("Result"),
     OUTPUT_HISTORY("Output History"),
+    VIDEO_PLAYER("Video Player"),
     SETTINGS("Settings"),
     COMING_SOON_FILTERS("Filters (Soon)"),
     COMING_SOON_STICKERS("Stickers (Soon)"),

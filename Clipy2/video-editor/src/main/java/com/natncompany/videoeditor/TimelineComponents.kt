@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,18 +55,20 @@ fun TrackRow(
             .border(1.dp, rowTint.copy(alpha = if (track.isEnabled) 0.18f else 0.08f))
     ) {
         track.clips.forEach { clip ->
-            ClipBlock(
-                clip = clip,
-                selected = clip.id == selectedClipId,
-                enabled = track.isEnabled,
-                muted = track.isMuted,
-                pixelsPerMs = pixelsPerMs,
-                modifier = Modifier.align(Alignment.TopStart),
-                onSelected = { onClipSelected(clip.id) },
-                onDragged = { onClipDragged(clip, it) },
-                onTrimStartDragged = { onClipTrimStartDragged(clip, it) },
-                onTrimEndDragged = { onClipTrimEndDragged(clip, it) }
-            )
+            key(clip.id) {
+                ClipBlock(
+                    clip = clip,
+                    selected = clip.id == selectedClipId,
+                    enabled = track.isEnabled,
+                    muted = track.isMuted,
+                    pixelsPerMs = pixelsPerMs,
+                    modifier = Modifier.align(Alignment.TopStart),
+                    onSelected = { onClipSelected(clip.id) },
+                    onDragged = { onClipDragged(clip, it) },
+                    onTrimStartDragged = { onClipTrimStartDragged(clip, it) },
+                    onTrimEndDragged = { onClipTrimEndDragged(clip, it) }
+                )
+            }
         }
 
         if (!track.isEnabled || track.isMuted) {
@@ -126,12 +129,15 @@ fun ClipBlock(
             }
             .pointerInput(clip.id, enabled, pixelsPerMs) {
                 if (!enabled) return@pointerInput
-                var draggedPx = 0f
-                detectDragGestures { change, dragAmount ->
-                    change.consume()
-                    draggedPx += dragAmount.x
-                    onDragged((draggedPx / pixelsPerMs).toLong())
-                }
+                var startMs = 0L
+                detectDragGestures(
+                    onDragStart = { startMs = 0L },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        startMs += (dragAmount.x / pixelsPerMs).toLong()
+                        onDragged(startMs)
+                    }
+                )
             },
         contentAlignment = Alignment.Center
     ) {
@@ -187,15 +193,17 @@ private fun TrimHandle(
             .fillMaxHeight()
             .width(24.dp)
             .background(Color.Black.copy(alpha = if (enabled) 0.38f else 0.14f))
-            .pointerInput(enabled, pixelsPerMs) {
+            .pointerInput(enabled, pixelsPerMs, onDrag) {
                 if (!enabled) return@pointerInput
-
-                var draggedPx = 0f
-                detectDragGestures { change, dragAmount ->
-                    change.consume()
-                    draggedPx += dragAmount.x
-                    onDrag((draggedPx / pixelsPerMs).toLong())
-                }
+                var draggedMs = 0L
+                detectDragGestures(
+                    onDragStart = { draggedMs = 0L },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        draggedMs += (dragAmount.x / pixelsPerMs).toLong()
+                        onDrag(draggedMs)
+                    }
+                )
             }
     )
 }
