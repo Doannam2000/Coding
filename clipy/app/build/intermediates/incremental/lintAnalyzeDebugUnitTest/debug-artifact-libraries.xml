@@ -1,12 +1,25 @@
 <libraries>
   <library
+      name="__local_aars__:D:\Code\clipy\export\libs\ffmpeg-kit-full-gpl-5.1.LTS-16K-full.aar:unspecified@jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\7f6ea8aa2f86d80a7d1898b4c20e5cc3\workspace\transformed\ffmpeg-kit-full-gpl-5.1.LTS-16K-full\jars\classes.jar"
+      resolved="__local_aars__:D:\Code\clipy\export\libs\ffmpeg-kit-full-gpl-5.1.LTS-16K-full.aar:unspecified"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\7f6ea8aa2f86d80a7d1898b4c20e5cc3\workspace\transformed\ffmpeg-kit-full-gpl-5.1.LTS-16K-full"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
       name=":@@:app::debug"
       project=":app"/>
   <library
       name=":@@:edit::debug"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\e29d6ba3691b27dbbdef1c30a175a854\workspace\transformed\out\jars\classes.jar;C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\e29d6ba3691b27dbbdef1c30a175a854\workspace\transformed\out\jars\libs\R.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\9c9489d033e9ff356ae7679cc8cb94a7\workspace\transformed\out\jars\classes.jar;C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\9c9489d033e9ff356ae7679cc8cb94a7\workspace\transformed\out\jars\libs\R.jar"
       resolved="Clipy:edit:unspecified"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\e29d6ba3691b27dbbdef1c30a175a854\workspace\transformed\out"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\9c9489d033e9ff356ae7679cc8cb94a7\workspace\transformed\out"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -17,9 +30,9 @@
       proguardRules="proguard.txt"/>
   <library
       name=":@@:export::debug"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\677a895bb9c141d2a723fd988b593e8f\workspace\transformed\out\jars\classes.jar;C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\677a895bb9c141d2a723fd988b593e8f\workspace\transformed\out\jars\libs\R.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\6096dcef73bbb42850ba3edefcfa14fe\workspace\transformed\out\jars\classes.jar;C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\6096dcef73bbb42850ba3edefcfa14fe\workspace\transformed\out\jars\libs\R.jar"
       resolved="Clipy:export:unspecified"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\677a895bb9c141d2a723fd988b593e8f\workspace\transformed\out"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\6096dcef73bbb42850ba3edefcfa14fe\workspace\transformed\out"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -30,9 +43,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.core:core:1.18.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\df92b1211dc0316a4922e16ec435311a\workspace\transformed\core-1.18.0\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\56642794a4e65c1364ce8b3a6135cd3e\workspace\transformed\core-1.18.0\jars\classes.jar"
       resolved="androidx.core:core:1.18.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\df92b1211dc0316a4922e16ec435311a\workspace\transformed\core-1.18.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\56642794a4e65c1364ce8b3a6135cd3e\workspace\transformed\core-1.18.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -43,9 +56,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.lifecycle:lifecycle-runtime-compose-android:2.10.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ff2a44dd00ebc89fabab3a668a80635d\workspace\transformed\lifecycle-runtime-compose\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\6db45a9d40375d755178794793640ac0\workspace\transformed\lifecycle-runtime-compose\jars\classes.jar"
       resolved="androidx.lifecycle:lifecycle-runtime-compose-android:2.10.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ff2a44dd00ebc89fabab3a668a80635d\workspace\transformed\lifecycle-runtime-compose"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\6db45a9d40375d755178794793640ac0\workspace\transformed\lifecycle-runtime-compose"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -56,9 +69,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.lifecycle:lifecycle-livedata-core:2.10.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\889a38d36a0349f701f976ded9b9bf26\workspace\transformed\lifecycle-livedata-core-2.10.0\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\759cbacafb28b2b565e5c1e7ef64ca0d\workspace\transformed\lifecycle-livedata-core-2.10.0\jars\classes.jar"
       resolved="androidx.lifecycle:lifecycle-livedata-core:2.10.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\889a38d36a0349f701f976ded9b9bf26\workspace\transformed\lifecycle-livedata-core-2.10.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\759cbacafb28b2b565e5c1e7ef64ca0d\workspace\transformed\lifecycle-livedata-core-2.10.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -69,9 +82,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.lifecycle:lifecycle-viewmodel-savedstate-android:2.10.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\3df33c15e7245bd722312e975b922db6\workspace\transformed\lifecycle-viewmodel-savedstate\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\88237f513fa7e384cb393d89b3e9aab9\workspace\transformed\lifecycle-viewmodel-savedstate\jars\classes.jar"
       resolved="androidx.lifecycle:lifecycle-viewmodel-savedstate-android:2.10.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\3df33c15e7245bd722312e975b922db6\workspace\transformed\lifecycle-viewmodel-savedstate"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\88237f513fa7e384cb393d89b3e9aab9\workspace\transformed\lifecycle-viewmodel-savedstate"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -82,9 +95,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.lifecycle:lifecycle-runtime-android:2.10.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\c88b4e7626642ce41937f85b506aa3a5\workspace\transformed\lifecycle-runtime\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\83cd44f1c424a3fa736ef977c3de4c23\workspace\transformed\lifecycle-runtime\jars\classes.jar"
       resolved="androidx.lifecycle:lifecycle-runtime-android:2.10.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\c88b4e7626642ce41937f85b506aa3a5\workspace\transformed\lifecycle-runtime"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\83cd44f1c424a3fa736ef977c3de4c23\workspace\transformed\lifecycle-runtime"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -99,9 +112,9 @@
       resolved="androidx.lifecycle:lifecycle-common-jvm:2.10.0"/>
   <library
       name="androidx.lifecycle:lifecycle-viewmodel-android:2.10.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a5373dbf9af9ff5dab33f219b1f04bfe\workspace\transformed\lifecycle-viewmodel\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\adbc2acdc3747596965c4c94fe400d56\workspace\transformed\lifecycle-viewmodel\jars\classes.jar"
       resolved="androidx.lifecycle:lifecycle-viewmodel-android:2.10.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a5373dbf9af9ff5dab33f219b1f04bfe\workspace\transformed\lifecycle-viewmodel"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\adbc2acdc3747596965c4c94fe400d56\workspace\transformed\lifecycle-viewmodel"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -112,9 +125,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.lifecycle:lifecycle-runtime-ktx-android:2.10.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\54629e0d8c2cc908c4aa4aa1d799c820\workspace\transformed\lifecycle-runtime-ktx\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\1e84627acd9bbddec83888c4f335a19a\workspace\transformed\lifecycle-runtime-ktx\jars\classes.jar"
       resolved="androidx.lifecycle:lifecycle-runtime-ktx-android:2.10.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\54629e0d8c2cc908c4aa4aa1d799c820\workspace\transformed\lifecycle-runtime-ktx"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\1e84627acd9bbddec83888c4f335a19a\workspace\transformed\lifecycle-runtime-ktx"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -125,9 +138,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\1d0150a1f682ab53ac77332339226d21\workspace\transformed\lifecycle-viewmodel-ktx-2.10.0\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\31061fad672da0bb50f2abdc19f13eaf\workspace\transformed\lifecycle-viewmodel-ktx-2.10.0\jars\classes.jar"
       resolved="androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\1d0150a1f682ab53ac77332339226d21\workspace\transformed\lifecycle-viewmodel-ktx-2.10.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\31061fad672da0bb50f2abdc19f13eaf\workspace\transformed\lifecycle-viewmodel-ktx-2.10.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -138,9 +151,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.lifecycle:lifecycle-viewmodel-compose-android:2.10.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ca72a0247cb316203e58f4773ec5e821\workspace\transformed\lifecycle-viewmodel-compose\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\344be564b73d0e878c05dd2847d4b1ef\workspace\transformed\lifecycle-viewmodel-compose\jars\classes.jar"
       resolved="androidx.lifecycle:lifecycle-viewmodel-compose-android:2.10.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ca72a0247cb316203e58f4773ec5e821\workspace\transformed\lifecycle-viewmodel-compose"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\344be564b73d0e878c05dd2847d4b1ef\workspace\transformed\lifecycle-viewmodel-compose"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -151,9 +164,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.material3:material3-android:1.3.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\15720e9fa2dc3f71d3be1d9cd73e1c70\workspace\transformed\material3-release\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\c2163a430d72d98019e85850d2d03547\workspace\transformed\material3-release\jars\classes.jar"
       resolved="androidx.compose.material3:material3-android:1.3.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\15720e9fa2dc3f71d3be1d9cd73e1c70\workspace\transformed\material3-release"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\c2163a430d72d98019e85850d2d03547\workspace\transformed\material3-release"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -164,10 +177,10 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.animation:animation-core-android:1.7.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\c5b955365b2d58e6f9903f8fe06489ce\workspace\transformed\animation-core-release\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\95d64850886b16cce2f930ffd4635670\workspace\transformed\animation-core-release\jars\classes.jar"
       resolved="androidx.compose.animation:animation-core-android:1.7.0"
       provided="true"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\c5b955365b2d58e6f9903f8fe06489ce\workspace\transformed\animation-core-release"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\95d64850886b16cce2f930ffd4635670\workspace\transformed\animation-core-release"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -178,10 +191,10 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.animation:animation-android:1.7.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\2bfbae6432e8fb3324e5669e8cc9aca3\workspace\transformed\animation-release\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\bf896661b5bd8b861bebae48298eb1b3\workspace\transformed\animation-release\jars\classes.jar"
       resolved="androidx.compose.animation:animation-android:1.7.0"
       provided="true"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\2bfbae6432e8fb3324e5669e8cc9aca3\workspace\transformed\animation-release"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\bf896661b5bd8b861bebae48298eb1b3\workspace\transformed\animation-release"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -192,10 +205,10 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.foundation:foundation-layout-android:1.7.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\771ac56d86f60d0ab2a0d1c55def08a0\workspace\transformed\foundation-layout-release\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\7ef3c8523244c105046a67fb475814aa\workspace\transformed\foundation-layout-release\jars\classes.jar"
       resolved="androidx.compose.foundation:foundation-layout-android:1.7.0"
       provided="true"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\771ac56d86f60d0ab2a0d1c55def08a0\workspace\transformed\foundation-layout-release"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\7ef3c8523244c105046a67fb475814aa\workspace\transformed\foundation-layout-release"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -206,9 +219,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.material:material-ripple-android:1.7.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\b2dcf256bc341afc01eceb76ac780f91\workspace\transformed\material-ripple-release\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\6b59aad3f5eb15834bef189a32c01234\workspace\transformed\material-ripple-release\jars\classes.jar"
       resolved="androidx.compose.material:material-ripple-android:1.7.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\b2dcf256bc341afc01eceb76ac780f91\workspace\transformed\material-ripple-release"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\6b59aad3f5eb15834bef189a32c01234\workspace\transformed\material-ripple-release"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -219,10 +232,10 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.foundation:foundation-android:1.7.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ef31d58ba1ae7736d9dea653937d39a9\workspace\transformed\foundation-release\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\8d23358166030e6534081edad451094c\workspace\transformed\foundation-release\jars\classes.jar"
       resolved="androidx.compose.foundation:foundation-android:1.7.0"
       provided="true"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ef31d58ba1ae7736d9dea653937d39a9\workspace\transformed\foundation-release"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\8d23358166030e6534081edad451094c\workspace\transformed\foundation-release"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -233,9 +246,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.material:material-icons-core-android:1.7.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\67a87b0f840c839ecc1b907210732dfd\workspace\transformed\material-icons-core-release\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\23caea9d9e3b00315cb20e8a679f50be\workspace\transformed\material-icons-core-release\jars\classes.jar"
       resolved="androidx.compose.material:material-icons-core-android:1.7.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\67a87b0f840c839ecc1b907210732dfd\workspace\transformed\material-icons-core-release"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\23caea9d9e3b00315cb20e8a679f50be\workspace\transformed\material-icons-core-release"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -246,10 +259,10 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-tooling-data-android:1.9.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\57ab33e07e530fd7ae2e00328fb149ad\workspace\transformed\ui-tooling-data\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ba5126fc7f327200f863c70f625859d1\workspace\transformed\ui-tooling-data\jars\classes.jar"
       resolved="androidx.compose.ui:ui-tooling-data-android:1.9.0"
       provided="true"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\57ab33e07e530fd7ae2e00328fb149ad\workspace\transformed\ui-tooling-data"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ba5126fc7f327200f863c70f625859d1\workspace\transformed\ui-tooling-data"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -260,10 +273,10 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-util-android:1.9.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\cb697878fb82d26f69ed5f42fe776c1e\workspace\transformed\ui-util\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a9b5345f455402a54b56e2dd8975bae7\workspace\transformed\ui-util\jars\classes.jar"
       resolved="androidx.compose.ui:ui-util-android:1.9.0"
       provided="true"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\cb697878fb82d26f69ed5f42fe776c1e\workspace\transformed\ui-util"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a9b5345f455402a54b56e2dd8975bae7\workspace\transformed\ui-util"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -274,10 +287,10 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-geometry-android:1.9.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\7e21f2d41823b01bad30c48642ee8982\workspace\transformed\ui-geometry\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\0acb7119395213ad65d9ed57e9a351ca\workspace\transformed\ui-geometry\jars\classes.jar"
       resolved="androidx.compose.ui:ui-geometry-android:1.9.0"
       provided="true"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\7e21f2d41823b01bad30c48642ee8982\workspace\transformed\ui-geometry"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\0acb7119395213ad65d9ed57e9a351ca\workspace\transformed\ui-geometry"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -288,10 +301,10 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-tooling-preview-android:1.9.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\5f861548006eb413416c6696e7550bb6\workspace\transformed\ui-tooling-preview\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\59271efd5303d3ce991ead26100bf7b8\workspace\transformed\ui-tooling-preview\jars\classes.jar"
       resolved="androidx.compose.ui:ui-tooling-preview-android:1.9.0"
       provided="true"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\5f861548006eb413416c6696e7550bb6\workspace\transformed\ui-tooling-preview"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\59271efd5303d3ce991ead26100bf7b8\workspace\transformed\ui-tooling-preview"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -302,10 +315,10 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-tooling-android:1.9.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\1860c771003ce7a327a53b5abed6fc94\workspace\transformed\ui-tooling\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a0f1a6cb1a5093b0ce52ff50826e3ff8\workspace\transformed\ui-tooling\jars\classes.jar"
       resolved="androidx.compose.ui:ui-tooling-android:1.9.0"
       provided="true"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\1860c771003ce7a327a53b5abed6fc94\workspace\transformed\ui-tooling"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a0f1a6cb1a5093b0ce52ff50826e3ff8\workspace\transformed\ui-tooling"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -316,10 +329,10 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-unit-android:1.9.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\b69178ba0fb0628be0dc3503a8e6cf66\workspace\transformed\ui-unit\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\99f04f1d33ea1ebf3fbae5cf4b85405b\workspace\transformed\ui-unit\jars\classes.jar"
       resolved="androidx.compose.ui:ui-unit-android:1.9.0"
       provided="true"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\b69178ba0fb0628be0dc3503a8e6cf66\workspace\transformed\ui-unit"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\99f04f1d33ea1ebf3fbae5cf4b85405b\workspace\transformed\ui-unit"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -330,10 +343,10 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-text-android:1.9.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\20aa45914954480fccc65723b2bfd38b\workspace\transformed\ui-text\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\21b1038ee73c73888db3b54d1657c85f\workspace\transformed\ui-text\jars\classes.jar"
       resolved="androidx.compose.ui:ui-text-android:1.9.0"
       provided="true"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\20aa45914954480fccc65723b2bfd38b\workspace\transformed\ui-text"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\21b1038ee73c73888db3b54d1657c85f\workspace\transformed\ui-text"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -344,10 +357,10 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-graphics-android:1.9.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\68004580d07cd84dafa7508467576679\workspace\transformed\ui-graphics-release\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\bb70af74f2969d1aba6c6860e62b8311\workspace\transformed\ui-graphics-release\jars\classes.jar"
       resolved="androidx.compose.ui:ui-graphics-android:1.9.0"
       provided="true"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\68004580d07cd84dafa7508467576679\workspace\transformed\ui-graphics-release"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\bb70af74f2969d1aba6c6860e62b8311\workspace\transformed\ui-graphics-release"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -358,10 +371,10 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-android:1.9.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\e0c3d3edd00d437c2f7ef97e8229c95e\workspace\transformed\ui-release\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\66c31d9e6c6543165afbb8c4fbf05503\workspace\transformed\ui-release\jars\classes.jar"
       resolved="androidx.compose.ui:ui-android:1.9.0"
       provided="true"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\e0c3d3edd00d437c2f7ef97e8229c95e\workspace\transformed\ui-release"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\66c31d9e6c6543165afbb8c4fbf05503\workspace\transformed\ui-release"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -372,10 +385,10 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-test-manifest:1.9.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\105b083ff533616726a0a5202a7b0c97\workspace\transformed\ui-test-manifest-1.9.0\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\797e2af0b8854bce4a8e76e835c64ea4\workspace\transformed\ui-test-manifest-1.9.0\jars\classes.jar"
       resolved="androidx.compose.ui:ui-test-manifest:1.9.0"
       provided="true"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\105b083ff533616726a0a5202a7b0c97\workspace\transformed\ui-test-manifest-1.9.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\797e2af0b8854bce4a8e76e835c64ea4\workspace\transformed\ui-test-manifest-1.9.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -386,9 +399,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.activity:activity:1.13.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a844151ee4dffbd77cf7e23c8621a850\workspace\transformed\activity-1.13.0\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\3caf91ca31d531f038d26be33a73783c\workspace\transformed\activity-1.13.0\jars\classes.jar"
       resolved="androidx.activity:activity:1.13.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a844151ee4dffbd77cf7e23c8621a850\workspace\transformed\activity-1.13.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\3caf91ca31d531f038d26be33a73783c\workspace\transformed\activity-1.13.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -399,9 +412,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.activity:activity-compose:1.13.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\eafc293655fec868f97c9a19f0783d4e\workspace\transformed\activity-compose-1.13.0\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\5f9dffd007fe9cb7a3815d1a7b7887a4\workspace\transformed\activity-compose-1.13.0\jars\classes.jar"
       resolved="androidx.activity:activity-compose:1.13.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\eafc293655fec868f97c9a19f0783d4e\workspace\transformed\activity-compose-1.13.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\5f9dffd007fe9cb7a3815d1a7b7887a4\workspace\transformed\activity-compose-1.13.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -412,9 +425,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.core:core-ktx:1.18.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\932463f4a364d11292647195f35ee9fd\workspace\transformed\core-ktx-1.18.0\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\caa22889a3912adf28deae9a4a265a3a\workspace\transformed\core-ktx-1.18.0\jars\classes.jar"
       resolved="androidx.core:core-ktx:1.18.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\932463f4a364d11292647195f35ee9fd\workspace\transformed\core-ktx-1.18.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\caa22889a3912adf28deae9a4a265a3a\workspace\transformed\core-ktx-1.18.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -425,9 +438,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.navigationevent:navigationevent-android:1.0.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\f6349f43b9b9de39981967847bdd15c5\workspace\transformed\navigationevent\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a1a4eb12d097ea22afdd0c0064b8140a\workspace\transformed\navigationevent\jars\classes.jar"
       resolved="androidx.navigationevent:navigationevent-android:1.0.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\f6349f43b9b9de39981967847bdd15c5\workspace\transformed\navigationevent"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a1a4eb12d097ea22afdd0c0064b8140a\workspace\transformed\navigationevent"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -438,9 +451,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.navigationevent:navigationevent-compose-android:1.0.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\590616892f2a54246afdfa8437bb5e53\workspace\transformed\navigationevent-compose\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\0d9f7a4cd059126b986051fd1e6a083d\workspace\transformed\navigationevent-compose\jars\classes.jar"
       resolved="androidx.navigationevent:navigationevent-compose-android:1.0.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\590616892f2a54246afdfa8437bb5e53\workspace\transformed\navigationevent-compose"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\0d9f7a4cd059126b986051fd1e6a083d\workspace\transformed\navigationevent-compose"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -451,9 +464,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.runtime:runtime-saveable-android:1.9.2@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\3d64ad7d6e143860567e2f59efd992a6\workspace\transformed\runtime-saveable\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\24778ca4061a8f909437bf6154af49a9\workspace\transformed\runtime-saveable\jars\classes.jar"
       resolved="androidx.compose.runtime:runtime-saveable-android:1.9.2"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\3d64ad7d6e143860567e2f59efd992a6\workspace\transformed\runtime-saveable"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\24778ca4061a8f909437bf6154af49a9\workspace\transformed\runtime-saveable"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -464,9 +477,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.runtime:runtime-annotation-android:1.9.2@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\f1acf27b03126cdeb89be5396c2016fa\workspace\transformed\runtime-annotation\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\32d30c3c519c2b67c802d233a41f1e0a\workspace\transformed\runtime-annotation\jars\classes.jar"
       resolved="androidx.compose.runtime:runtime-annotation-android:1.9.2"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\f1acf27b03126cdeb89be5396c2016fa\workspace\transformed\runtime-annotation"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\32d30c3c519c2b67c802d233a41f1e0a\workspace\transformed\runtime-annotation"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -477,9 +490,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.savedstate:savedstate-android:1.4.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\1c0d067cb2e8b520921b844f3bcbd1e1\workspace\transformed\savedstate\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\e3c71180041695369744f6f65e41a133\workspace\transformed\savedstate\jars\classes.jar"
       resolved="androidx.savedstate:savedstate-android:1.4.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\1c0d067cb2e8b520921b844f3bcbd1e1\workspace\transformed\savedstate"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\e3c71180041695369744f6f65e41a133\workspace\transformed\savedstate"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -490,9 +503,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.savedstate:savedstate-compose-android:1.4.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a6e9e45900daf6f7949412e65c2a73cc\workspace\transformed\savedstate-compose\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\3253aef8cf326a8a500e68b468b4b149\workspace\transformed\savedstate-compose\jars\classes.jar"
       resolved="androidx.savedstate:savedstate-compose-android:1.4.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a6e9e45900daf6f7949412e65c2a73cc\workspace\transformed\savedstate-compose"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\3253aef8cf326a8a500e68b468b4b149\workspace\transformed\savedstate-compose"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -503,9 +516,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.runtime:runtime-android:1.9.2@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\984827f13e9246f707a6c8a03a9c1c9b\workspace\transformed\runtime\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\53bb0e1030ec04ad5b7e55f3ba2be7e4\workspace\transformed\runtime\jars\classes.jar"
       resolved="androidx.compose.runtime:runtime-android:1.9.2"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\984827f13e9246f707a6c8a03a9c1c9b\workspace\transformed\runtime"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\53bb0e1030ec04ad5b7e55f3ba2be7e4\workspace\transformed\runtime"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -523,10 +536,49 @@
       jars="C:\Users\DDWAN\.gradle\caches\modules-2\files-2.1\org.jetbrains.kotlinx\kotlinx-coroutines-android\1.9.0\6cf3b8df5a2ce8c6b0dffe55657a827c405ee2fe\kotlinx-coroutines-android-1.9.0.jar"
       resolved="org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0"/>
   <library
+      name="androidx.media3:media3-exoplayer:1.4.1@aar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\e22e2c19a4c53d51c14b0c1c2d011bc1\workspace\transformed\media3-exoplayer-1.4.1\jars\classes.jar"
+      resolved="androidx.media3:media3-exoplayer:1.4.1"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\e22e2c19a4c53d51c14b0c1c2d011bc1\workspace\transformed\media3-exoplayer-1.4.1"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
+      name="androidx.media3:media3-container:1.4.1@aar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\c7925e28306fdc85ee8e9726368c08c2\workspace\transformed\media3-container-1.4.1\jars\classes.jar"
+      resolved="androidx.media3:media3-container:1.4.1"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\c7925e28306fdc85ee8e9726368c08c2\workspace\transformed\media3-container-1.4.1"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
+      name="androidx.media3:media3-common:1.4.1@aar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ba1862a6767187f33406348800802be8\workspace\transformed\media3-common-1.4.1\jars\classes.jar"
+      resolved="androidx.media3:media3-common:1.4.1"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ba1862a6767187f33406348800802be8\workspace\transformed\media3-common-1.4.1"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
       name="androidx.annotation:annotation-experimental:1.4.1@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\2310952f47ac991065a400aeeb1c908b\workspace\transformed\annotation-experimental-1.4.1\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\1cfc8259dd9284df469d8f56f430879f\workspace\transformed\annotation-experimental-1.4.1\jars\classes.jar"
       resolved="androidx.annotation:annotation-experimental:1.4.1"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\2310952f47ac991065a400aeeb1c908b\workspace\transformed\annotation-experimental-1.4.1"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\1cfc8259dd9284df469d8f56f430879f\workspace\transformed\annotation-experimental-1.4.1"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -537,9 +589,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.core:core-viewtree:1.0.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\499df3a568c8f69cc8e5b4b1dd91da23\workspace\transformed\core-viewtree-1.0.0\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\6573655cd6a963feb007be7f732bb6c4\workspace\transformed\core-viewtree-1.0.0\jars\classes.jar"
       resolved="androidx.core:core-viewtree:1.0.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\499df3a568c8f69cc8e5b4b1dd91da23\workspace\transformed\core-viewtree-1.0.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\6573655cd6a963feb007be7f732bb6c4\workspace\transformed\core-viewtree-1.0.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -550,9 +602,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.versionedparcelable:versionedparcelable:1.1.1@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\d053fb86161969b4e66cb871d90c8918\workspace\transformed\versionedparcelable-1.1.1\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\08c2d9bdf28b1264ea70e71f05a8e678\workspace\transformed\versionedparcelable-1.1.1\jars\classes.jar"
       resolved="androidx.versionedparcelable:versionedparcelable:1.1.1"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\d053fb86161969b4e66cb871d90c8918\workspace\transformed\versionedparcelable-1.1.1"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\08c2d9bdf28b1264ea70e71f05a8e678\workspace\transformed\versionedparcelable-1.1.1"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -583,6 +635,19 @@
       jars="C:\Users\DDWAN\.gradle\caches\modules-2\files-2.1\org.jetbrains.kotlin\kotlin-stdlib\2.2.10\30de6faa127a4a012db8e71bf1b9c0a99b1402b2\kotlin-stdlib-2.2.10.jar"
       resolved="org.jetbrains.kotlin:kotlin-stdlib:2.2.10"/>
   <library
+      name="androidx.media3:media3-ui:1.4.1@aar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\f9d53172725d81dc8a0f3eba6e387bf3\workspace\transformed\media3-ui-1.4.1\jars\classes.jar"
+      resolved="androidx.media3:media3-ui:1.4.1"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\f9d53172725d81dc8a0f3eba6e387bf3\workspace\transformed\media3-ui-1.4.1"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
       name="junit:junit:4.13.2@jar"
       jars="C:\Users\DDWAN\.gradle\caches\modules-2\files-2.1\junit\junit\4.13.2\8ac9e16d933b6fb43bc7f576336b8f4d7eb5ba12\junit-4.13.2.jar"
       resolved="junit:junit:4.13.2"/>
@@ -591,22 +656,108 @@
       jars="C:\Users\DDWAN\.gradle\caches\modules-2\files-2.1\org.jetbrains\annotations\23.0.0\8cc20c07506ec18e0834947b84a864bfc094484e\annotations-23.0.0.jar"
       resolved="org.jetbrains:annotations:23.0.0"/>
   <library
+      name="androidx.media3:media3-datasource:1.4.1@aar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\db121df6fed420ccbf53ec8caf8a3f53\workspace\transformed\media3-datasource-1.4.1\jars\classes.jar"
+      resolved="androidx.media3:media3-datasource:1.4.1"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\db121df6fed420ccbf53ec8caf8a3f53\workspace\transformed\media3-datasource-1.4.1"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
+      name="androidx.media3:media3-decoder:1.4.1@aar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\92e5b1a5efde591c2f70361212734fa2\workspace\transformed\media3-decoder-1.4.1\jars\classes.jar"
+      resolved="androidx.media3:media3-decoder:1.4.1"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\92e5b1a5efde591c2f70361212734fa2\workspace\transformed\media3-decoder-1.4.1"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
+      name="androidx.media3:media3-extractor:1.4.1@aar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\434d4558e7c6757af01925f9be9c4556\workspace\transformed\media3-extractor-1.4.1\jars\classes.jar"
+      resolved="androidx.media3:media3-extractor:1.4.1"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\434d4558e7c6757af01925f9be9c4556\workspace\transformed\media3-extractor-1.4.1"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
+      name="androidx.media3:media3-database:1.4.1@aar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\0b7eb11daaa1cc85445b7c3724c55e95\workspace\transformed\media3-database-1.4.1\jars\classes.jar"
+      resolved="androidx.media3:media3-database:1.4.1"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\0b7eb11daaa1cc85445b7c3724c55e95\workspace\transformed\media3-database-1.4.1"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
       name="org.hamcrest:hamcrest-core:1.3@jar"
       jars="C:\Users\DDWAN\.gradle\caches\modules-2\files-2.1\org.hamcrest\hamcrest-core\1.3\42a25dc3219429f0e5d060061f71acb49bf010a0\hamcrest-core-1.3.jar"
       resolved="org.hamcrest:hamcrest-core:1.3"/>
   <library
-      name="com.google.guava:listenablefuture:1.0@jar"
-      jars="C:\Users\DDWAN\.gradle\caches\modules-2\files-2.1\com.google.guava\listenablefuture\1.0\c949a840a6acbc5268d088e47b04177bf90b3cad\listenablefuture-1.0.jar"
-      resolved="com.google.guava:listenablefuture:1.0"/>
+      name="com.google.guava:guava:33.0.0-android@jar"
+      jars="C:\Users\DDWAN\.gradle\caches\modules-2\files-2.1\com.google.guava\guava\33.0.0-android\cfbbdc54f232feedb85746aeeea0722f5244bb9a\guava-33.0.0-android.jar"
+      resolved="com.google.guava:guava:33.0.0-android"/>
+  <library
+      name="com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava@jar"
+      jars="C:\Users\DDWAN\.gradle\caches\modules-2\files-2.1\com.google.guava\listenablefuture\9999.0-empty-to-avoid-conflict-with-guava\b421526c5f297295adef1c886e5246c39d4ac629\listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar"
+      resolved="com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava"/>
   <library
       name="org.jspecify:jspecify:1.0.0@jar"
       jars="C:\Users\DDWAN\.gradle\caches\modules-2\files-2.1\org.jspecify\jspecify\1.0.0\7425a601c1c7ec76645a78d22b8c6a627edee507\jspecify-1.0.0.jar"
       resolved="org.jspecify:jspecify:1.0.0"/>
   <library
-      name="__local_aars__:D:\Code\clipy\export\libs\ffmpeg-kit-full-gpl-5.1.LTS-16K-full.aar:unspecified@jar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\546eded5bef77728d14cc344bb2b31ec\workspace\transformed\ffmpeg-kit-full-gpl-5.1.LTS-16K-full\jars\classes.jar"
-      resolved="__local_aars__:D:\Code\clipy\export\libs\ffmpeg-kit-full-gpl-5.1.LTS-16K-full.aar:unspecified"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\546eded5bef77728d14cc344bb2b31ec\workspace\transformed\ffmpeg-kit-full-gpl-5.1.LTS-16K-full"
+      name="com.google.guava:failureaccess:1.0.2@jar"
+      jars="C:\Users\DDWAN\.gradle\caches\modules-2\files-2.1\com.google.guava\failureaccess\1.0.2\c4a06a64e650562f30b7bf9aaec1bfed43aca12b\failureaccess-1.0.2.jar"
+      resolved="com.google.guava:failureaccess:1.0.2"/>
+  <library
+      name="androidx.media:media:1.7.0@aar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\01d84e9de7f912226f0d5429401807a4\workspace\transformed\media-1.7.0\jars\classes.jar"
+      resolved="androidx.media:media:1.7.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\01d84e9de7f912226f0d5429401807a4\workspace\transformed\media-1.7.0"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
+      name="androidx.recyclerview:recyclerview:1.3.0@aar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\974500a08270a4d00006b3862a131a09\workspace\transformed\recyclerview-1.3.0\jars\classes.jar"
+      resolved="androidx.recyclerview:recyclerview:1.3.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\974500a08270a4d00006b3862a131a09\workspace\transformed\recyclerview-1.3.0"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
+      name="androidx.customview:customview:1.0.0@aar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\d9e8578cd31edbdfc3a4fbb82beb190f\workspace\transformed\customview-1.0.0\jars\classes.jar"
+      resolved="androidx.customview:customview:1.0.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\d9e8578cd31edbdfc3a4fbb82beb190f\workspace\transformed\customview-1.0.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -617,9 +768,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.autofill:autofill:1.0.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\67ed1dcae73f4195f85d508f90773c7e\workspace\transformed\autofill-1.0.0\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\71d98e7c67b64904956c42f8a67d6839\workspace\transformed\autofill-1.0.0\jars\classes.jar"
       resolved="androidx.autofill:autofill:1.0.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\67ed1dcae73f4195f85d508f90773c7e\workspace\transformed\autofill-1.0.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\71d98e7c67b64904956c42f8a67d6839\workspace\transformed\autofill-1.0.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -630,9 +781,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.foundation:foundation-android:1.9.2@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\94ee6abd0d7be1fd545a1b393758583d\workspace\transformed\foundation-release\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\71509cc4294f6e81fd37a3f7436d52ed\workspace\transformed\foundation-release\jars\classes.jar"
       resolved="androidx.compose.foundation:foundation-android:1.9.2"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\94ee6abd0d7be1fd545a1b393758583d\workspace\transformed\foundation-release"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\71509cc4294f6e81fd37a3f7436d52ed\workspace\transformed\foundation-release"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -643,9 +794,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.foundation:foundation-layout-android:1.9.2@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\f26f700e272c755d1c4133ae1ba0c45a\workspace\transformed\foundation-layout\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ece634b8413d885df1608375c5418c0a\workspace\transformed\foundation-layout\jars\classes.jar"
       resolved="androidx.compose.foundation:foundation-layout-android:1.9.2"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\f26f700e272c755d1c4133ae1ba0c45a\workspace\transformed\foundation-layout"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ece634b8413d885df1608375c5418c0a\workspace\transformed\foundation-layout"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -656,9 +807,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.animation:animation-core-android:1.9.2@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\c49252198c9a508e7064a82e4be394d1\workspace\transformed\animation-core\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\0cde0509221c5b27f090ab56ef2c3b44\workspace\transformed\animation-core\jars\classes.jar"
       resolved="androidx.compose.animation:animation-core-android:1.9.2"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\c49252198c9a508e7064a82e4be394d1\workspace\transformed\animation-core"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\0cde0509221c5b27f090ab56ef2c3b44\workspace\transformed\animation-core"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -669,9 +820,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.animation:animation-android:1.9.2@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\89ca95362253af12a27c942d76f044c3\workspace\transformed\animation\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\f9674c2c6d8668925d38f5b69c8b4320\workspace\transformed\animation\jars\classes.jar"
       resolved="androidx.compose.animation:animation-android:1.9.2"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\89ca95362253af12a27c942d76f044c3\workspace\transformed\animation"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\f9674c2c6d8668925d38f5b69c8b4320\workspace\transformed\animation"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -682,9 +833,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-tooling-data-android:1.9.2@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\b28d8f9d7473115c539a89a38fa81763\workspace\transformed\ui-tooling-data\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\78aae807cc8065bdde6afe2ef5892cee\workspace\transformed\ui-tooling-data\jars\classes.jar"
       resolved="androidx.compose.ui:ui-tooling-data-android:1.9.2"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\b28d8f9d7473115c539a89a38fa81763\workspace\transformed\ui-tooling-data"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\78aae807cc8065bdde6afe2ef5892cee\workspace\transformed\ui-tooling-data"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -695,9 +846,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-geometry-android:1.9.2@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a288e8cdf39b7a9ff6d3a5ff52597481\workspace\transformed\ui-geometry\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\5e086013ed9e3bcc3edca0f7bb6e5d7a\workspace\transformed\ui-geometry\jars\classes.jar"
       resolved="androidx.compose.ui:ui-geometry-android:1.9.2"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a288e8cdf39b7a9ff6d3a5ff52597481\workspace\transformed\ui-geometry"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\5e086013ed9e3bcc3edca0f7bb6e5d7a\workspace\transformed\ui-geometry"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -708,9 +859,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-tooling-preview-android:1.9.2@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\d3b88e1cd459b4f86804dace75c26f9d\workspace\transformed\ui-tooling-preview\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\78cdec4e0878542b895ea626715c2e09\workspace\transformed\ui-tooling-preview\jars\classes.jar"
       resolved="androidx.compose.ui:ui-tooling-preview-android:1.9.2"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\d3b88e1cd459b4f86804dace75c26f9d\workspace\transformed\ui-tooling-preview"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\78cdec4e0878542b895ea626715c2e09\workspace\transformed\ui-tooling-preview"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -721,9 +872,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-tooling-android:1.9.2@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\bd573ee57daf43831d9b68cfab0c10c1\workspace\transformed\ui-tooling\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\410d263b06f293d9b1205ca5add264b7\workspace\transformed\ui-tooling\jars\classes.jar"
       resolved="androidx.compose.ui:ui-tooling-android:1.9.2"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\bd573ee57daf43831d9b68cfab0c10c1\workspace\transformed\ui-tooling"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\410d263b06f293d9b1205ca5add264b7\workspace\transformed\ui-tooling"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -734,9 +885,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.material:material-android:1.7.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\43b97173d7ef3c9a3c38f9e726c31e9c\workspace\transformed\material-release\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\2cf0ce156fd509eb045106b336668222\workspace\transformed\material-release\jars\classes.jar"
       resolved="androidx.compose.material:material-android:1.7.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\43b97173d7ef3c9a3c38f9e726c31e9c\workspace\transformed\material-release"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\2cf0ce156fd509eb045106b336668222\workspace\transformed\material-release"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -747,9 +898,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-util-android:1.9.2@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\46d89cbf2e44df4b2d187aa609799df2\workspace\transformed\ui-util\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a4fcf5e1f4258a6d56eacd93cfba567a\workspace\transformed\ui-util\jars\classes.jar"
       resolved="androidx.compose.ui:ui-util-android:1.9.2"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\46d89cbf2e44df4b2d187aa609799df2\workspace\transformed\ui-util"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a4fcf5e1f4258a6d56eacd93cfba567a\workspace\transformed\ui-util"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -760,9 +911,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-unit-android:1.9.2@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\c13307623d90c9f89a39609483cbb640\workspace\transformed\ui-unit\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\4ccfbad23531631c8dba6d7a9ae0c945\workspace\transformed\ui-unit\jars\classes.jar"
       resolved="androidx.compose.ui:ui-unit-android:1.9.2"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\c13307623d90c9f89a39609483cbb640\workspace\transformed\ui-unit"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\4ccfbad23531631c8dba6d7a9ae0c945\workspace\transformed\ui-unit"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -773,9 +924,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-text-android:1.9.2@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\93f2e2db6fd36cdff0bc80cded1f3ac3\workspace\transformed\ui-text\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\5f89983a0adab6e12c680cc5b7162525\workspace\transformed\ui-text\jars\classes.jar"
       resolved="androidx.compose.ui:ui-text-android:1.9.2"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\93f2e2db6fd36cdff0bc80cded1f3ac3\workspace\transformed\ui-text"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\5f89983a0adab6e12c680cc5b7162525\workspace\transformed\ui-text"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -786,9 +937,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-graphics-android:1.9.2@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\381fb2fda516b87ecd41c8507a175aa0\workspace\transformed\ui-graphics-release\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\60e4023e1dc33e83849239569f2eb4a4\workspace\transformed\ui-graphics-release\jars\classes.jar"
       resolved="androidx.compose.ui:ui-graphics-android:1.9.2"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\381fb2fda516b87ecd41c8507a175aa0\workspace\transformed\ui-graphics-release"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\60e4023e1dc33e83849239569f2eb4a4\workspace\transformed\ui-graphics-release"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -799,9 +950,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.graphics:graphics-path:1.0.1@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\cb6aafd87cbbe64e8a08f750696a3f76\workspace\transformed\graphics-path-1.0.1\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\329c1e3c4ceade87f07a964168c01961\workspace\transformed\graphics-path-1.0.1\jars\classes.jar"
       resolved="androidx.graphics:graphics-path:1.0.1"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\cb6aafd87cbbe64e8a08f750696a3f76\workspace\transformed\graphics-path-1.0.1"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\329c1e3c4ceade87f07a964168c01961\workspace\transformed\graphics-path-1.0.1"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -812,9 +963,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.emoji2:emoji2:1.4.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\393d1f4a5bfad36163f6327adf94ee77\workspace\transformed\emoji2-1.4.0\jars\classes.jar;C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\393d1f4a5bfad36163f6327adf94ee77\workspace\transformed\emoji2-1.4.0\jars\libs\repackaged.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\99af7cf901c19d32a7b998ce2122b341\workspace\transformed\emoji2-1.4.0\jars\classes.jar;C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\99af7cf901c19d32a7b998ce2122b341\workspace\transformed\emoji2-1.4.0\jars\libs\repackaged.jar"
       resolved="androidx.emoji2:emoji2:1.4.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\393d1f4a5bfad36163f6327adf94ee77\workspace\transformed\emoji2-1.4.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\99af7cf901c19d32a7b998ce2122b341\workspace\transformed\emoji2-1.4.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -825,9 +976,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.lifecycle:lifecycle-process:2.10.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\fdc8a194330ebb4379aa0891954e842e\workspace\transformed\lifecycle-process-2.10.0\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\9cd44c21a21187afc24391fe10fca792\workspace\transformed\lifecycle-process-2.10.0\jars\classes.jar"
       resolved="androidx.lifecycle:lifecycle-process:2.10.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\fdc8a194330ebb4379aa0891954e842e\workspace\transformed\lifecycle-process-2.10.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\9cd44c21a21187afc24391fe10fca792\workspace\transformed\lifecycle-process-2.10.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -842,9 +993,9 @@
       resolved="androidx.lifecycle:lifecycle-common-java8:2.10.0"/>
   <library
       name="androidx.activity:activity-ktx:1.13.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\05ffa6af22e1d566a7099ee1117120d7\workspace\transformed\activity-ktx-1.13.0\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\4f7e187282f6007bb3385768a6fce479\workspace\transformed\activity-ktx-1.13.0\jars\classes.jar"
       resolved="androidx.activity:activity-ktx:1.13.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\05ffa6af22e1d566a7099ee1117120d7\workspace\transformed\activity-ktx-1.13.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\4f7e187282f6007bb3385768a6fce479\workspace\transformed\activity-ktx-1.13.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -855,9 +1006,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.savedstate:savedstate-ktx:1.4.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\3c275a1a04c962ce609827c3dcaf61b4\workspace\transformed\savedstate-ktx-1.4.0\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ad25ccb50d47c2a99cac8e18f350552c\workspace\transformed\savedstate-ktx-1.4.0\jars\classes.jar"
       resolved="androidx.savedstate:savedstate-ktx:1.4.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\3c275a1a04c962ce609827c3dcaf61b4\workspace\transformed\savedstate-ktx-1.4.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ad25ccb50d47c2a99cac8e18f350552c\workspace\transformed\savedstate-ktx-1.4.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -868,9 +1019,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-android:1.9.2@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a9bdc60b5a845ee2b93ca3bfee536088\workspace\transformed\ui-release\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\cd56dd713793a8092092cd847367d06e\workspace\transformed\ui-release\jars\classes.jar"
       resolved="androidx.compose.ui:ui-android:1.9.2"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a9bdc60b5a845ee2b93ca3bfee536088\workspace\transformed\ui-release"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\cd56dd713793a8092092cd847367d06e\workspace\transformed\ui-release"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -881,9 +1032,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.compose.ui:ui-test-manifest:1.9.2@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ce057b67e04968f83657653dc515675f\workspace\transformed\ui-test-manifest-1.9.2\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\2fe8d37ea4f723b57030632bc0c5e67c\workspace\transformed\ui-test-manifest-1.9.2\jars\classes.jar"
       resolved="androidx.compose.ui:ui-test-manifest:1.9.2"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ce057b67e04968f83657653dc515675f\workspace\transformed\ui-test-manifest-1.9.2"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\2fe8d37ea4f723b57030632bc0c5e67c\workspace\transformed\ui-test-manifest-1.9.2"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -894,9 +1045,22 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.customview:customview-poolingcontainer:1.0.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\5287cb3d2d04b4fa17b8d588351ee40a\workspace\transformed\customview-poolingcontainer-1.0.0\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\04012ee8b576c53ede9df1d7c4b4a793\workspace\transformed\customview-poolingcontainer-1.0.0\jars\classes.jar"
       resolved="androidx.customview:customview-poolingcontainer:1.0.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\5287cb3d2d04b4fa17b8d588351ee40a\workspace\transformed\customview-poolingcontainer-1.0.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\04012ee8b576c53ede9df1d7c4b4a793\workspace\transformed\customview-poolingcontainer-1.0.0"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
+      name="androidx.exifinterface:exifinterface:1.3.6@aar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\f18432a71c511d08e21cb182799479a0\workspace\transformed\exifinterface-1.3.6\jars\classes.jar"
+      resolved="androidx.exifinterface:exifinterface:1.3.6"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\f18432a71c511d08e21cb182799479a0\workspace\transformed\exifinterface-1.3.6"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -907,9 +1071,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.interpolator:interpolator:1.0.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ba595cf77bd2d50b3bc9d3a08c6ed7d8\workspace\transformed\interpolator-1.0.0\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a240593465d13a18f20f92d74d3d10c5\workspace\transformed\interpolator-1.0.0\jars\classes.jar"
       resolved="androidx.interpolator:interpolator:1.0.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ba595cf77bd2d50b3bc9d3a08c6ed7d8\workspace\transformed\interpolator-1.0.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a240593465d13a18f20f92d74d3d10c5\workspace\transformed\interpolator-1.0.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -920,9 +1084,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.profileinstaller:profileinstaller:1.4.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ebd8cecefd578cb09a28ac29da10d7ae\workspace\transformed\profileinstaller-1.4.0\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\f5fae916459c75dd8ab09c75e997b3b9\workspace\transformed\profileinstaller-1.4.0\jars\classes.jar"
       resolved="androidx.profileinstaller:profileinstaller:1.4.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\ebd8cecefd578cb09a28ac29da10d7ae\workspace\transformed\profileinstaller-1.4.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\f5fae916459c75dd8ab09c75e997b3b9\workspace\transformed\profileinstaller-1.4.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -933,9 +1097,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.startup:startup-runtime:1.1.1@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\1a46d866a4e28489591dfe5e4ec365f1\workspace\transformed\startup-runtime-1.1.1\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\8be38f6b901d145ca3100f3e79d8d355\workspace\transformed\startup-runtime-1.1.1\jars\classes.jar"
       resolved="androidx.startup:startup-runtime:1.1.1"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\1a46d866a4e28489591dfe5e4ec365f1\workspace\transformed\startup-runtime-1.1.1"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\8be38f6b901d145ca3100f3e79d8d355\workspace\transformed\startup-runtime-1.1.1"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -946,9 +1110,9 @@
       proguardRules="proguard.txt"/>
   <library
       name="androidx.tracing:tracing:1.2.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\d33af8ce32f029de42ec42eb2b84d7c6\workspace\transformed\tracing-1.2.0\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\1c8e02c7f91736dfa6af1ba700f10aad\workspace\transformed\tracing-1.2.0\jars\classes.jar"
       resolved="androidx.tracing:tracing:1.2.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\d33af8ce32f029de42ec42eb2b84d7c6\workspace\transformed\tracing-1.2.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\1c8e02c7f91736dfa6af1ba700f10aad\workspace\transformed\tracing-1.2.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -963,9 +1127,9 @@
       resolved="androidx.concurrent:concurrent-futures:1.1.0"/>
   <library
       name="androidx.arch.core:core-runtime:2.2.0@aar"
-      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\c16300ca4b8545ebed9d5c5f72281c67\workspace\transformed\core-runtime-2.2.0\jars\classes.jar"
+      jars="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a1c9d16ef0a5b5ed61dcf72b1fe7bffe\workspace\transformed\core-runtime-2.2.0\jars\classes.jar"
       resolved="androidx.arch.core:core-runtime:2.2.0"
-      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\c16300ca4b8545ebed9d5c5f72281c67\workspace\transformed\core-runtime-2.2.0"
+      folder="C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\a1c9d16ef0a5b5ed61dcf72b1fe7bffe\workspace\transformed\core-runtime-2.2.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -982,4 +1146,12 @@
       name="androidx.collection:collection-jvm:1.5.0@jar"
       jars="C:\Users\DDWAN\.gradle\caches\modules-2\files-2.1\androidx.collection\collection-jvm\1.5.0\7ba2c69414d46ebc2dd76598bdd0a75c54281a57\collection-jvm-1.5.0.jar"
       resolved="androidx.collection:collection-jvm:1.5.0"/>
+  <library
+      name="com.arthenica:smart-exception-java:0.2.1@jar"
+      jars="C:\Users\DDWAN\.gradle\caches\modules-2\files-2.1\com.arthenica\smart-exception-java\0.2.1\2c680aa8cf7ef84fa63cb6c7c1fa4a1fe1359821\smart-exception-java-0.2.1.jar"
+      resolved="com.arthenica:smart-exception-java:0.2.1"/>
+  <library
+      name="com.arthenica:smart-exception-common:0.2.1@jar"
+      jars="C:\Users\DDWAN\.gradle\caches\modules-2\files-2.1\com.arthenica\smart-exception-common\0.2.1\b8c705037c485302d1f331bc30e7b72f9642b0e1\smart-exception-common-0.2.1.jar"
+      resolved="com.arthenica:smart-exception-common:0.2.1"/>
 </libraries>

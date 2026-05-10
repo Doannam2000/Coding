@@ -1,5 +1,9 @@
 [
     {
+        "merged": "com.nantcompany.clipy.app-debug-38:/xml_file_paths.xml.flat",
+        "source": "com.nantcompany.clipy.app-main-40:/xml/file_paths.xml"
+    },
+    {
         "merged": "com.nantcompany.clipy.app-debug-38:/drawable_ic_launcher_foreground.xml.flat",
         "source": "com.nantcompany.clipy.app-main-40:/drawable/ic_launcher_foreground.xml"
     },

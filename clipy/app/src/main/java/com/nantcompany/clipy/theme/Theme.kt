@@ -11,7 +11,8 @@ private val DarkColorScheme = darkColorScheme(
     secondary = ClipyDarkSecondary,
     background = ClipyDarkBackground,
     surface = ClipyDarkSurface,
-    onSurface = ClipyDarkOnSurface
+    onSurface = ClipyDarkOnSurface,
+    error = ClipyDesignTokens.error
 )
 
 private val LightColorScheme = lightColorScheme(

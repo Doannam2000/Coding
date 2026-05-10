@@ -6,6 +6,8 @@ import android.provider.OpenableColumns
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 object MediaFileUtils {
@@ -41,11 +43,24 @@ object MediaFileUtils {
         extension: String
     ): String {
         val outputDir = File(context.filesDir, "outputs").apply { mkdirs() }
-        val safeOp = operation.lowercase(Locale.US).replace("[^a-z0-9-_]".toRegex(), "_")
-        return File(
-            outputDir,
-            "clipy_${safeOp}_${System.currentTimeMillis()}.$extension"
-        ).absolutePath
+        val suffix = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val normalized = operation.trim().lowercase(Locale.US)
+        val label = when (normalized) {
+            "cut" -> "Cut"
+            "compress" -> "Compress"
+            "merge" -> "Merge"
+            "extractaudio", "extract_audio", "extract-audio" -> "Audio"
+            "slideshow" -> "Slideshow"
+            else -> normalized
+                .replace(Regex("[^a-z0-9]+"), " ")
+                .split(' ')
+                .filter { it.isNotBlank() }
+                .joinToString(separator = "") { part ->
+                    part.replaceFirstChar { it.uppercase(Locale.US) }
+                }
+                .ifBlank { "Output" }
+        }
+        return File(outputDir, "Clipy_${label}_${suffix}.${extension.lowercase(Locale.US)}").absolutePath
     }
 
     private fun queryDisplayName(context: Context, uri: Uri): String? {

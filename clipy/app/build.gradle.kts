@@ -42,6 +42,7 @@ android {
 dependencies {
     implementation(project(":edit"))
     implementation(project(":export"))
+    implementation(files("../export/libs/ffmpeg-kit-full-gpl-5.1.LTS-16K-full.aar"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)

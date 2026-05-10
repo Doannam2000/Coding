@@ -35,10 +35,10 @@ class ProcessingJobManager(
         val firstPlan = try {
             buildExecutionPlan(request, preciseCut = false, mergeReencode = false)
         } catch (error: Throwable) {
-            return ProcessEvent.Failed(error)
+            return ProcessEvent.Failed(asFriendlyError(error))
         }
 
-        val firstResult = executePlan(firstPlan, outputFile, totalDurationMs, progressCallback)
+        val firstResult = executePlan(request, firstPlan, outputFile, totalDurationMs, progressCallback)
         if (firstResult is ProcessEvent.Failed && !cancelled) {
             val retryPlan = when (request) {
                 is ProcessingRequest.Cut -> runCatching {
@@ -52,7 +52,7 @@ class ProcessingJobManager(
                 else -> null
             }
             if (retryPlan != null) {
-                return executePlan(retryPlan, outputFile, totalDurationMs, progressCallback)
+                return executePlan(request, retryPlan, outputFile, totalDurationMs, progressCallback)
             }
         }
 
@@ -60,6 +60,7 @@ class ProcessingJobManager(
     }
 
     private fun executePlan(
+        request: ProcessingRequest,
         plan: ExecutionPlan,
         outputFile: File,
         totalDurationMs: Long,
@@ -76,22 +77,27 @@ class ProcessingJobManager(
                         cancelled -> ProcessEvent.Cancelled
                         ReturnCode.isCancel(session.returnCode) -> ProcessEvent.Cancelled
                         ReturnCode.isSuccess(session.returnCode) -> {
-                            val output = OutputMedia(
-                                id = UUID.randomUUID().toString(),
-                                fileName = outputFile.name,
-                                path = outputFile.absolutePath,
-                                sizeInBytes = outputFile.length(),
-                                operation = plan.operation
-                            )
-                            outputRepository.save(output)
-                            ProcessEvent.Completed(output)
+                            val expectedExtension = expectedOutputExtension(request)
+                            val actualExtension = outputFile.extension.lowercase()
+                            if (!outputFile.exists() || outputFile.length() <= 0L) {
+                                ProcessEvent.Failed(IllegalStateException("The output file could not be created."))
+                            } else if (actualExtension != expectedExtension) {
+                                ProcessEvent.Failed(IllegalStateException("Output file extension mismatch."))
+                            } else {
+                                val output = OutputMedia(
+                                    id = UUID.randomUUID().toString(),
+                                    fileName = outputFile.name,
+                                    path = outputFile.absolutePath,
+                                    sizeInBytes = outputFile.length(),
+                                    operation = plan.operation
+                                )
+                                outputRepository.save(output)
+                                ProcessEvent.Completed(output)
+                            }
                         }
 
                         else -> {
-                            val details = session.failStackTrace
-                                ?: session.allLogsAsString
-                                ?: "Unknown FFmpeg error"
-                            ProcessEvent.Failed(IllegalStateException(details))
+                            ProcessEvent.Failed(asFriendlyError(IllegalStateException("Export failed. Please try another file.")))
                         }
                     }
                     resultRef.set(result)
@@ -105,7 +111,12 @@ class ProcessingJobManager(
                     } else {
                         20
                     }
-                    val status = if (plan.operation.startsWith("merge")) "Merging clips..." else "Running FFmpeg..."
+                    val status = when {
+                        percent < 15 -> "Reading media"
+                        percent < 70 -> "Processing"
+                        percent < 90 -> "Writing file"
+                        else -> "Finalizing"
+                    }
                     progressCallback?.onProgress(
                         ProcessEvent.Progress(
                             percent = percent,
@@ -122,9 +133,9 @@ class ProcessingJobManager(
                 }
             }
 
-            resultRef.get() ?: ProcessEvent.Failed(IllegalStateException("FFmpeg session ended without result"))
+            resultRef.get() ?: ProcessEvent.Failed(asFriendlyError(IllegalStateException("FFmpeg session ended without result")))
         } catch (error: Throwable) {
-            ProcessEvent.Failed(error)
+            ProcessEvent.Failed(asFriendlyError(error))
         } finally {
             plan.tempFiles.forEach { temp ->
                 runCatching { temp.delete() }
@@ -135,6 +146,29 @@ class ProcessingJobManager(
     fun cancelProcessing() {
         cancelled = true
         FFmpegKit.cancel()
+    }
+
+    private fun expectedOutputExtension(request: ProcessingRequest): String {
+        return when (request) {
+            is ProcessingRequest.Cut,
+            is ProcessingRequest.Compress,
+            is ProcessingRequest.Merge,
+            is ProcessingRequest.Slideshow -> "mp4"
+            is ProcessingRequest.ExtractAudio -> request.request.format.lowercase()
+        }
+    }
+
+    private fun asFriendlyError(error: Throwable): IllegalStateException {
+        val raw = error.message.orEmpty()
+        val message = when {
+            raw.contains("No such file", ignoreCase = true) || raw.contains("not found", ignoreCase = true) -> "Could not read file."
+            raw.contains("Invalid data", ignoreCase = true) || raw.contains("unsupported", ignoreCase = true) -> "Format not supported."
+            raw.contains("No space", ignoreCase = true) || raw.contains("ENOSPC", ignoreCase = true) -> "Not enough storage."
+            raw.contains("audio", ignoreCase = true) && raw.contains("not", ignoreCase = true) && raw.contains("found", ignoreCase = true) -> "Audio track not found."
+            raw.contains("output file", ignoreCase = true) || raw.contains("could not be created", ignoreCase = true) -> "Output file could not be created."
+            else -> "Export failed. Please try another file."
+        }
+        return IllegalStateException(message)
     }
 
     private fun buildExecutionPlan(
@@ -171,16 +205,23 @@ class ProcessingJobManager(
             }
 
             is ProcessingRequest.Compress -> {
+                val args = mutableListOf(
+                    "-y", "-i", request.request.inputPath,
+                    "-b:v", "${request.request.bitrateKbps}k",
+                    "-c:v", "libx264",
+                    "-preset", "medium"
+                )
+                request.request.targetHeight?.let { height ->
+                    args.addAll(listOf("-vf", "scale=-2:$height"))
+                }
+                if (request.request.keepAudio) {
+                    args.addAll(listOf("-c:a", "aac", "-b:a", "128k"))
+                } else {
+                    args.add("-an")
+                }
+                args.add(request.outputPath)
                 ExecutionPlan(
-                    arguments = listOf(
-                        "-y", "-i", request.request.inputPath,
-                        "-b:v", "${request.request.bitrateKbps}k",
-                        "-c:v", "libx264",
-                        "-preset", "medium",
-                        "-c:a", "aac",
-                        "-b:a", "128k",
-                        request.outputPath
-                    ),
+                    arguments = args,
                     operation = "compress"
                 )
             }
@@ -225,7 +266,7 @@ class ProcessingJobManager(
                 ExecutionPlan(
                     arguments = listOf(
                         "-y", "-i", request.request.inputPath,
-                        "-vn", "-c:a", codec,
+                        "-vn", "-c:a", codec, "-b:a", "${request.request.bitrateKbps}k",
                         request.outputPath
                     ),
                     operation = "extract-audio"

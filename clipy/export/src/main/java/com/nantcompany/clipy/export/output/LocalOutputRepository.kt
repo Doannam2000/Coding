@@ -32,6 +32,26 @@ class LocalOutputRepository {
         }
     }
 
+    fun removeById(id: String) {
+        synchronized(lock) {
+            val current = readFromDisk().toMutableList()
+            current.removeAll { it.id == id }
+            store.clear()
+            store.addAll(current)
+            runCatching { writeToDisk(current) }
+        }
+    }
+
+    fun removeByPath(path: String) {
+        synchronized(lock) {
+            val current = readFromDisk().toMutableList()
+            current.removeAll { it.path == path }
+            store.clear()
+            store.addAll(current)
+            runCatching { writeToDisk(current) }
+        }
+    }
+
     private fun readFromDisk(): List<OutputMedia> {
         val file = storageFile
         if (!file.exists()) return emptyList()

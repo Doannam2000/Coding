@@ -904,3 +904,4 @@ int styleable RecyclerView_spanCount 10
 int styleable RecyclerView_stackFromEnd 11
 int xml backup_rules 0x7f100000
 int xml data_extraction_rules 0x7f100001
+int xml file_paths 0x7f100002

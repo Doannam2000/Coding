@@ -1,6 +1,7 @@
 package com.nantcompany.clipy.player
 
 import android.net.Uri
+import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -35,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.nantcompany.clipy.navigation.AppRoute
@@ -42,6 +44,7 @@ import java.io.File
 import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalContext
 
+@OptIn(markerClass = [UnstableApi::class])
 @Composable
 fun VideoPlayerScreen(
     videoPath: String?,

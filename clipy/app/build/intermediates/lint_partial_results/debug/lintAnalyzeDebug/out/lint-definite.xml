@@ -78,6 +78,46 @@
     </incident>
 
     <incident
+        id="GradleDependency"
+        severity="warning"
+        message="A newer version of androidx.media3:media3-exoplayer than 1.4.1 is available: 1.10.0">
+        <fix-replace
+            description="Change to 1.10.0"
+            family="Update versions"
+            oldString="1.4.1"
+            replacement="1.10.0"
+            priority="0"/>
+        <location
+            file="../gradle/libs.versions.toml"
+            line="11"
+            column="10"
+            startOffset="228"
+            endLine="11"
+            endColumn="17"
+            endOffset="235"/>
+    </incident>
+
+    <incident
+        id="GradleDependency"
+        severity="warning"
+        message="A newer version of androidx.media3:media3-ui than 1.4.1 is available: 1.10.0">
+        <fix-replace
+            description="Change to 1.10.0"
+            family="Update versions"
+            oldString="1.4.1"
+            replacement="1.10.0"
+            priority="0"/>
+        <location
+            file="../gradle/libs.versions.toml"
+            line="11"
+            column="10"
+            startOffset="228"
+            endLine="11"
+            endColumn="17"
+            endOffset="235"/>
+    </incident>
+
+    <incident
         id="NewerVersionAvailable"
         severity="warning"
         message="A newer version of org.jetbrains.kotlin.android than 2.0.21 is available: 2.3.21">
@@ -115,6 +155,30 @@
             endLine="9"
             endColumn="18"
             endOffset="190"/>
+    </incident>
+
+    <incident
+        id="AutoboxingStateCreation"
+        severity="informational"
+        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`">
+        <fix-replace
+            description="Replace with mutableIntStateOf"
+            replacement="androidx.compose.runtime.mutableIntStateOf"
+            shortenNames="true"
+            priority="0">
+            <range
+                file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/nantcompany/clipy/tools/compress/CompressVideoScreen.kt"
+                startOffset="2971"
+                endOffset="2985"/>
+        </fix-replace>
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/nantcompany/clipy/tools/compress/CompressVideoScreen.kt"
+            line="77"
+            column="43"
+            startOffset="2971"
+            endLine="77"
+            endColumn="57"
+            endOffset="2985"/>
     </incident>
 
     <incident

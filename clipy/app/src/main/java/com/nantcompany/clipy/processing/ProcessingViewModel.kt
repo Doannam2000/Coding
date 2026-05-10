@@ -12,9 +12,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+enum class ProcessingPhase {
+    Idle,
+    Preparing,
+    Processing,
+    Success,
+    Failed,
+    Cancelled
+}
+
 data class ProcessingUiState(
     val progressPercent: Int = 0,
     val statusText: String = "Idle",
+    val phase: ProcessingPhase = ProcessingPhase.Idle,
     val isRunning: Boolean = false,
     val errorMessage: String? = null,
     val isCompleted: Boolean = false,
@@ -45,6 +55,7 @@ class ProcessingViewModel(
         _uiState.value = ProcessingUiState(
             progressPercent = 5,
             statusText = "Preparing job...",
+            phase = ProcessingPhase.Preparing,
             isRunning = true,
             activeRequest = request
         )
@@ -52,7 +63,8 @@ class ProcessingViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.value = _uiState.value.copy(
                 progressPercent = 10,
-                statusText = "Preparing..."
+                statusText = "Preparing...",
+                phase = ProcessingPhase.Preparing
             )
 
             when (
@@ -64,7 +76,8 @@ class ProcessingViewModel(
                             if (!current.isRunning || current.activeRequest != request) return
                             _uiState.value = current.copy(
                                 progressPercent = event.percent.coerceIn(0, 99),
-                                statusText = event.statusText
+                                statusText = event.statusText,
+                                phase = ProcessingPhase.Processing
                             )
                         }
                     }
@@ -74,7 +87,8 @@ class ProcessingViewModel(
                     setTerminalState(
                         ProcessingUiState(
                             progressPercent = 100,
-                            statusText = "Completed",
+                            statusText = "Complete",
+                            phase = ProcessingPhase.Success,
                             isRunning = false,
                             isCompleted = true,
                             output = event.output,
@@ -88,6 +102,7 @@ class ProcessingViewModel(
                         ProcessingUiState(
                             progressPercent = 0,
                             statusText = "Cancelled",
+                            phase = ProcessingPhase.Cancelled,
                             isRunning = false,
                             activeRequest = null
                         )
@@ -99,8 +114,9 @@ class ProcessingViewModel(
                         ProcessingUiState(
                             progressPercent = 0,
                             statusText = "Failed",
+                            phase = ProcessingPhase.Failed,
                             isRunning = false,
-                            errorMessage = event.error.message ?: "Unknown processing error",
+                            errorMessage = event.error.message ?: "Something went wrong while processing this media.",
                             activeRequest = null
                         )
                     )
@@ -111,6 +127,7 @@ class ProcessingViewModel(
                         _uiState.value.copy(
                             progressPercent = 100,
                             statusText = "Done",
+                            phase = ProcessingPhase.Success,
                             isRunning = false,
                             isCompleted = true,
                             activeRequest = null
@@ -126,7 +143,7 @@ class ProcessingViewModel(
     }
 
     fun clearFailure() {
-        _uiState.value = _uiState.value.copy(errorMessage = null)
+        _uiState.value = _uiState.value.copy(errorMessage = null, phase = ProcessingPhase.Idle)
     }
 
     fun cancel() {
@@ -135,6 +152,7 @@ class ProcessingViewModel(
             _uiState.value.copy(
                 isRunning = false,
                 statusText = "Cancelled",
+                phase = ProcessingPhase.Cancelled,
                 activeRequest = null
             )
         )

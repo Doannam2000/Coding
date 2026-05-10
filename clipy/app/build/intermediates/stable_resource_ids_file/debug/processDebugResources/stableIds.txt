@@ -541,6 +541,7 @@ com.nantcompany.clipy:drawable/exo_styled_controls_repeat_all = 0x7f050044
 com.nantcompany.clipy:drawable/ic_call_decline_low = 0x7f050056
 com.nantcompany.clipy:id/view_tree_on_back_pressed_dispatcher_owner = 0x7f0700a2
 com.nantcompany.clipy:color/notification_material_background_media_default_color = 0x7f03000e
+com.nantcompany.clipy:xml/file_paths = 0x7f100002
 com.nantcompany.clipy:string/exo_controls_play_description = 0x7f0d001a
 com.nantcompany.clipy:dimen/exo_small_icon_padding_vertical = 0x7f04001d
 com.nantcompany.clipy:dimen/item_touch_helper_swipe_escape_velocity = 0x7f04002f

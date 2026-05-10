@@ -1,11 +1,22 @@
 -- Merging decision tree log ---
+provider#androidx.core.content.FileProvider
+INJECTED from D:\Code\clipy\app\src\main\AndroidManifest.xml:25:9-33:20
+	android:grantUriPermissions
+		ADDED from D:\Code\clipy\app\src\main\AndroidManifest.xml:29:13-47
+	android:authorities
+		INJECTED from D:\Code\clipy\app\src\main\AndroidManifest.xml
+		ADDED from D:\Code\clipy\app\src\main\AndroidManifest.xml:27:13-64
+	android:exported
+		ADDED from D:\Code\clipy\app\src\main\AndroidManifest.xml:28:13-37
+	android:name
+		ADDED from D:\Code\clipy\app\src\main\AndroidManifest.xml:26:13-62
 manifest
-ADDED from D:\Code\clipy\app\src\main\AndroidManifest.xml:2:1-26:12
-INJECTED from D:\Code\clipy\app\src\main\AndroidManifest.xml:2:1-26:12
-INJECTED from D:\Code\clipy\app\src\main\AndroidManifest.xml:2:1-26:12
-INJECTED from D:\Code\clipy\app\src\main\AndroidManifest.xml:2:1-26:12
-MERGED from [:export] D:\Code\clipy\export\build\intermediates\merged_manifest\debug\processDebugManifest\AndroidManifest.xml:2:1-7:12
+ADDED from D:\Code\clipy\app\src\main\AndroidManifest.xml:2:1-36:12
+INJECTED from D:\Code\clipy\app\src\main\AndroidManifest.xml:2:1-36:12
+INJECTED from D:\Code\clipy\app\src\main\AndroidManifest.xml:2:1-36:12
+INJECTED from D:\Code\clipy\app\src\main\AndroidManifest.xml:2:1-36:12
 MERGED from [ffmpeg-kit-full-gpl-5.1.LTS-16K-full.aar] C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\7f6ea8aa2f86d80a7d1898b4c20e5cc3\workspace\transformed\ffmpeg-kit-full-gpl-5.1.LTS-16K-full\AndroidManifest.xml:2:1-9:12
+MERGED from [:export] D:\Code\clipy\export\build\intermediates\merged_manifest\debug\processDebugManifest\AndroidManifest.xml:2:1-7:12
 MERGED from [:edit] D:\Code\clipy\edit\build\intermediates\merged_manifest\debug\processDebugManifest\AndroidManifest.xml:2:1-7:12
 MERGED from [androidx.media3:media3-ui:1.4.1] C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\f9d53172725d81dc8a0f3eba6e387bf3\workspace\transformed\media3-ui-1.4.1\AndroidManifest.xml:17:1-22:12
 MERGED from [androidx.media3:media3-extractor:1.4.1] C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\434d4558e7c6757af01925f9be9c4556\workspace\transformed\media3-extractor-1.4.1\AndroidManifest.xml:17:1-22:12
@@ -80,8 +91,8 @@ MERGED from [androidx.arch.core:core-runtime:2.2.0] C:\Users\DDWAN\.gradle\cache
 	xmlns:android
 		ADDED from D:\Code\clipy\app\src\main\AndroidManifest.xml:2:11-69
 application
-ADDED from D:\Code\clipy\app\src\main\AndroidManifest.xml:4:5-24:19
-INJECTED from D:\Code\clipy\app\src\main\AndroidManifest.xml:4:5-24:19
+ADDED from D:\Code\clipy\app\src\main\AndroidManifest.xml:4:5-34:19
+INJECTED from D:\Code\clipy\app\src\main\AndroidManifest.xml:4:5-34:19
 MERGED from [androidx.compose.ui:ui-tooling-android:1.9.2] C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\410d263b06f293d9b1205ca5add264b7\workspace\transformed\ui-tooling\AndroidManifest.xml:22:5-26:19
 MERGED from [androidx.compose.ui:ui-tooling-android:1.9.2] C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\410d263b06f293d9b1205ca5add264b7\workspace\transformed\ui-tooling\AndroidManifest.xml:22:5-26:19
 MERGED from [androidx.emoji2:emoji2:1.4.0] C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\99af7cf901c19d32a7b998ce2122b341\workspace\transformed\emoji2-1.4.0\AndroidManifest.xml:23:5-33:19
@@ -138,14 +149,20 @@ category#android.intent.category.LAUNCHER
 ADDED from D:\Code\clipy\app\src\main\AndroidManifest.xml:21:17-77
 	android:name
 		ADDED from D:\Code\clipy\app\src\main\AndroidManifest.xml:21:27-74
+meta-data#android.support.FILE_PROVIDER_PATHS
+ADDED from D:\Code\clipy\app\src\main\AndroidManifest.xml:30:13-32:54
+	android:resource
+		ADDED from D:\Code\clipy\app\src\main\AndroidManifest.xml:32:17-51
+	android:name
+		ADDED from D:\Code\clipy\app\src\main\AndroidManifest.xml:31:17-67
 uses-sdk
 INJECTED from D:\Code\clipy\app\src\main\AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from D:\Code\clipy\app\src\main\AndroidManifest.xml
 INJECTED from D:\Code\clipy\app\src\main\AndroidManifest.xml
-MERGED from [:export] D:\Code\clipy\export\build\intermediates\merged_manifest\debug\processDebugManifest\AndroidManifest.xml:5:5-44
-MERGED from [:export] D:\Code\clipy\export\build\intermediates\merged_manifest\debug\processDebugManifest\AndroidManifest.xml:5:5-44
 MERGED from [ffmpeg-kit-full-gpl-5.1.LTS-16K-full.aar] C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\7f6ea8aa2f86d80a7d1898b4c20e5cc3\workspace\transformed\ffmpeg-kit-full-gpl-5.1.LTS-16K-full\AndroidManifest.xml:5:5-7:41
 MERGED from [ffmpeg-kit-full-gpl-5.1.LTS-16K-full.aar] C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\7f6ea8aa2f86d80a7d1898b4c20e5cc3\workspace\transformed\ffmpeg-kit-full-gpl-5.1.LTS-16K-full\AndroidManifest.xml:5:5-7:41
+MERGED from [:export] D:\Code\clipy\export\build\intermediates\merged_manifest\debug\processDebugManifest\AndroidManifest.xml:5:5-44
+MERGED from [:export] D:\Code\clipy\export\build\intermediates\merged_manifest\debug\processDebugManifest\AndroidManifest.xml:5:5-44
 MERGED from [:edit] D:\Code\clipy\edit\build\intermediates\merged_manifest\debug\processDebugManifest\AndroidManifest.xml:5:5-44
 MERGED from [:edit] D:\Code\clipy\edit\build\intermediates\merged_manifest\debug\processDebugManifest\AndroidManifest.xml:5:5-44
 MERGED from [androidx.media3:media3-ui:1.4.1] C:\Users\DDWAN\.gradle\caches\9.1.0\transforms\f9d53172725d81dc8a0f3eba6e387bf3\workspace\transformed\media3-ui-1.4.1\AndroidManifest.xml:20:5-44
