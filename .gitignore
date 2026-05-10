@@ -1,3 +1,20 @@
 .env
 **/.env
-**/build
+
+# Build artifacts
+**/build/
+**/dist/
+**/out/
+
+# IDE files
+**/.idea/
+**/*.iml
+
+# Android / Gradle
+**/.gradle/
+**/local.properties
+**/captures/
+
+# OS junk
+**/.DS_Store
+**/Thumbs.db
