@@ -197,7 +197,8 @@ enum class EditOperationType {
     Trim,
     Split,
     Move,
-    Duplicate
+    Duplicate,
+    Adjust
 }
 
 data class ClipRange(

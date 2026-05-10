@@ -37,8 +37,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.Crop
@@ -46,11 +49,9 @@ import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Rotate90DegreesCcw
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.TextFields
-import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Wallpaper
@@ -70,7 +71,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -89,6 +89,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.natncompany.media.Timeline
 import com.natncompany.media.TimelineClip
 import com.natncompany.media.Crop
@@ -106,6 +107,18 @@ import jp.co.cyberagent.android.gpuimage.filter.GPUImageSepiaToneFilter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
+
+private val cropRatioOptions = listOf("Original", "1:1", "4:5", "9:16", "16:9")
+private val speedOptions = listOf(0.5f, 1f, 1.5f, 2f)
+private val bottomEditorTools = listOf(
+    EditorTool.Trim,
+    EditorTool.Crop,
+    EditorTool.Rotate,
+    EditorTool.Filter,
+    EditorTool.Speed,
+    EditorTool.Music,
+    EditorTool.Volume
+)
 
 private val CScreenBackground = Color(0xFF0B0D12)
 private val CTopBarBackground = Color(0xFF11141A)
@@ -128,12 +141,11 @@ fun VideoEditScreen(
     qualityLabel: String = "1080p",
     modifier: Modifier = Modifier
 ) {
-    val state by viewModel.uiState.collectAsState()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
     var zoomScale by remember { mutableFloatStateOf(1f) }
-    var cropRatioLabel by remember { mutableStateOf("Original") }
-    var clipSpeed by remember { mutableFloatStateOf(1f) }
     var importMenuExpanded by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val selectedClip = state.selectedClip
     val importVideoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) viewModel.onAction(EditorAction.Import(listOf(uri)))
     }
@@ -188,7 +200,7 @@ fun VideoEditScreen(
             )
             PreviewAreaNew(
                 state = state,
-                cropRatioLabel = cropRatioLabel,
+                cropRatioLabel = selectedClip?.cropLabel() ?: "Original",
                 showCropOverlay = state.activeTool == EditorTool.Crop && state.selectedClip != null,
                 onSurfaceChanged = viewModel::setSurface,
                 modifier = Modifier.weight(1f)
@@ -203,7 +215,7 @@ fun VideoEditScreen(
             TimelinePanel(
                 timeline = state.timeline,
                 selectedClipId = state.selectedClipId,
-                selectedClip = state.selectedClip,
+                selectedClip = selectedClip,
                 activeTool = state.activeTool,
                 positionMs = state.position,
                 durationMs = state.duration,
@@ -222,10 +234,9 @@ fun VideoEditScreen(
                 onClipMoved = { trackId, clipId, newStartMs ->
                     viewModel.onAction(EditorAction.MoveClip(trackId, clipId, newStartMs))
                 },
-                currentCropRatio = cropRatioLabel,
-                currentSpeed = clipSpeed,
-                onCropRatioSelected = { cropRatioLabel = it },
-                onSpeedChanged = { clipSpeed = it },
+                currentCropRatio = selectedClip?.cropLabel() ?: "Original",
+                currentSpeed = selectedClip?.speedMultiplier() ?: 1f,
+                isComparingOriginal = state.isComparingOriginal,
                 onAction = viewModel::onAction,
                 onImportVideo = { importVideoLauncher.launch(arrayOf("video/*")) },
                 onImportImage = { importImageLauncher.launch(arrayOf("image/*")) },
@@ -263,18 +274,18 @@ fun VideoEditorTopBar(
     onNext: () -> Unit
 ) {
     Surface(color = CTopBarBackground) {
-        Row(modifier = Modifier.fillMaxWidth().height(68.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = CTextPrimary) }
-            Text("Edit", color = CTextPrimary, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+        Row(modifier = Modifier.fillMaxWidth().height(62.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = CTextPrimary) }
+            Text("Edit", color = CTextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = onUndo, enabled = canUndo, modifier = Modifier.size(44.dp)) { Icon(Icons.Filled.Undo, contentDescription = "Undo", tint = CTextPrimary.copy(alpha = if (canUndo) 1f else 0.35f)) }
-            IconButton(onClick = onRedo, enabled = canRedo, modifier = Modifier.size(44.dp)) { Icon(Icons.Filled.Redo, contentDescription = "Redo", tint = CTextPrimary.copy(alpha = if (canRedo) 1f else 0.35f)) }
-            OutlinedButton(onClick = onResolutionClick, modifier = Modifier.size(width = 88.dp, height = 40.dp), shape = RoundedCornerShape(20.dp), border = androidx.compose.foundation.BorderStroke(1.dp, CStrokeColor), contentPadding = PaddingValues(horizontal = 8.dp)) {
-                Text(qualityLabel, color = CTextPrimary, fontSize = 14.sp, maxLines = 1)
+            IconButton(onClick = onUndo, enabled = canUndo, modifier = Modifier.size(40.dp)) { Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo", tint = CTextPrimary.copy(alpha = if (canUndo) 1f else 0.35f)) }
+            IconButton(onClick = onRedo, enabled = canRedo, modifier = Modifier.size(40.dp)) { Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "Redo", tint = CTextPrimary.copy(alpha = if (canRedo) 1f else 0.35f)) }
+            OutlinedButton(onClick = onResolutionClick, modifier = Modifier.size(width = 82.dp, height = 36.dp), shape = RoundedCornerShape(18.dp), border = androidx.compose.foundation.BorderStroke(1.dp, CStrokeColor), contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text(qualityLabel, color = CTextPrimary, fontSize = 12.sp, maxLines = 1)
             }
             Spacer(Modifier.width(6.dp))
-            Button(onClick = onNext, modifier = Modifier.size(width = 88.dp, height = 42.dp), shape = RoundedCornerShape(22.dp), colors = ButtonDefaults.buttonColors(containerColor = CPrimaryBlue)) {
-                Text(nextLabel, color = CTextPrimary, fontSize = 15.sp)
+            Button(onClick = onNext, modifier = Modifier.size(width = 82.dp, height = 38.dp), shape = RoundedCornerShape(19.dp), colors = ButtonDefaults.buttonColors(containerColor = CPrimaryBlue)) {
+                Text(nextLabel, color = CTextPrimary, fontSize = 13.sp)
             }
         }
     }
@@ -289,14 +300,13 @@ fun PreviewAreaNew(
     modifier: Modifier = Modifier
 ) {
     val selectedClip = state.selectedClip
-    val previewAspectRatio = remember(cropRatioLabel) { aspectRatioForLabel(cropRatioLabel) }
-    Surface(modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), color = CCardBackground, shape = RoundedCornerShape(20.dp), border = androidx.compose.foundation.BorderStroke(1.dp, CStrokeColor)) {
-        Box(modifier = Modifier.fillMaxSize().padding(14.dp), contentAlignment = Alignment.Center) {
+    val previewAspectRatio = aspectRatioForLabel(cropRatioLabel)
+    Surface(modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), color = CCardBackground, shape = RoundedCornerShape(20.dp), border = androidx.compose.foundation.BorderStroke(1.dp, CStrokeColor)) {
+        Box(modifier = Modifier.fillMaxSize().padding(10.dp), contentAlignment = Alignment.Center) {
             Box(
                 modifier = Modifier
-                    .fillMaxHeight()
-                    .widthIn(max = 420.dp)
-                    .aspectRatio(previewAspectRatio, matchHeightConstraintsFirst = true)
+                    .fillMaxWidth(0.94f)
+                    .aspectRatio(previewAspectRatio)
                     .clip(RoundedCornerShape(18.dp))
                     .background(Color.Black),
                 contentAlignment = Alignment.Center
@@ -306,11 +316,11 @@ fun PreviewAreaNew(
                     factory = { context ->
                         RealtimeGpuVideoView(context).apply {
                             setOnInputSurfaceChanged(onSurfaceChanged)
-                            updateClip(selectedClip)
+                            updateClip(selectedClip, state.isComparingOriginal)
                         }
                     },
                     update = { view ->
-                        view.updateClip(selectedClip)
+                        view.updateClip(selectedClip, state.isComparingOriginal)
                     }
                 )
                 if (!state.isPlaying) {
@@ -343,7 +353,7 @@ fun PreviewAreaNew(
 
 @Composable
 private fun BoxScope.EditorPreviewEffects(clip: TimelineClip) {
-    val filterName = clip.effect.parameters["filterName"].orEmpty()
+    val filterName = clip.effect.parameters[ClipEffectParameterFilterName].orEmpty()
     if (filterName.isNotBlank() && filterName != "Original") {
         val tint = when (filterName) {
             "Sepia" -> Color(0x666B3F12)
@@ -370,7 +380,7 @@ private fun BoxScope.EditorPreviewEffects(clip: TimelineClip) {
                 .padding(horizontal = 8.dp, vertical = 4.dp)
         )
     }
-    clip.effect.parameters["speed"]?.let { speed ->
+    clip.effect.parameters[ClipEffectParameterSpeed]?.let { speed ->
         Text(
             text = "Speed ${speed}x",
             color = CTextPrimary,
@@ -415,8 +425,7 @@ fun TimelinePanel(
     onClipMoved: (String, String, Long) -> Unit,
     currentCropRatio: String,
     currentSpeed: Float,
-    onCropRatioSelected: (String) -> Unit,
-    onSpeedChanged: (Float) -> Unit,
+    isComparingOriginal: Boolean,
     onAction: (EditorAction) -> Unit,
     onImportVideo: () -> Unit,
     onImportImage: () -> Unit,
@@ -426,7 +435,7 @@ fun TimelinePanel(
     val pixelsPerMs = 0.04f * zoomScale
     val timelineWidth = ((timelineDuration * pixelsPerMs).roundToInt().coerceAtLeast(440)).dp
     val scrollState = rememberScrollState()
-    Surface(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).heightIn(min = 210.dp, max = 250.dp), color = CCardBackground, shape = RoundedCornerShape(20.dp), border = androidx.compose.foundation.BorderStroke(1.dp, CStrokeColor)) {
+    Surface(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp).heightIn(min = 260.dp, max = 320.dp), color = CCardBackground, shape = RoundedCornerShape(20.dp), border = androidx.compose.foundation.BorderStroke(1.dp, CStrokeColor)) {
         Box(modifier = Modifier.fillMaxSize().padding(12.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -471,8 +480,7 @@ fun TimelinePanel(
                     selectedClip = selectedClip,
                     currentCropRatio = currentCropRatio,
                     currentSpeed = currentSpeed,
-                    onCropRatioSelected = onCropRatioSelected,
-                    onSpeedChanged = onSpeedChanged,
+                    isComparingOriginal = isComparingOriginal,
                     onAction = onAction
                 )
             }
@@ -486,37 +494,59 @@ private fun ActiveToolActionPanel(
     selectedClip: TimelineClip?,
     currentCropRatio: String,
     currentSpeed: Float,
-    onCropRatioSelected: (String) -> Unit,
-    onSpeedChanged: (Float) -> Unit,
+    isComparingOriginal: Boolean,
     onAction: (EditorAction) -> Unit
 ) {
     if (activeTool == null || selectedClip == null) return
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 120.dp)
+            .padding(top = 6.dp),
         color = CCardInnerBackground,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 12.dp, bottomEnd = 12.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, CStrokeColor)
     ) {
         when (activeTool) {
             EditorTool.Trim -> {
-                Text(
-                    "Drag left/right handles on selected clip to trim",
-                    color = CTextSecondary,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
-                )
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        "Drag left/right handles on selected clip",
+                        color = CTextSecondary,
+                        fontSize = 12.sp
+                    )
+                    Text(
+                        "Start ${formatClock(selectedClip.sourceStartMs)}  •  End ${formatClock(selectedClip.sourceEndMs)}",
+                        color = CTextPrimary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
             EditorTool.Crop -> {
-                Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    listOf("Original", "1:1", "4:5", "9:16", "16:9").forEach { ratio ->
-                        OutlinedButton(onClick = {
-                            onCropRatioSelected(ratio)
-                            onAction(EditorAction.SetCrop(cropForRatio(ratio), ratio))
-                        }) {
-                            Text(if (ratio == currentCropRatio) "[$ratio]" else ratio, fontSize = 12.sp)
+                    Text(
+                        "Crop applies to selected clip",
+                        color = CTextSecondary,
+                        fontSize = 12.sp
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        cropRatioOptions.forEach { ratio ->
+                            OutlinedButton(
+                                onClick = { onAction(EditorAction.SetCrop(cropForRatio(ratio), ratio)) },
+                                modifier = Modifier.height(38.dp)
+                            ) {
+                                Text(if (ratio == currentCropRatio) "[$ratio]" else ratio, fontSize = 12.sp)
+                            }
                         }
                     }
                 }
@@ -526,19 +556,53 @@ private fun ActiveToolActionPanel(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedButton(onClick = { onAction(EditorAction.RotateLeft) }) { Text("Rotate L", fontSize = 12.sp) }
-                    OutlinedButton(onClick = { onAction(EditorAction.RotateRight) }) { Text("Rotate R", fontSize = 12.sp) }
-                    OutlinedButton(onClick = { onAction(EditorAction.FlipHorizontal) }) { Text("Flip H", fontSize = 12.sp) }
-                    OutlinedButton(onClick = { onAction(EditorAction.FlipVertical) }) { Text("Flip V", fontSize = 12.sp) }
+                    OutlinedButton(
+                        onClick = { onAction(EditorAction.RotateLeft) },
+                        modifier = Modifier.weight(1f).height(38.dp)
+                    ) { Text("Rotate L", fontSize = 12.sp) }
+                    OutlinedButton(
+                        onClick = { onAction(EditorAction.RotateRight) },
+                        modifier = Modifier.weight(1f).height(38.dp)
+                    ) { Text("Rotate R", fontSize = 12.sp) }
+                    OutlinedButton(
+                        onClick = { onAction(EditorAction.FlipHorizontal) },
+                        modifier = Modifier.weight(1f).height(38.dp)
+                    ) { Text("Flip H", fontSize = 12.sp) }
+                    OutlinedButton(
+                        onClick = { onAction(EditorAction.FlipVertical) },
+                        modifier = Modifier.weight(1f).height(38.dp)
+                    ) { Text("Flip V", fontSize = 12.sp) }
                 }
             }
             EditorTool.Filter -> {
-                Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    legacyFilterOptions.forEach { name ->
-                        OutlinedButton(onClick = { onAction(EditorAction.ApplyNamedFilter(name)) }) { Text(name, fontSize = 12.sp) }
+                    OutlinedButton(
+                        onClick = { },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(38.dp)
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onPress = {
+                                        onAction(EditorAction.StartComparingOriginal)
+                                        tryAwaitRelease()
+                                        onAction(EditorAction.StopComparingOriginal)
+                                    }
+                                )
+                            }
+                    ) {
+                        Text(if (isComparingOriginal) "Showing Original" else "Hold to Compare", fontSize = 12.sp)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        legacyFilterOptions.forEach { name ->
+                            OutlinedButton(onClick = { onAction(EditorAction.ApplyNamedFilter(name)) }) { Text(name, fontSize = 12.sp) }
+                        }
                     }
                 }
             }
@@ -563,9 +627,8 @@ private fun ActiveToolActionPanel(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    listOf(0.5f, 1f, 1.5f, 2f).forEach { speed ->
+                    speedOptions.forEach { speed ->
                         OutlinedButton(onClick = {
-                            onSpeedChanged(speed)
                             onAction(EditorAction.SetSpeed(speed))
                         }) {
                             Text(if (speed == currentSpeed) "[${speed}x]" else "${speed}x", fontSize = 12.sp)
@@ -582,6 +645,7 @@ private fun cropForRatio(ratio: String): Crop {
     return when (ratio) {
         "1:1" -> verticalCropForTargetRatio(1f)
         "4:5" -> verticalCropForTargetRatio(4f / 5f)
+        "9:16" -> Crop()
         "16:9" -> verticalCropForTargetRatio(16f / 9f)
         else -> Crop()
     }
@@ -591,6 +655,7 @@ private fun aspectRatioForLabel(ratio: String): Float {
     return when (ratio) {
         "1:1" -> 1f
         "4:5" -> 4f / 5f
+        "9:16" -> 9f / 16f
         "16:9" -> 16f / 9f
         else -> 9f / 16f
     }
@@ -645,10 +710,12 @@ fun TimelineTrack(
                     onClipMoved(track.id, clip.id, (clip.timelineStartMs + deltaMs).coerceAtLeast(0L))
                 },
                 onClipTrimStartDragged = { clip, deltaMs ->
-                    onTrimStartChanged(clip.id, (clip.sourceStartMs + deltaMs).coerceAtLeast(0L))
+                    val maxStart = (clip.sourceEndMs - 100L).coerceAtLeast(0L)
+                    onTrimStartChanged(clip.id, (clip.sourceStartMs + deltaMs).coerceIn(0L, maxStart))
                 },
                 onClipTrimEndDragged = { clip, deltaMs ->
-                    onTrimEndChanged(clip.id, (clip.sourceEndMs + deltaMs).coerceAtLeast(clip.sourceStartMs + 100L))
+                    val minEnd = (clip.sourceStartMs + 100L).coerceAtMost(clip.sourceDurationMs)
+                    onTrimEndChanged(clip.id, (clip.sourceEndMs + deltaMs).coerceIn(minEnd, clip.sourceDurationMs))
                 }
             )
         }
@@ -704,27 +771,37 @@ fun TimelineClipItem(
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .width(8.dp)
+                    .width(14.dp)
                     .fillMaxHeight()
-                    .background(CPrimaryBlue.copy(alpha = 0.65f))
+                    .background(CPrimaryBlue.copy(alpha = 0.72f))
                     .pointerInput(clip.id, pixelsPerMs) {
-                        detectDragGestures { _, dragAmount ->
-                            val deltaMs = (dragAmount.x / pixelsPerMs).toLong()
-                            onTrimStartChanged(clip.id, (clip.sourceStartMs + deltaMs).coerceAtLeast(0L))
-                        }
+                        var draggedMs = 0f
+                        detectDragGestures(
+                            onDragStart = { draggedMs = 0f },
+                            onDrag = { _, dragAmount ->
+                                draggedMs += (dragAmount.x / pixelsPerMs) * 0.8f
+                                val maxStart = (clip.sourceEndMs - 100L).coerceAtLeast(0L)
+                                onTrimStartChanged(clip.id, (clip.sourceStartMs + draggedMs.toLong()).coerceIn(0L, maxStart))
+                            }
+                        )
                     }
             )
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .width(8.dp)
+                    .width(14.dp)
                     .fillMaxHeight()
-                    .background(CPrimaryBlue.copy(alpha = 0.65f))
+                    .background(CPrimaryBlue.copy(alpha = 0.72f))
                     .pointerInput(clip.id, pixelsPerMs) {
-                        detectDragGestures { _, dragAmount ->
-                            val deltaMs = (dragAmount.x / pixelsPerMs).toLong()
-                            onTrimEndChanged(clip.id, (clip.sourceEndMs + deltaMs).coerceAtLeast(clip.sourceStartMs + 100L))
-                        }
+                        var draggedMs = 0f
+                        detectDragGestures(
+                            onDragStart = { draggedMs = 0f },
+                            onDrag = { _, dragAmount ->
+                                draggedMs += (dragAmount.x / pixelsPerMs) * 0.8f
+                                val minEnd = (clip.sourceStartMs + 100L).coerceAtMost(clip.sourceDurationMs)
+                                onTrimEndChanged(clip.id, (clip.sourceEndMs + draggedMs.toLong()).coerceIn(minEnd, clip.sourceDurationMs))
+                            }
+                        )
                     }
             )
         }
@@ -742,34 +819,14 @@ fun TimelineZoomControls(zoomScale: Float, onZoomOutTimeline: () -> Unit, onZoom
 
 @Composable
 fun BottomFunctionBar(selectedTool: EditorTool?, onToolSelected: (EditorTool) -> Unit, modifier: Modifier = Modifier) {
-    val tools = remember {
-        listOf(
-            EditorTool.Trim,
-            EditorTool.Crop,
-            EditorTool.Rotate,
-            EditorTool.Filter,
-            EditorTool.Speed,
-            EditorTool.Music,
-            EditorTool.Volume
-        )
-    }
     Surface(modifier = modifier.fillMaxWidth().height(74.dp), color = CTopBarBackground) {
         LazyRow(contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(tools) { tool ->
-                val enabled = tool in setOf(
-                    EditorTool.Trim,
-                    EditorTool.Crop,
-                    EditorTool.Rotate,
-                    EditorTool.Filter,
-                    EditorTool.Speed,
-                    EditorTool.Volume,
-                    EditorTool.Music
-                )
+            items(bottomEditorTools, key = { it.name }) { tool ->
                 BottomFunctionItem(
                     tool = tool,
                     selected = selectedTool == tool,
-                    enabled = enabled,
-                    onClick = { if (enabled) onToolSelected(tool) }
+                    enabled = true,
+                    onClick = { onToolSelected(tool) }
                 )
             }
         }
@@ -792,7 +849,7 @@ fun BottomFunctionItem(tool: EditorTool, selected: Boolean, enabled: Boolean, on
         EditorTool.Text -> Icons.Filled.TextFields
         EditorTool.Sticker -> Icons.Filled.EmojiEmotions
         EditorTool.Music -> Icons.Filled.MusicNote
-        EditorTool.Volume -> Icons.Filled.VolumeUp
+        EditorTool.Volume -> Icons.AutoMirrored.Filled.VolumeUp
         EditorTool.Background -> Icons.Filled.Wallpaper
         EditorTool.Canvas -> Icons.Filled.CropSquare
         EditorTool.Effects -> Icons.Filled.AutoAwesome
@@ -862,7 +919,7 @@ private fun Bitmap.applyCropRotateFlip(clip: TimelineClip): Bitmap {
 
 private fun gpuFilterForClip(clip: TimelineClip): GPUImageFilter {
     val filters = mutableListOf<GPUImageFilter>()
-    when (clip.effect.parameters["filterName"]) {
+    when (clip.effect.parameters[ClipEffectParameterFilterName]) {
         "Sepia" -> filters += GPUImageSepiaToneFilter()
         "Mono", "Monochrome", "Luminance" -> filters += GPUImageGrayscaleFilter()
         "Gaussian Blur", "Box Blur", "Bilateral Blur" -> filters += GPUImageGaussianBlurFilter(2f)

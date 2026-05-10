@@ -168,7 +168,7 @@ class EditorViewModel(
             is EditorAction.ApplyNamedFilter -> updateSelectedClip { clip ->
                 clip.copy(
                     effect = clip.effect.copy(
-                        parameters = clip.effect.parameters + ("filterName" to action.filterName)
+                        parameters = clip.effect.parameters + (ClipEffectParameterFilterName to action.filterName)
                     ),
                     transform = clip.transform.copy(
                         blur = if (action.filterName == "Box Blur" || action.filterName == "Gaussian Blur") 0.25f else clip.transform.blur
@@ -205,12 +205,14 @@ class EditorViewModel(
             is EditorAction.SetCrop -> updateSelectedClip { clip ->
                 clip.copy(
                     transform = clip.transform.copy(crop = action.crop),
-                    effect = clip.effect.copy(parameters = clip.effect.parameters + ("cropLabel" to action.label))
+                    effect = clip.effect.withParameter(ClipEffectParameterCropLabel, action.label)
                 )
             }
             is EditorAction.SetSpeed -> updateSelectedClip { clip ->
-                clip.copy(effect = clip.effect.copy(parameters = clip.effect.parameters + ("speed" to action.speed.toString())))
+                clip.copy(effect = clip.effect.withParameter(ClipEffectParameterSpeed, action.speed.coerceIn(0.25f, 3f).toString()))
             }
+            EditorAction.StartComparingOriginal -> _uiState.update { it.copy(isComparingOriginal = true) }
+            EditorAction.StopComparingOriginal -> _uiState.update { it.copy(isComparingOriginal = false) }
         }
     }
 
@@ -311,16 +313,24 @@ class EditorViewModel(
         val clipId = state.selectedClipId ?: return
         val track = state.timeline.findClipTrack(clipId) ?: return
         val clip = track.clips.firstOrNull { it.id == clipId } ?: return
+        val updatedClip = transform(clip)
+        if (updatedClip == clip) return
+
         val updatedTimeline = state.timeline.copy(
             tracks = state.timeline.tracks.map { timelineTrack ->
                 if (timelineTrack.id == track.id) {
                     timelineTrack.copy(clips = timelineTrack.clips.map { existing ->
-                        if (existing.id == clipId) transform(clip) else existing
+                        if (existing.id == clipId) updatedClip else existing
                     })
                 } else {
                     timelineTrack
                 }
             }
+        ).withRecordedAdjustment(
+            before = state.timeline,
+            clipId = clipId,
+            trackId = track.id,
+            details = "adjust clip"
         )
         launchMediaCall { mediaSessionManager.updateTimeline(updatedTimeline) }
     }

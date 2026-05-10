@@ -1,3 +1,26 @@
 <resources>
     <string name="app_name">Clipy</string>
+
+    <string name="home_welcome">Welcome to</string>
+    <string name="home_continue_editing">Continue Editing</string>
+    <string name="home_create_new">Create New</string>
+    <string name="home_ai_magic_effects">Try AI Magic Effects</string>
+    <string name="home_clip_count_duration">%1$d clips • %2$s</string>
+
+    <string name="export_ready">Ready to export</string>
+    <string name="export_no_media">No media to export</string>
+    <string name="export_failed">Export failed</string>
+    <string name="export_cancelled">Export cancelled</string>
+    <string name="export_unexpected_error">Unexpected export error</string>
+    <string name="export_preparing">Preparing export</string>
+    <string name="export_saved_to_movies">Saved to Movies/Clipy</string>
+    <string name="export_back">Back</string>
+    <string name="export_project_title">Export Project</string>
+    <string name="export_settings">Export Settings</string>
+    <string name="export_resolution">Resolution</string>
+    <string name="export_resolution_hint">High resolution export might take longer depending on your device performance.</string>
+    <string name="export_start">Start Export</string>
+    <string name="export_done">Done</string>
+    <string name="export_again">Export Again</string>
+    <string name="exporting">Exporting...</string>
 </resources>

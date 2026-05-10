@@ -8,7 +8,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 data class OutputHistoryUiState(
-    val outputs: List<OutputMedia> = emptyList()
+    val outputs: List<OutputMedia> = emptyList(),
+    val message: String? = null
 )
 
 class OutputHistoryViewModel(
@@ -18,6 +19,23 @@ class OutputHistoryViewModel(
     val uiState: StateFlow<OutputHistoryUiState> = _uiState.asStateFlow()
 
     fun loadHistory() {
-        _uiState.value = OutputHistoryUiState(repository.getAll())
+        _uiState.value = OutputHistoryUiState(outputs = repository.getAll(), message = _uiState.value.message)
+    }
+
+    fun removeHistoryItem(output: OutputMedia) {
+        repository.removeById(output.id)
+        repository.removeByPath(output.path)
+        _uiState.value = OutputHistoryUiState(
+            outputs = repository.getAll(),
+            message = "Removed from history."
+        )
+    }
+
+    fun showMessage(message: String) {
+        _uiState.value = _uiState.value.copy(message = message)
+    }
+
+    fun consumeMessage() {
+        _uiState.value = _uiState.value.copy(message = null)
     }
 }

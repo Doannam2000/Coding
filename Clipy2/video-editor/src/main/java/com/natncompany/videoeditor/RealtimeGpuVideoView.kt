@@ -31,8 +31,8 @@ class RealtimeGpuVideoView(context: Context) : GLSurfaceView(context) {
         surfaceListener = listener
     }
 
-    fun updateClip(clip: TimelineClip?) {
-        queueEvent { renderer.updateClip(clip) }
+    fun updateClip(clip: TimelineClip?, bypassEffects: Boolean = false) {
+        queueEvent { renderer.updateClip(clip, bypassEffects) }
         requestRender()
     }
 
@@ -68,7 +68,7 @@ private class RealtimeGpuVideoRenderer(
         -1f, 1f,
         1f, 1f
     )
-    private var texCoordBuffer = floatBufferOf(
+    private val texCoordBuffer = floatBufferOf(
         0f, 1f,
         1f, 1f,
         0f, 0f,
@@ -138,16 +138,23 @@ private class RealtimeGpuVideoRenderer(
         requestRender?.invoke()
     }
 
-    fun updateClip(clip: TimelineClip?) {
-        brightness = clip?.transform?.brightness?.coerceIn(-1f, 1f) ?: 0f
-        contrast = clip?.transform?.contrast?.coerceIn(0f, 2f) ?: 1f
-        saturation = clip?.transform?.saturation?.coerceIn(0f, 2f) ?: 1f
-        filterMode = when (clip?.effect?.parameters?.get("filterName")) {
-            "Sepia" -> 1
-            "Mono", "Monochrome", "Luminance" -> 2
-            else -> 0
+    fun updateClip(clip: TimelineClip?, bypassEffects: Boolean) {
+        if (bypassEffects) {
+            brightness = 0f
+            contrast = 1f
+            saturation = 1f
+            filterMode = 0
+        } else {
+            brightness = clip?.transform?.brightness?.coerceIn(-1f, 1f) ?: 0f
+            contrast = clip?.transform?.contrast?.coerceIn(0f, 2f) ?: 1f
+            saturation = clip?.transform?.saturation?.coerceIn(0f, 2f) ?: 1f
+            filterMode = when (clip?.effect?.parameters?.get(ClipEffectParameterFilterName)) {
+                "Sepia" -> 1
+                "Mono", "Monochrome", "Luminance" -> 2
+                else -> 0
+            }
         }
-        texCoordBuffer = textureCoordsFor(clip)
+        texCoordBuffer.putTextureCoordsFor(clip)
     }
 
     fun release() {
@@ -162,7 +169,7 @@ private class RealtimeGpuVideoRenderer(
         program = 0
     }
 
-    private fun textureCoordsFor(clip: TimelineClip?): FloatBuffer {
+    private fun FloatBuffer.putTextureCoordsFor(clip: TimelineClip?) {
         var left = clip?.transform?.crop?.left ?: 0f
         var top = clip?.transform?.crop?.top ?: 0f
         var right = clip?.transform?.crop?.right ?: 1f
@@ -183,7 +190,9 @@ private class RealtimeGpuVideoRenderer(
             3 -> floatArrayOf(left, top, left, bottom, right, top, right, bottom)
             else -> floatArrayOf(left, bottom, right, bottom, left, top, right, top)
         }
-        return floatBufferOf(*base)
+        position(0)
+        put(base)
+        position(0)
     }
 
     private fun Int.floorMod4(): Int = ((this % 4) + 4) % 4

@@ -54,9 +54,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -102,7 +102,7 @@ fun EditorScreen(
     onQualitySelected: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val state by viewModel.uiState.collectAsState()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
     VideoEditScreen(
         viewModel = viewModel,
         onBack = onBack,
@@ -391,7 +391,7 @@ private fun PreviewPanel(
 
 @Composable
 private fun FilterPreviewOverlay(clip: com.natncompany.media.TimelineClip) {
-    val filterName = clip.effect.parameters["filterName"].orEmpty().ifBlank { "Original" }
+    val filterName = clip.effect.parameters[ClipEffectParameterFilterName].orEmpty().ifBlank { "Original" }
     val hasAdjustments = filterName != "Original" ||
         clip.transform.brightness != 0f ||
         clip.transform.contrast != 1f ||
@@ -725,32 +725,32 @@ private fun ToolPanel(
     onSpeed: () -> Unit,
     onVolume: () -> Unit
 ) {
-    val tools = remember(activeTool, hasSelection) {
-        listOf(
-            Triple(EditorTool.Trim, onTrim, hasSelection),
-            Triple(EditorTool.Crop, onCrop, hasSelection),
-            Triple(EditorTool.Rotate, onRotate, hasSelection),
-            Triple(EditorTool.Filter, onFilter, hasSelection),
-            Triple(EditorTool.Speed, onSpeed, hasSelection),
-            Triple(EditorTool.Volume, onVolume, hasSelection)
-        )
-    }
     LazyRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(vertical = 2.dp)
     ) {
-        item { EditorToolChip(label = "Import", selected = false, enabled = true, onClick = onImport) }
-        item { EditorToolChip(label = "Split", selected = false, enabled = hasSelection, onClick = onSplit) }
-        item { EditorToolChip(label = "Delete", selected = false, enabled = hasSelection, onClick = onDelete) }
-        item { EditorToolChip(label = "Copy", selected = false, enabled = hasSelection, onClick = onDuplicate) }
-        items(tools, key = { it.first.name }) { (tool, action, enabled) ->
-            EditorToolChip(
-                label = tool.label,
-                selected = activeTool == tool,
-                enabled = enabled,
-                onClick = action
-            )
+        item(key = "import") { EditorToolChip(label = "Import", selected = false, enabled = true, onClick = onImport) }
+        item(key = "split") { EditorToolChip(label = "Split", selected = false, enabled = hasSelection, onClick = onSplit) }
+        item(key = "delete") { EditorToolChip(label = "Delete", selected = false, enabled = hasSelection, onClick = onDelete) }
+        item(key = "copy") { EditorToolChip(label = "Copy", selected = false, enabled = hasSelection, onClick = onDuplicate) }
+        item(key = EditorTool.Trim.name) {
+            EditorToolChip(label = EditorTool.Trim.label, selected = activeTool == EditorTool.Trim, enabled = hasSelection, onClick = onTrim)
+        }
+        item(key = EditorTool.Crop.name) {
+            EditorToolChip(label = EditorTool.Crop.label, selected = activeTool == EditorTool.Crop, enabled = hasSelection, onClick = onCrop)
+        }
+        item(key = EditorTool.Rotate.name) {
+            EditorToolChip(label = EditorTool.Rotate.label, selected = activeTool == EditorTool.Rotate, enabled = hasSelection, onClick = onRotate)
+        }
+        item(key = EditorTool.Filter.name) {
+            EditorToolChip(label = EditorTool.Filter.label, selected = activeTool == EditorTool.Filter, enabled = hasSelection, onClick = onFilter)
+        }
+        item(key = EditorTool.Speed.name) {
+            EditorToolChip(label = EditorTool.Speed.label, selected = activeTool == EditorTool.Speed, enabled = hasSelection, onClick = onSpeed)
+        }
+        item(key = EditorTool.Volume.name) {
+            EditorToolChip(label = EditorTool.Volume.label, selected = activeTool == EditorTool.Volume, enabled = hasSelection, onClick = onVolume)
         }
     }
 }

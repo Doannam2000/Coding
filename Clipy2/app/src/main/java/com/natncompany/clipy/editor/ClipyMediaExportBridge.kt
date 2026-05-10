@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
+import java.util.UUID
 
 data class ClipyExportProgress(
     val progressPercent: Int,
@@ -60,13 +61,12 @@ suspend fun ClipyAppState.exportWithMediaPipeline(
                         "render event started job=${event.job.id} output=${event.request.outputFileName} durationMs=${event.request.timeline.durationMs}"
                     )
                     is MediaSessionEvent.RenderProgress -> {
-                        Log.d(EXPORT_LOG_TAG, "render event progress job=${event.job.id} progress=${event.progressPercent}")
                         onProgress(ClipyExportProgress(event.progressPercent, "Rendering ${event.progressPercent}%"))
                     }
                     is MediaSessionEvent.RenderCompleted -> {
                         outputPath = event.outputPath
-                        Log.i(EXPORT_LOG_TAG, "render event completed output=${event.outputPath}")
-                        onProgress(ClipyExportProgress(100, "Export completed", event.outputPath))
+                        Log.i(EXPORT_LOG_TAG, "render event completed hasOutput=${event.outputPath.isNotBlank()}")
+                        onProgress(ClipyExportProgress(100, "Export completed"))
                     }
                     is MediaSessionEvent.RenderFailed -> {
                         Log.e(EXPORT_LOG_TAG, "render event failed error=${event.error.message}")
@@ -95,14 +95,14 @@ suspend fun ClipyAppState.exportWithMediaPipeline(
 
         val importedAssets = mutableListOf<Asset>()
         clips.forEachIndexed { index, clip ->
-            Log.i(EXPORT_LOG_TAG, "import start index=$index name=${clip.displayName} uri=${clip.uriString}")
+            Log.i(EXPORT_LOG_TAG, "import start index=$index name=${clip.displayName}")
             onProgress(ClipyExportProgress((index * 20 / clips.size.coerceAtLeast(1)).coerceIn(0, 20), "Importing ${clip.displayName}"))
             val input = MediaImportInput(uri = Uri.parse(clip.uriString))
             when (val imported = sessionManager.importMedia(input)) {
                 is MediaResult.Success -> {
                     Log.i(
                         EXPORT_LOG_TAG,
-                        "import success index=$index asset=${imported.value.id} cached=${imported.value.cachedPath} type=${imported.value.type} transcode=${imported.value.needsTranscode}"
+                        "import success index=$index asset=${imported.value.id} type=${imported.value.type} transcode=${imported.value.needsTranscode}"
                     )
                     importedAssets += imported.value
                 }
@@ -113,7 +113,7 @@ suspend fun ClipyAppState.exportWithMediaPipeline(
             }
         }
 
-        val timeline = buildTimeline(importedAssets)
+        val timeline = buildMediaTimeline(importedAssets)
         Log.i(EXPORT_LOG_TAG, "timeline built tracks=${timeline.tracks.size} durationMs=${timeline.durationMs} clips=${timeline.tracks.sumOf { it.clips.size }}")
         when (val updated = sessionManager.updateTimeline(timeline)) {
             is MediaResult.Failure -> {
@@ -143,19 +143,19 @@ suspend fun ClipyAppState.exportWithMediaPipeline(
             )
         )) {
             is MediaResult.Success -> {
-                Log.i(EXPORT_LOG_TAG, "render call success eventOutput=$outputPath")
+                Log.i(EXPORT_LOG_TAG, "render call success hasEventOutput=${!outputPath.isNullOrBlank()}")
                 val resolvedOutputPath = outputPath ?: when (val resolved = cacheManager.createRenderOutput(projectId.orEmpty(), outputName)) {
                     is MediaResult.Success -> resolved.value
                     is MediaResult.Failure -> null
                 }
                 if (resolvedOutputPath.isNullOrBlank() || !File(resolvedOutputPath).isFile) {
-                    Log.e(EXPORT_LOG_TAG, "rendered file missing resolved=$resolvedOutputPath")
+                    Log.e(EXPORT_LOG_TAG, "rendered file missing")
                     return@coroutineScope MediaResult.Failure(MediaError.FileAccess("Rendered file was not created"))
                 }
-                Log.i(EXPORT_LOG_TAG, "publish start rendered=$resolvedOutputPath size=${File(resolvedOutputPath).length()}")
+                Log.i(EXPORT_LOG_TAG, "publish start size=${File(resolvedOutputPath).length()}")
                 when (val published = publishExportToGallery(context.applicationContext, resolvedOutputPath, outputName)) {
                     is MediaResult.Success -> {
-                        Log.i(EXPORT_LOG_TAG, "publish success uri=${published.value}")
+                        Log.i(EXPORT_LOG_TAG, "publish success")
                         onProgress(ClipyExportProgress(100, "Saved to Movies/Clipy", published.value))
                         MediaResult.Success(published.value)
                     }
@@ -177,7 +177,7 @@ suspend fun ClipyAppState.exportWithMediaPipeline(
         Log.e(EXPORT_LOG_TAG, "export crashed", throwable)
         MediaResult.Failure(MediaError.ExceptionError(throwable))
     } finally {
-        Log.i(EXPORT_LOG_TAG, "export cleanup projectId=$projectId")
+        Log.i(EXPORT_LOG_TAG, "export cleanup hasProject=${projectId != null}")
         eventJob?.cancel()
         sessionManager.closeProject()
     }
@@ -227,10 +227,12 @@ fun ClipyAppState.buildMediaTimeline(assets: List<Asset> = emptyList()): Timelin
 }
 
 private fun ClipyAppState.buildProjectId(): String {
-    return "clipy_${projectName}_${clips.size}"
+    val slug = projectName
         .lowercase(Locale.US)
         .replace(Regex("[^a-z0-9_-]+"), "_")
+        .trim('_')
         .ifBlank { "clipy_project" }
+    return "${slug}_${UUID.randomUUID()}"
 }
 
 private fun ClipyAppState.renderSize(): RenderSize {
@@ -242,8 +244,6 @@ private fun ClipyAppState.renderSize(): RenderSize {
         AspectPreset.SixteenNine -> RenderSize(longEdge, (longEdge * 9 / 16).roundToEven())
     }
 }
-
-private fun ClipyAppState.buildTimeline(assets: List<Asset>): Timeline = buildMediaTimeline(assets)
 
 private fun ClipyAppState.exportVideoBitrate(): Int {
     return when (exportResolutionPreset) {
@@ -288,7 +288,7 @@ private suspend fun publishExportToGallery(
 ): MediaResult<String> = withContext(Dispatchers.IO) {
     val source = File(renderedPath)
     if (!source.isFile) {
-        Log.e(EXPORT_LOG_TAG, "publish source missing path=$renderedPath")
+        Log.e(EXPORT_LOG_TAG, "publish source missing")
         return@withContext MediaResult.Failure(MediaError.FileAccess("Rendered file does not exist: $renderedPath"))
     }
 
@@ -303,7 +303,7 @@ private suspend fun publishExportToGallery(
         val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
             ?: return@withContext MediaResult.Failure(MediaError.FileAccess("Unable to create MediaStore export"))
 
-        Log.i(EXPORT_LOG_TAG, "mediastore insert uri=$uri name=$outputName")
+        Log.i(EXPORT_LOG_TAG, "mediastore insert name=$outputName")
         runCatching {
             resolver.openOutputStream(uri)?.use { output ->
                 source.inputStream().use { input -> input.copyTo(output) }
@@ -313,7 +313,7 @@ private suspend fun publishExportToGallery(
             resolver.update(uri, values, null, null)
             MediaResult.Success(uri.toString())
         }.getOrElse { throwable ->
-            Log.e(EXPORT_LOG_TAG, "mediastore write failed uri=$uri", throwable)
+            Log.e(EXPORT_LOG_TAG, "mediastore write failed", throwable)
             resolver.delete(uri, null, null)
             MediaResult.Failure(MediaError.FileAccess(throwable.message ?: "Unable to save export"))
         }
@@ -325,10 +325,10 @@ private suspend fun publishExportToGallery(
         runCatching {
             source.copyTo(target, overwrite = true)
             MediaScannerConnection.scanFile(context, arrayOf(target.absolutePath), arrayOf("video/mp4"), null)
-            Log.i(EXPORT_LOG_TAG, "legacy publish success target=${target.absolutePath}")
+            Log.i(EXPORT_LOG_TAG, "legacy publish success")
             MediaResult.Success(target.absolutePath)
         }.getOrElse { throwable ->
-            Log.e(EXPORT_LOG_TAG, "legacy publish failed target=${target.absolutePath}", throwable)
+            Log.e(EXPORT_LOG_TAG, "legacy publish failed", throwable)
             MediaResult.Failure(MediaError.FileAccess(throwable.message ?: "Unable to save export"))
         }
     }

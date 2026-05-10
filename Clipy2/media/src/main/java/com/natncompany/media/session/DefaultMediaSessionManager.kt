@@ -95,7 +95,7 @@ class DefaultMediaSessionManager(
     }
 
     override suspend fun importMedia(input: MediaImportInput): MediaResult<Asset> = withContext(ioDispatcher) {
-        val project = currentProjectOrFailure()?.let { return@withContext it } ?: mutableState.value.currentProject!!
+        val project = mutableState.value.currentProject ?: return@withContext noOpenProjectFailure()
         val job = ActiveMediaJob(id = "import_${UUID.randomUUID()}", type = MediaJobType.Import)
         addJob(job)
         mutableEvents.emit(MediaSessionEvent.ImportStarted(job, input))
@@ -132,7 +132,7 @@ class DefaultMediaSessionManager(
     }
 
     override suspend fun importBatch(inputs: List<MediaImportInput>): MediaResult<List<Asset>> = withContext(ioDispatcher) {
-        var project = currentProjectOrFailure()?.let { return@withContext it } ?: mutableState.value.currentProject!!
+        var project = mutableState.value.currentProject ?: return@withContext noOpenProjectFailure()
         val imported = mutableListOf<Asset>()
         val job = ActiveMediaJob(id = "import_batch_${UUID.randomUUID()}", type = MediaJobType.Import)
         addJob(job)
@@ -154,7 +154,7 @@ class DefaultMediaSessionManager(
     }
 
     override suspend fun preparePreview(surface: Surface?): MediaResult<Unit> = withContext(ioDispatcher) {
-        val project = currentProjectOrFailure()?.let { return@withContext it } ?: mutableState.value.currentProject!!
+        val project = mutableState.value.currentProject ?: return@withContext noOpenProjectFailure()
         when (val prepare = previewController.prepare(project)) {
             is MediaResult.Failure -> {
                 mutableEvents.emit(MediaSessionEvent.PreviewError(prepare.error))
@@ -191,7 +191,7 @@ class DefaultMediaSessionManager(
     override suspend fun scrubTo(positionMs: Long): MediaResult<Unit> = delegatePreview { previewController.scrub(positionMs) }
 
     override suspend fun updateTimeline(timeline: Timeline): MediaResult<Timeline> = withContext(ioDispatcher) {
-        val project = currentProjectOrFailure()?.let { return@withContext it } ?: mutableState.value.currentProject!!
+        val project = mutableState.value.currentProject ?: return@withContext noOpenProjectFailure()
         val validated = when (val result = timelineEditor.validate(timeline)) {
             is MediaResult.Success -> result.value
             is MediaResult.Failure -> return@withContext result
@@ -204,7 +204,7 @@ class DefaultMediaSessionManager(
     }
 
     override suspend fun transcodeAsset(assetId: String): MediaResult<Unit> = withContext(ioDispatcher) {
-        val project = currentProjectOrFailure()?.let { return@withContext it } ?: mutableState.value.currentProject!!
+        val project = mutableState.value.currentProject ?: return@withContext noOpenProjectFailure()
         val asset = project.assets.firstOrNull { it.id == assetId }
             ?: return@withContext MediaResult.Failure(MediaError.InvalidInput("Asset $assetId not found"))
         val job = ActiveMediaJob(id = "transcode_${UUID.randomUUID()}", type = MediaJobType.Transcode, assetId = asset.id)
@@ -220,10 +220,11 @@ class DefaultMediaSessionManager(
         }
 
         removeJob(job)
-        return@withContext if (finalError != null) {
-            mutableEvents.emit(MediaSessionEvent.TranscodeFailed(job, finalError!!))
-            updateLastError(finalError!!)
-            MediaResult.Failure(finalError!!)
+        val error = finalError
+        return@withContext if (error != null) {
+            mutableEvents.emit(MediaSessionEvent.TranscodeFailed(job, error))
+            updateLastError(error)
+            MediaResult.Failure(error)
         } else {
             val normalized = outputAsset ?: asset
             val updatedProject = project.copy(assets = project.assets.map { if (it.id == asset.id) normalized else it })
@@ -236,7 +237,7 @@ class DefaultMediaSessionManager(
     }
 
     override suspend fun export(config: MediaExportConfig): MediaResult<Unit> = withContext(ioDispatcher) {
-        val project = currentProjectOrFailure()?.let { return@withContext it } ?: mutableState.value.currentProject!!
+        val project = mutableState.value.currentProject ?: return@withContext noOpenProjectFailure()
         val timeline = config.timeline ?: project.timeline
         val renderProject = project.copy(timeline = timeline)
         val job = ActiveMediaJob(id = "render_${UUID.randomUUID()}", type = MediaJobType.Render)
@@ -262,10 +263,11 @@ class DefaultMediaSessionManager(
         }
 
         removeJob(job)
-        return@withContext if (finalError != null) {
-            mutableEvents.emit(MediaSessionEvent.RenderFailed(job, finalError!!))
-            updateLastError(finalError!!)
-            MediaResult.Failure(finalError!!)
+        val error = finalError
+        return@withContext if (error != null) {
+            mutableEvents.emit(MediaSessionEvent.RenderFailed(job, error))
+            updateLastError(error)
+            MediaResult.Failure(error)
         } else {
             mutableEvents.emit(MediaSessionEvent.RenderCompleted(job, outputPath.orEmpty()))
             MediaResult.Success(Unit)
@@ -309,10 +311,14 @@ class DefaultMediaSessionManager(
 
     private fun currentProjectOrFailure(): MediaResult.Failure? {
         return if (mutableState.value.currentProject == null) {
-            MediaResult.Failure(MediaError.InvalidInput("No project is open"))
+            noOpenProjectFailure()
         } else {
             null
         }
+    }
+
+    private fun noOpenProjectFailure(): MediaResult.Failure {
+        return MediaResult.Failure(MediaError.InvalidInput("No project is open"))
     }
 
     private fun updateProject(project: VideoProject) {

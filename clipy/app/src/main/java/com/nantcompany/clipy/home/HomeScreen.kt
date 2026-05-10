@@ -1,38 +1,104 @@
 package com.nantcompany.clipy.home
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.nantcompany.clipy.app.ToolTarget
+import com.nantcompany.clipy.export.output.OutputMedia
+import com.nantcompany.clipy.home.components.BottomGlassNav
+import com.nantcompany.clipy.home.pages.LibraryPage
+import com.nantcompany.clipy.home.pages.SettingsPage
+import com.nantcompany.clipy.home.pages.StudioPage
+import com.nantcompany.clipy.home.pages.ToolsPage
 import com.nantcompany.clipy.navigation.AppRoute
+import kotlinx.coroutines.launch
+
+enum class HomeTab(val label: String, val icon: ImageVector) {
+    STUDIO("Studio", Icons.Default.PlayArrow),
+    LIBRARY("Library", Icons.Default.Star),
+    TOOLS("Tools", Icons.Default.Build),
+    SETTINGS("Settings", Icons.Default.Settings)
+}
 
 @Composable
 fun HomeScreen(
-    onNavigate: (AppRoute) -> Unit
+    onNavigate: (AppRoute) -> Unit,
+    onToolSelected: (AppRoute, ToolTarget?) -> Unit,
+    recentExports: List<OutputMedia> = emptyList(),
+    onRecentClick: (OutputMedia) -> Unit = {}
 ) {
-    Column(
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { HomeTab.entries.size })
+    val scope = rememberCoroutineScope()
+    val bg = Brush.verticalGradient(
+        listOf(
+            Color(0xFF0A0A12),
+            Color(0xFF090D1D),
+            Color(0xFF020617)
+        )
+    )
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .background(bg)
     ) {
-        Text("Clipy Studio", style = MaterialTheme.typography.headlineSmall)
-        Text("Dark video editor workspace with focused tools.", style = MaterialTheme.typography.bodyMedium)
+        Box(
+            modifier = Modifier
+                .size(320.dp)
+                .align(Alignment.TopStart)
+                .background(
+                    Brush.radialGradient(colors = listOf(Color(0x55D8B4FE), Color.Transparent)),
+                    CircleShape
+                )
+        )
+        Box(
+            modifier = Modifier
+                .size(280.dp)
+                .align(Alignment.BottomEnd)
+                .background(
+                    Brush.radialGradient(colors = listOf(Color(0x4467E8F9), Color.Transparent)),
+                    CircleShape
+                )
+        )
 
-        Button(onClick = { onNavigate(AppRoute.PICK_VIDEO) }) { Text("Pick Video") }
-        Button(onClick = { onNavigate(AppRoute.PICK_MULTIPLE_VIDEOS) }) { Text("Pick Multiple Videos") }
-        Button(onClick = { onNavigate(AppRoute.PICK_IMAGES) }) { Text("Pick Images") }
-        Button(onClick = { onNavigate(AppRoute.PICK_AUDIO) }) { Text("Pick Audio (Soon)") }
-        Button(onClick = { onNavigate(AppRoute.CUT_VIDEO) }) { Text("Cut") }
-        Button(onClick = { onNavigate(AppRoute.COMPRESS_VIDEO) }) { Text("Compress") }
-        Button(onClick = { onNavigate(AppRoute.MERGE_VIDEO) }) { Text("Merge") }
-        Button(onClick = { onNavigate(AppRoute.EXTRACT_AUDIO) }) { Text("Extract Audio") }
-        Button(onClick = { onNavigate(AppRoute.SLIDESHOW) }) { Text("Slideshow") }
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize()
+        ) { page ->
+            when (HomeTab.entries[page]) {
+                HomeTab.STUDIO -> StudioPage(onNavigate = onNavigate, onToolSelected = onToolSelected)
+                HomeTab.LIBRARY -> LibraryPage(recentExports = recentExports, onRecentClick = onRecentClick)
+                HomeTab.TOOLS -> ToolsPage(onToolSelected = onToolSelected)
+                HomeTab.SETTINGS -> SettingsPage(onNavigate = onNavigate)
+            }
+        }
+
+        BottomGlassNav(
+            currentIndex = pagerState.currentPage,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            onTabClick = { index ->
+                scope.launch { pagerState.animateScrollToPage(index) }
+            }
+        )
     }
 }

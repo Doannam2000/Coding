@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(update-config)",
+      "Bash(./gradlew tasks)",
+      "Bash(./gradlew assembleDebug)",
+      "Bash(./gradlew test)",
+      "Bash(./gradlew connectedAndroidTest)",
+      "Bash(./gradlew lint)",
+      "Bash(adb devices)",
+      "Bash(adb logcat)",
+      "Bash(adb shell pm list packages)",
+      "Bash(git status)",
+      "Bash(git diff)",
+      "Bash(chcp.com 65001 *)",
+      "Bash(setx LANG *)",
+      "Bash(claude *+)",
+      "Bash(claude *)",
+      "Bash(python *)",
+      "Bash(D:/Code/Clipy2/gradlew *)",
+      "Bash(Remove-Item -Path \"D:\\\\Code\\\\DiscordBotClaude\\\\.data\" -Recurse -Force -ErrorAction SilentlyContinue)",
+      "Bash(New-Item -Path \"D:\\\\Code\\\\DiscordBotClaude\\\\.data\" -ItemType Directory -Force)",
+      "Bash(Out-Null)",
+      "Bash(Write-Output \"Cleared\")"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(git reset --hard*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)"
+    ]
+  }
+}

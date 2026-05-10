@@ -7,6 +7,10 @@ android {
     namespace = "com.nantcompany.clipy"
     compileSdk = 36
 
+    lint {
+        disable += "Instantiatable"
+    }
+
     defaultConfig {
         applicationId = "com.nantcompany.clipy"
         minSdk = 24
@@ -38,8 +42,10 @@ android {
 dependencies {
     implementation(project(":edit"))
     implementation(project(":export"))
+    implementation(files("../export/libs/ffmpeg-kit-full-gpl-5.1.LTS-16K-full.aar"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
@@ -47,6 +53,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
