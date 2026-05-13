@@ -1,11 +1,18 @@
 R_DEF: Internal format may change without notice
 local
+attr? left_thumb_color
+attr? progress_thumb_color
+attr? right_thumb_color
+attr? thumb_dimension
+attr? thumb_width
 color launcher_background
+color purple_500
 drawable ic_launcher_foreground
 mipmap ic_launcher
 mipmap ic_launcher_round
 string app_name
 style Theme.Clipy
+styleable TimelineView left_thumb_color right_thumb_color progress_thumb_color thumb_width thumb_dimension
 xml backup_rules
 xml data_extraction_rules
 xml file_paths

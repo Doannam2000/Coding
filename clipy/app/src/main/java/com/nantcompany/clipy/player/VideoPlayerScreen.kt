@@ -48,7 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 @Composable
 fun VideoPlayerScreen(
     videoPath: String?,
-    onNavigate: (AppRoute) -> Unit
+    onBack: () -> Unit
 ) {
     if (videoPath.isNullOrBlank()) {
         Box(
@@ -160,7 +160,7 @@ fun VideoPlayerScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Surface(shape = CircleShape, color = Color(0x66000000)) {
-                    IconButton(onClick = { onNavigate(AppRoute.OUTPUT_HISTORY) }) {
+                    IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",

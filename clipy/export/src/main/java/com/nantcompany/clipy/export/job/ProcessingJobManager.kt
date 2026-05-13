@@ -3,6 +3,8 @@ package com.nantcompany.clipy.export.job
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.FFprobeKit
 import com.arthenica.ffmpegkit.ReturnCode
+import com.nantcompany.clipy.edit.tools.cut.CutRequest
+import com.nantcompany.clipy.edit.tools.cut.CutType
 import com.nantcompany.clipy.export.output.LocalOutputRepository
 import com.nantcompany.clipy.export.output.OutputMedia
 import java.io.File
@@ -180,26 +182,42 @@ class ProcessingJobManager(
             is ProcessingRequest.Cut -> {
                 val start = formatSeconds(request.request.startMs)
                 val end = formatSeconds(request.request.endMs)
-                if (!preciseCut) {
-                    ExecutionPlan(
-                        arguments = listOf(
-                            "-y", "-ss", start, "-to", end,
-                            "-i", request.request.inputPath,
-                            "-c", "copy",
-                            request.outputPath
-                        ),
-                        operation = "cut-fast"
-                    )
+                if (request.request.type == CutType.TRIM) {
+                    if (!preciseCut) {
+                        ExecutionPlan(
+                            arguments = listOf(
+                                "-y", "-ss", start, "-to", end,
+                                "-i", request.request.inputPath,
+                                "-c", "copy",
+                                request.outputPath
+                            ),
+                            operation = "cut-fast"
+                        )
+                    } else {
+                        ExecutionPlan(
+                            arguments = listOf(
+                                "-y", "-i", request.request.inputPath,
+                                "-ss", start, "-to", end,
+                                "-c:v", "libx264",
+                                "-c:a", "aac",
+                                request.outputPath
+                            ),
+                            operation = "cut-precise"
+                        )
+                    }
                 } else {
+                    // Remove selection (Delete segment [start, end])
+                    // We take [0, start] and [end, duration] and concat them
                     ExecutionPlan(
                         arguments = listOf(
                             "-y", "-i", request.request.inputPath,
-                            "-ss", start, "-to", end,
-                            "-c:v", "libx264",
-                            "-c:a", "aac",
+                            "-filter_complex", 
+                            "[0:v]trim=0:$start,setpts=PTS-STARTPTS[v1];[0:v]trim=start=$end,setpts=PTS-STARTPTS[v2];[v1][v2]concat=n=2:v=1:a=0[v];[0:a]atrim=0:$start,asetpts=PTS-STARTPTS[a1];[0:a]atrim=start=$end,asetpts=PTS-STARTPTS[a2];[a1][a2]concat=n=2:v=0:a=1[a]",
+                            "-map", "[v]", "-map", "[a]",
+                            "-c:v", "libx264", "-c:a", "aac",
                             request.outputPath
                         ),
-                        operation = "cut-precise"
+                        operation = "cut-remove"
                     )
                 }
             }
@@ -303,7 +321,14 @@ class ProcessingJobManager(
 
     private fun resolveDurationMs(request: ProcessingRequest): Long {
         return when (request) {
-            is ProcessingRequest.Cut -> (request.request.endMs - request.request.startMs).coerceAtLeast(0L)
+            is ProcessingRequest.Cut -> {
+                val total = probeDurationMs(request.request.inputPath)
+                if (request.request.type == CutType.TRIM) {
+                    (request.request.endMs - request.request.startMs).coerceAtLeast(0L)
+                } else {
+                    (total - (request.request.endMs - request.request.startMs)).coerceAtLeast(0L)
+                }
+            }
             is ProcessingRequest.Slideshow -> {
                 (request.request.imagePaths.size.toLong() * request.request.secondsPerImage * 1000.0).toLong()
             }

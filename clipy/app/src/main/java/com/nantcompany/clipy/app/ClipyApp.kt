@@ -12,13 +12,10 @@ import kotlinx.coroutines.delay
 import com.nantcompany.clipy.design.ClipyScaffold
 import com.nantcompany.clipy.future.ComingSoonScreen
 import com.nantcompany.clipy.future.FutureToolsPlaceholderScreen
-import com.nantcompany.clipy.history.OutputHistoryScreen
-import com.nantcompany.clipy.history.OutputHistoryViewModel
 import com.nantcompany.clipy.home.HomeScreen
 import com.nantcompany.clipy.home.HomeViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModelAlias
 import com.nantcompany.clipy.navigation.AppRoute
-import com.nantcompany.clipy.app.ToolTarget
 import com.nantcompany.clipy.navigation.RootNavigatorViewModel
 import com.nantcompany.clipy.onboarding.OnboardingScreen
 import com.nantcompany.clipy.onboarding.OnboardingStateStore
@@ -86,7 +83,19 @@ fun ClipyApp(
         if (currentRoute == AppRoute.VIDEO_PLAYER) {
             VideoPlayerScreen(
                 videoPath = sessionState.selectedHistoryOutput?.path,
-                onNavigate = navigatorViewModel::navigateTo
+                onBack = navigatorViewModel::goBack
+            )
+            return@ClipyTheme
+        }
+
+        if (currentRoute == AppRoute.CUT_VIDEO) {
+            CutVideoScreen(
+                inputPath = sessionState.singleVideoPath,
+                onNavigate = navigatorViewModel::navigateTo,
+                onSubmitRequest = {
+                    sessionViewModel.setPendingRequest(it)
+                    navigatorViewModel.navigateTo(AppRoute.PROCESSING)
+                }
             )
             return@ClipyTheme
         }
@@ -94,7 +103,6 @@ fun ClipyApp(
         ClipyScaffold(
             title = currentRoute.title,
             onHomeClick = { navigatorViewModel.navigateTo(AppRoute.HOME) },
-            onHistoryClick = { navigatorViewModel.navigateTo(AppRoute.OUTPUT_HISTORY) },
             onSettingsClick = { navigatorViewModel.navigateTo(AppRoute.SETTINGS) }
         ) {
             when (currentRoute) {
@@ -116,39 +124,28 @@ fun ClipyApp(
                     }
                 )
 
-                AppRoute.PICK_VIDEO -> PickVideoScreen(
-                    selectedPath = sessionState.singleVideoPath,
-                    screenTitle = when (sessionState.toolTarget) {
-                        ToolTarget.CUT -> "Select video to cut"
-                        ToolTarget.COMPRESS -> "Select video to compress"
-                        ToolTarget.EXTRACT_AUDIO -> "Select video for audio"
-                        else -> "Select video"
-                    },
-                    instructionText = when (sessionState.toolTarget) {
-                        ToolTarget.CUT -> "Choose one video. You will trim the start and end on the next screen."
-                        ToolTarget.COMPRESS -> "Choose one video. Then select a quality preset and export a smaller file."
-                        ToolTarget.EXTRACT_AUDIO -> "Choose one video. Clipy will save the audio as a separate file."
-                        else -> "Choose one video to continue."
-                    },
-                    onVideoPicked = sessionViewModel::setSingleVideoPath,
-                    onContinue = {
-                        val target = when (sessionState.toolTarget) {
-                            ToolTarget.CUT -> AppRoute.CUT_VIDEO
-                            ToolTarget.COMPRESS -> AppRoute.COMPRESS_VIDEO
-                            ToolTarget.EXTRACT_AUDIO -> AppRoute.EXTRACT_AUDIO
-                            else -> AppRoute.CUT_VIDEO
-                        }
-                        sessionViewModel.setToolTarget(
-                            when (target) {
-                                AppRoute.CUT_VIDEO -> ToolTarget.CUT
-                                AppRoute.COMPRESS_VIDEO -> ToolTarget.COMPRESS
-                                AppRoute.EXTRACT_AUDIO -> ToolTarget.EXTRACT_AUDIO
-                                else -> null
+                AppRoute.PICK_VIDEO -> com.nantcompany.clipy.picker.GalleryScreen(
+                    onNavigateBack = navigatorViewModel::goBack,
+                    onVideoPicked = { path ->
+                        if (path != null) {
+                            sessionViewModel.setSingleVideoPath(path)
+                            val target = when (sessionState.toolTarget) {
+                                ToolTarget.CUT -> AppRoute.CUT_VIDEO
+                                ToolTarget.COMPRESS -> AppRoute.COMPRESS_VIDEO
+                                ToolTarget.EXTRACT_AUDIO -> AppRoute.EXTRACT_AUDIO
+                                else -> AppRoute.CUT_VIDEO
                             }
-                        )
-                        navigatorViewModel.navigateTo(AppRoute.MEDIA_PREVIEW)
-                    },
-                    onNavigate = navigatorViewModel::navigateTo
+                            sessionViewModel.setToolTarget(
+                                when (target) {
+                                    AppRoute.CUT_VIDEO -> ToolTarget.CUT
+                                    AppRoute.COMPRESS_VIDEO -> ToolTarget.COMPRESS
+                                    AppRoute.EXTRACT_AUDIO -> ToolTarget.EXTRACT_AUDIO
+                                    else -> null
+                                }
+                            )
+                            navigatorViewModel.navigateTo(AppRoute.MEDIA_PREVIEW)
+                        }
+                    }
                 )
 
                 AppRoute.PICK_MULTIPLE_VIDEOS -> PickMultipleVideosScreen(
@@ -194,13 +191,7 @@ fun ClipyApp(
                     onNavigate = navigatorViewModel::navigateTo
                 )
 
-                AppRoute.CUT_VIDEO -> CutVideoScreen(
-                    inputPath = sessionState.singleVideoPath,
-                    onSubmitRequest = {
-                        sessionViewModel.setPendingRequest(it)
-                        navigatorViewModel.navigateTo(AppRoute.PROCESSING)
-                    }
-                )
+                AppRoute.CUT_VIDEO -> Unit
 
                 AppRoute.COMPRESS_VIDEO -> CompressVideoScreen(
                     inputPath = sessionState.singleVideoPath,
@@ -248,12 +239,6 @@ fun ClipyApp(
                     onNavigate = navigatorViewModel::navigateTo
                 )
 
-                AppRoute.OUTPUT_HISTORY -> OutputHistoryScreen(
-                    onOutputSelected = { output ->
-                        sessionViewModel.setSelectedHistoryOutput(output)
-                        navigatorViewModel.navigateTo(AppRoute.VIDEO_PLAYER)
-                    }
-                )
                 AppRoute.VIDEO_PLAYER -> Unit
                 AppRoute.SETTINGS -> SettingsScreen()
                 AppRoute.FUTURE_TOOLS -> FutureToolsPlaceholderScreen(navigatorViewModel::navigateTo)
@@ -263,6 +248,7 @@ fun ClipyApp(
                 AppRoute.COMING_SOON_TIMELINE -> ComingSoonScreen("Timeline", navigatorViewModel::navigateTo)
                 AppRoute.COMING_SOON_TRANSITIONS -> ComingSoonScreen("Transitions", navigatorViewModel::navigateTo)
                 AppRoute.COMING_SOON_AUDIO_EDITOR -> ComingSoonScreen("Audio Editor", navigatorViewModel::navigateTo)
+                else -> {}
             }
         }
     }

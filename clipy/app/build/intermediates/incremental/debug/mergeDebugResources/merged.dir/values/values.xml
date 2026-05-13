@@ -116,6 +116,7 @@
     <color name="notification_icon_bg_color">#ff9e9e9e</color>
     <color name="notification_material_background_media_default_color">#ff424242</color>
     <color name="primary_text_default_material_dark">#ffffffff</color>
+    <color name="purple_500">#FF6200EE</color>
     <color name="secondary_text_default_material_dark">#b3ffffff</color>
     <dimen name="compat_button_inset_horizontal_material">4dp</dimen>
     <dimen name="compat_button_inset_vertical_material">6dp</dimen>
@@ -754,23 +755,14 @@
         <attr format="reference" name="fontProviderCerts"/>
         
         <attr name="fontProviderFetchStrategy">
-            <!-- The blocking font fetch works as follows.
-              First, check the local cache, then if the requested font is not cached, request the
-              font from the provider and wait until it is finished.  You can change the length of
-              the timeout by modifying fontProviderFetchTimeout.  If the timeout happens, the
-              default typeface will be used instead. -->
+            
             <enum name="blocking" value="0"/>
-            <!-- The async font fetch works as follows.
-              First, check the local cache, then if the requested font is not cached, trigger a
-              request the font and continue with layout inflation. Once the font fetch succeeds, the
-              target text view will be refreshed with the downloaded font data. The
-              fontProviderFetchTimeout will be ignored if async loading is specified. -->
+            
             <enum name="async" value="1"/>
         </attr>
         
         <attr format="integer" name="fontProviderFetchTimeout">
-            <!-- A special value for the timeout. In this case, the blocking font fetching will not
-              timeout and wait until a reply is received from the font provider. -->
+            
             <enum name="forever" value="-1"/>
         </attr>
         
@@ -992,5 +984,12 @@
         <attr format="reference" name="fastScrollVerticalTrackDrawable"/>
         <attr format="reference" name="fastScrollHorizontalThumbDrawable"/>
         <attr format="reference" name="fastScrollHorizontalTrackDrawable"/>
+    </declare-styleable>
+    <declare-styleable name="TimelineView">
+        <attr format="color" name="left_thumb_color"/>
+        <attr format="color" name="right_thumb_color"/>
+        <attr format="color" name="progress_thumb_color"/>
+        <attr format="dimension" name="thumb_width"/>
+        <attr format="float" name="thumb_dimension"/>
     </declare-styleable>
 </resources>

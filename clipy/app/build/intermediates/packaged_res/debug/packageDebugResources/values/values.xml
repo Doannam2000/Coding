@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="launcher_background">#111827</color>
+    <color name="purple_500">#FF6200EE</color>
     <string name="app_name">Clipy</string>
     <style name="Theme.Clipy" parent="android:Theme.Material.Light.NoActionBar"/>
+    <declare-styleable name="TimelineView">
+        <attr format="color" name="left_thumb_color"/>
+        <attr format="color" name="right_thumb_color"/>
+        <attr format="color" name="progress_thumb_color"/>
+        <attr format="dimension" name="thumb_width"/>
+        <attr format="float" name="thumb_dimension"/>
+    </declare-styleable>
 </resources>
