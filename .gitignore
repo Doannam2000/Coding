@@ -5,9 +5,12 @@
 **/build/
 **/dist/
 **/out/
+**/coverage/
+**/.cache/
 
 # IDE files
 **/.idea/
+**/.vscode/
 **/*.iml
 
 # Android / Gradle
@@ -17,6 +20,13 @@
 
 # Credentials
 **/*firebase-adminsdk*.json
+
+# Python
+**/__pycache__/
+**/*.pyc
+
+# Logs
+**/*.log
 
 # OS junk
 **/.DS_Store
