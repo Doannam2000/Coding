@@ -13,3 +13,9 @@
 .externalNativeBuild
 .cxx
 local.properties
+.claude/
+**/build/
+**/WebReview/
+.claude/
+**/build/
+**/WebReview/
