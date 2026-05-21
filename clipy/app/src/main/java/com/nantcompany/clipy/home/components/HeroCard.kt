@@ -1,58 +1,109 @@
 package com.nantcompany.clipy.home.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.nantcompany.clipy.theme.ClipyDesignTokens
 
 @Composable
 fun HeroCard(onPickVideo: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0x802D3344)),
-        border = CardDefaults.outlinedCardBorder().copy(width = 1.dp, brush = Brush.linearGradient(listOf(Color(0x33FFFFFF), Color(0x22FFFFFF))))
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(210.dp)
+            .shadow(24.dp, shape = RoundedCornerShape(ClipyDesignTokens.heroCorner), ambientColor = ClipyDesignTokens.primaryAccent, spotColor = ClipyDesignTokens.primaryAccent)
+            .clickable { onPickVideo() },
+        shape = RoundedCornerShape(ClipyDesignTokens.heroCorner),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) {
-        Column(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .fillMaxSize()
+                .background(ClipyDesignTokens.heroBrush)
         ) {
-            Text("Create faster with Clipy", style = MaterialTheme.typography.headlineSmall, color = Color(0xFFF8FAFC), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-            Text("Your personal video studio,\nenhanced by AI.", style = MaterialTheme.typography.bodyLarge, color = Color(0xFF94A3B8), textAlign = TextAlign.Center)
-            Surface(
+            // Glow Effect
+            Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .clickable(onClick = onPickVideo),
-                color = Color.Transparent
+                    .fillMaxSize()
+                    .background(
+                        Brush.radialGradient(
+                            listOf(Color.White.copy(alpha = 0.15f), Color.Transparent),
+                            radius = 600f
+                        )
+                    )
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(28.dp),
+                verticalArrangement = Arrangement.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .background(Brush.horizontalGradient(listOf(Color(0xFFB76DFF), Color(0xFF00CBE6))), RoundedCornerShape(999.dp))
-                        .padding(horizontal = 28.dp, vertical = 12.dp),
-                    contentAlignment = Alignment.Center
+                Surface(
+                    color = Color.White.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.padding(bottom = 12.dp)
                 ) {
-                    Text("⊕ Pick a video", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
+                    Text(
+                        "PRO EDITOR",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.sp
+                    )
+                }
+                
+                Text(
+                    "Start New\nCreative Project",
+                    color = Color.White,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    lineHeight = 34.sp
+                )
+                
+                Spacer(modifier = Modifier.height(20.dp))
+                
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        color = Color.White,
+                        shape = CircleShape,
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = Color.Black,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.width(16.dp))
+                    
+                    Text(
+                        "Tap to Open Studio",
+                        color = Color.White.copy(alpha = 0.9f),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }

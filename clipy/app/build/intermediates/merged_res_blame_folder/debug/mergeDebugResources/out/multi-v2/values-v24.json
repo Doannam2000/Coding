@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.nantcompany.clipy.app-mergeDebugResources-36:/values-v24/values-v24.xml",
+            "outputFile": "com.nantcompany.clipy.app-mergeDebugResources-47:/values-v24/values-v24.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\DDWAN\\.gradle\\caches\\9.1.0\\transforms\\01d84e9de7f912226f0d5429401807a4\\workspace\\transformed\\media-1.7.0\\res\\values-v24\\values-v24.xml",
+                    "source": "C:\\Users\\DDWAN\\.gradle\\caches\\9.1.0\\transforms\\59c43e77c337f7a9a16c50320f1186d7\\workspace\\transformed\\media-1.7.0\\res\\values-v24\\values-v24.xml",
                     "from": {
                         "startLines": "2,3,4,5",
                         "startColumns": "4,4,4,4",

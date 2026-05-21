@@ -43,6 +43,7 @@ import com.nantcompany.clipy.navigation.AppRoute
 import java.io.File
 import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalContext
+import com.nantcompany.clipy.theme.ClipyDesignTokens
 
 @OptIn(markerClass = [UnstableApi::class])
 @Composable
@@ -74,8 +75,8 @@ fun VideoPlayerScreen(
         }
     }
 
-    var currentPositionMs by remember(videoPath) { mutableLongStateOf(0L) }
-    var durationMs by remember(videoPath) { mutableLongStateOf(0L) }
+    var currentPositionMs by remember { mutableLongStateOf(0L) }
+    var durationMs by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(player) {
         while (true) {
@@ -89,7 +90,7 @@ fun VideoPlayerScreen(
         onDispose { player.release() }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { viewContext ->

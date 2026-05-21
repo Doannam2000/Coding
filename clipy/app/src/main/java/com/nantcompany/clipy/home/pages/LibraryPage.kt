@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -34,7 +35,7 @@ import com.nantcompany.clipy.theme.ClipyDesignTokens
 @Composable
 fun LibraryPage(
     recentExports: List<OutputMedia>,
-    onRecentClick: (OutputMedia) -> Unit
+    onRecentClick: (OutputMedia?) -> Unit
 ) {
     val list = recentExports
 
@@ -55,6 +56,14 @@ fun LibraryPage(
                     fontWeight = FontWeight.ExtraBold,
                     modifier = Modifier.weight(1f)
                 )
+                Text(
+                    "See All",
+                    color = ClipyDesignTokens.primaryAccent,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable { onRecentClick(null) } // null signals 'open history'
+                )
+                Spacer(modifier = Modifier.width(12.dp))
                 Surface(
                     shape = CircleShape,
                     color = Color(0xFF16233D),

@@ -1,42 +1,52 @@
 package com.nantcompany.clipy.processing
 
+import android.content.Context
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.media3.common.util.UnstableApi
 import com.nantcompany.clipy.app.EditorSessionViewModel
 import com.nantcompany.clipy.design.ClipyErrorState
 import com.nantcompany.clipy.design.ClipyLoadingState
-import com.nantcompany.clipy.design.ScreenLayout
-import com.nantcompany.clipy.export.output.LocalOutputRepository
+import com.nantcompany.clipy.design.ClipyPrimaryButton
+import com.nantcompany.clipy.design.ClipyScaffold
+import com.nantcompany.clipy.design.ClipySecondaryButton
+import com.nantcompany.clipy.export.job.ClipyExportProvider
 import com.nantcompany.clipy.navigation.AppRoute
+import com.nantcompany.clipy.theme.ClipyDesignTokens
 
+@OptIn(UnstableApi::class)
 @Composable
 fun ProcessingScreen(
     sessionViewModel: EditorSessionViewModel,
     onNavigate: (AppRoute) -> Unit,
-    viewModel: ProcessingViewModel = viewModel()
+    viewModel: ProcessingViewModel = viewModel(factory = ProcessingViewModel.Factory(LocalContext.current))
 ) {
+    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     val sessionState by sessionViewModel.state.collectAsState()
     val pendingRequest = sessionState.pendingRequest
-    val outputRepository = remember { LocalOutputRepository() }
+    val outputRepository = remember { ClipyExportProvider.getOutputRepository() }
 
     LaunchedEffect(pendingRequest, uiState.activeRequest, uiState.isRunning) {
         if (pendingRequest != null && uiState.activeRequest == null && !uiState.isRunning) {
@@ -48,7 +58,6 @@ fun ProcessingScreen(
     LaunchedEffect(uiState.isCompleted, uiState.output) {
         if (uiState.isCompleted) {
             uiState.output?.let {
-                outputRepository.save(it)
                 sessionViewModel.setLastOutput(it)
             }
             sessionViewModel.clearPendingRequest()
@@ -60,102 +69,89 @@ fun ProcessingScreen(
     BackHandler(enabled = uiState.isRunning) { }
 
     val progress = (uiState.progressPercent.coerceIn(0, 100)) / 100f
-    val stepText = uiState.statusText
-    val progressValue = uiState.progressPercent.coerceIn(0, 100)
-    val outputName = pendingRequest?.outputPath?.substringAfterLast('/')?.substringAfterLast('\\') ?: "Unknown"
-    val phaseText = when (uiState.phase) {
-        ProcessingPhase.Idle -> "Idle"
-        ProcessingPhase.Preparing -> "Preparing"
-        ProcessingPhase.Processing -> "Processing"
-        ProcessingPhase.Success -> "Success"
-        ProcessingPhase.Failed -> "Failed"
-        ProcessingPhase.Cancelled -> "Cancelled"
-    }
-    val cancelAvailabilityText = if (uiState.isRunning) {
-        "Cancel: Available"
-    } else {
-        "Cancel: Unavailable (not exporting)"
-    }
-    val subtitle = buildString {
-        append("State: ")
-        append(phaseText)
-        append("\nStep: ")
-        append(stepText)
-        append("\n")
-        append("Progress: ")
-        append(progressValue)
-        append("%")
-        if (uiState.isRunning && progressValue <= 0) {
-            append("\nPreparing output verification...")
-        }
-        uiState.errorMessage?.let {
-            append("\nError: ")
-            append(it)
-        }
+    val outputName = pendingRequest?.outputPath?.substringAfterLast('/')?.substringAfterLast('\\') ?: "Clipy_Output.mp4"
+    
+    val subtitle = when {
+        uiState.errorMessage != null -> "Export failed"
+        uiState.phase == ProcessingPhase.Preparing -> "Preparing your media..."
+        uiState.phase == ProcessingPhase.Processing -> "Processing: ${uiState.progressPercent}%"
+        else -> "Working on your request..."
     }
 
-    ScreenLayout(
+    ClipyScaffold(
         title = "Exporting",
-        subtitle = subtitle,
-        primaryActionLabel = if (uiState.isRunning) "Cancel" else if (uiState.errorMessage != null) "Retry" else "Back Home",
-        onPrimaryAction = {
-            when {
-                uiState.isRunning -> viewModel.cancel()
-                uiState.errorMessage != null -> {
-                    viewModel.clearFailure()
-                    pendingRequest?.let { viewModel.start(it) }
+        onBackClick = { if (!uiState.isRunning) onNavigate(AppRoute.HOME) }
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            Text(text = subtitle, style = MaterialTheme.typography.bodyLarge, color = Color.White)
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = ClipyDesignTokens.cardSurface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Output File", style = MaterialTheme.typography.titleSmall, color = Color.White)
+                    Text(outputName, style = MaterialTheme.typography.bodySmall, color = ClipyDesignTokens.secondaryText)
                 }
-                else -> onNavigate(AppRoute.HOME)
             }
-        },
-        content = {
+
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Card(
+                LinearProgressIndicator(
+                    progress = { progress }, 
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Output", style = MaterialTheme.typography.titleSmall)
-                        Text(outputName, style = MaterialTheme.typography.bodySmall)
-                        Text("Estimated size: Calculating...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(cancelAvailabilityText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    color = ClipyDesignTokens.primaryAccent,
+                    trackColor = ClipyDesignTokens.cardSurface
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(uiState.statusText, style = MaterialTheme.typography.bodyMedium, color = ClipyDesignTokens.secondaryText)
+                    Text("${uiState.progressPercent}%", style = MaterialTheme.typography.bodyMedium, color = ClipyDesignTokens.primaryAccent)
+                }
+            }
+
+            if (uiState.errorMessage != null) {
+                ClipyErrorState(
+                    message = uiState.errorMessage!!,
+                    onRetry = {
+                        viewModel.clearFailure()
+                        pendingRequest?.let { viewModel.start(it) }
                     }
-                }
-                if (uiState.isRunning || uiState.progressPercent in 1..99) {
-                    LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-                    ClipyLoadingState(label = stepText)
-                } else {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    Text(stepText, style = MaterialTheme.typography.bodyMedium)
-                }
-                if (uiState.errorMessage != null) {
-                    ClipyErrorState(
-                        message = uiState.errorMessage!!,
-                        onRetry = {
-                            viewModel.clearFailure()
-                            pendingRequest?.let { viewModel.start(it) }
-                        }
+                )
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (uiState.isRunning) {
+                    ClipyPrimaryButton(
+                        label = "Cancel Export",
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { viewModel.cancel() }
                     )
-                    Button(
+                } else if (uiState.errorMessage != null) {
+                    ClipyPrimaryButton(
+                        label = "Retry Export",
                         modifier = Modifier.fillMaxWidth(),
                         onClick = {
                             viewModel.clearFailure()
                             pendingRequest?.let { viewModel.start(it) }
                         }
-                    ) {
-                        Text("Retry Export")
-                    }
-                    OutlinedButton(
+                    )
+                    ClipySecondaryButton(
+                        label = "Back to Home",
                         modifier = Modifier.fillMaxWidth(),
                         onClick = { onNavigate(AppRoute.HOME) }
-                    ) {
-                        Text("Back Home")
-                    }
-                }
-                if (!uiState.isRunning && uiState.errorMessage == null && !uiState.isCompleted) {
-                    OutlinedButton(onClick = { onNavigate(AppRoute.HOME) }) { Text("Back Home") }
+                    )
+                } else {
+                    ClipyPrimaryButton(
+                        label = "Back Home",
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { onNavigate(AppRoute.HOME) }
+                    )
                 }
             }
         }
-    )
+    }
 }

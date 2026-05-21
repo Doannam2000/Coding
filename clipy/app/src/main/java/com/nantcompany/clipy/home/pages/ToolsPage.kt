@@ -33,7 +33,14 @@ fun ToolsPage(onToolSelected: (AppRoute, ToolTarget?) -> Unit) {
         ToolCardModel("Cut", Icons.Default.Build, Color(0xFFFF6B9A), AppRoute.PICK_VIDEO, ToolTarget.CUT),
         ToolCardModel("Compress", Icons.Default.Star, Color(0xFF22D3EE), AppRoute.PICK_VIDEO, ToolTarget.COMPRESS),
         ToolCardModel("Merge", Icons.AutoMirrored.Filled.ArrowForward, Color(0xFF60A5FA), AppRoute.PICK_MULTIPLE_VIDEOS, ToolTarget.MERGE),
-        ToolCardModel("Extract Audio", Icons.Default.Star, Color(0xFFC084FC), AppRoute.PICK_VIDEO, ToolTarget.EXTRACT_AUDIO)
+        ToolCardModel("Extract Audio", Icons.Default.Star, Color(0xFFC084FC), AppRoute.PICK_VIDEO, ToolTarget.EXTRACT_AUDIO),
+        ToolCardModel("Rotate", Icons.Default.Build, Color(0xFFF97316), AppRoute.PICK_VIDEO, ToolTarget.ROTATE),
+        ToolCardModel("Speed", Icons.Default.Build, Color(0xFF8B5CF6), AppRoute.PICK_VIDEO, ToolTarget.SPEED),
+        ToolCardModel("Crop", Icons.Default.Build, Color(0xFF10B981), AppRoute.PICK_VIDEO, ToolTarget.CROP),
+        ToolCardModel("Filters", Icons.Default.Build, Color(0xFF3B82F6), AppRoute.PICK_VIDEO, ToolTarget.FILTERS),
+        ToolCardModel("Reverse", Icons.Default.Build, Color(0xFFEF4444), AppRoute.PICK_VIDEO, ToolTarget.REVERSE),
+        ToolCardModel("Stickers", Icons.Default.Star, Color(0xFFFACC15), AppRoute.PICK_VIDEO, ToolTarget.STICKERS),
+        ToolCardModel("Text Overlay", Icons.AutoMirrored.Filled.ArrowForward, Color(0xFF818CF8), AppRoute.PICK_VIDEO, ToolTarget.TEXT_OVERLAY)
     )
 
     LazyColumn(
@@ -50,10 +57,22 @@ fun ToolsPage(onToolSelected: (AppRoute, ToolTarget?) -> Unit) {
         items((tools.indices step 2).toList()) { startIndex ->
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 val first = tools[startIndex]
-                HomeToolCard(first, onClick = { onToolSelected(first.route, first.target) }, modifier = Modifier.weight(1f))
+                HomeToolCard(
+                    title = first.title,
+                    icon = first.icon,
+                    color = first.accent,
+                    onClick = { onToolSelected(first.route, first.target) },
+                    modifier = Modifier.weight(1f)
+                )
                 val second = tools.getOrNull(startIndex + 1)
                 if (second != null) {
-                    HomeToolCard(second, onClick = { onToolSelected(second.route, second.target) }, modifier = Modifier.weight(1f))
+                    HomeToolCard(
+                        title = second.title,
+                        icon = second.icon,
+                        color = second.accent,
+                        onClick = { onToolSelected(second.route, second.target) },
+                        modifier = Modifier.weight(1f)
+                    )
                 } else {
                     Spacer(modifier = Modifier.weight(1f))
                 }

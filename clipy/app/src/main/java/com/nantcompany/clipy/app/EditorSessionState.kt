@@ -8,13 +8,21 @@ enum class ToolTarget {
     COMPRESS,
     EXTRACT_AUDIO,
     MERGE,
-    SLIDESHOW
+    SLIDESHOW,
+    ROTATE,
+    SPEED,
+    CROP,
+    FILTERS,
+    REVERSE,
+    STICKERS,
+    TEXT_OVERLAY
 }
 
 data class EditorSessionState(
     val singleVideoPath: String? = null,
     val multipleVideoPaths: List<String> = emptyList(),
     val imagePaths: List<String> = emptyList(),
+    val slideshowAudioPath: String? = null,
     val toolTarget: ToolTarget? = null,
     val pendingRequest: ProcessingRequest? = null,
     val lastOutput: OutputMedia? = null,

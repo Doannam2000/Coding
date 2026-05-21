@@ -1,0 +1,42 @@
+﻿*** Begin Patch
+--- a/app/review/[slug]/page.tsx
++++ b/app/review/[slug]/page.tsx
+@@ -68,8 +68,6 @@ type ReviewPageData = {
+   insightVerified: boolean;
+ };
+ 
+-const fallbackImage = "https://images.unsplash.com/photo-1545127398-14699f92334b?q=80&w=1200&auto=format&fit=crop";
+-
+ function parseItems(raw: string | null | undefined): string[] {
+   if (!raw) return [];
+   try {
+@@ -281,13 +279,11 @@ export default async function ReviewPage({ params }: ReviewPageProps) {
+  const faqSchema = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+-   mainEntity:
+-     review.faqs.length > 0
+-       ? review.faqs.map((faq) => ({
+-           "@type": "Question" as const,
+-           name: faq.question,
+-           acceptedAnswer: { "@type": "Answer" as const, text: faq.answer },
+-         }))
+-       : [{ "@type": "Question" as const, name: "Sản phẩm có đáng mua không?", acceptedAnswer: { "@type": "Answer" as const, text: review.shortVerdict } }],
++   mainEntity: review.faqs.map((faq) => ({
++     "@type": "Question" as const,
++     name: faq.question,
++     acceptedAnswer: { "@type": "Answer" as const, text: faq.answer },
++   })),
+  };
+ 
+  const breadcrumbSchema = {
+@@ -302,7 +298,7 @@ export default async function ReviewPage({ params }: ReviewPageProps) {
+    <PageContainer>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(reviewSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema) }} />
+-     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
++     {review.faqs.length > 0 && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }} />
+       <div className="space-y-8">
+         <section className="rounded-3xl border border-slate-200/70 bg-white/90 p-6 shadow-sm sm:p-8">
+*** End Patch

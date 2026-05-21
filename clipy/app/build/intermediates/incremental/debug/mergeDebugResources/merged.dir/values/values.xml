@@ -100,6 +100,10 @@
     <attr format="boolean" name="use_artwork"/>
     <attr format="boolean" name="use_controller"/>
     <attr format="reference" name="vr_icon"/>
+    <bool name="enable_system_alarm_service_default">true</bool>
+    <bool name="enable_system_foreground_service_default">true</bool>
+    <bool name="enable_system_job_service_default">false</bool>
+    <bool name="workmanager_test_configuration">false</bool>
     <color name="androidx_core_ripple_material_light">#1f000000</color>
     <color name="androidx_core_secondary_text_default_material_light">#8a000000</color>
     <color name="call_notification_answer_color">#1d873b</color>
@@ -262,6 +266,7 @@
     <item name="accessibility_custom_action_8" type="id"/>
     <item name="accessibility_custom_action_9" type="id"/>
     <item name="androidx_compose_ui_view_composition_context" type="id"/>
+    <item name="coil_request_manager" type="id"/>
     <item name="compose_prefetch_scheduler" type="id"/>
     <item name="compose_view_saveable_id_tag" type="id"/>
     <item name="consume_window_insets_tag" type="id"/>
@@ -706,6 +711,38 @@
         <item name="android:textColor">@color/androidx_core_secondary_text_default_material_light</item>
         <item name="android:textSize">@dimen/notification_action_text_size</item>
     </style>
+    <declare-styleable name="AnimatedStateListDrawableCompat">
+        
+        <attr name="android:visible"/>
+        
+        <attr name="android:variablePadding"/>
+        
+        <attr name="android:constantSize"/>
+        
+        <attr name="android:dither"/>
+        
+        <attr name="android:enterFadeDuration"/>
+        
+        <attr name="android:exitFadeDuration"/>
+        
+        
+    </declare-styleable>
+    <declare-styleable name="AnimatedStateListDrawableItem">
+        
+        <attr name="android:drawable"/>
+        
+        <attr name="android:id"/>
+    </declare-styleable>
+    <declare-styleable name="AnimatedStateListDrawableTransition">
+        
+        <attr name="android:fromId"/>
+        
+        <attr name="android:toId"/>
+        
+        <attr name="android:drawable"/>
+        
+        <attr name="android:reversible"/>
+    </declare-styleable>
     <declare-styleable name="AspectRatioFrameLayout">
     <attr name="resize_mode"/>
   </declare-styleable>
@@ -804,6 +841,13 @@
         <attr name="fontProviderSystemFontFamily"/>
         
         <attr name="fontVariationSettings"/>
+    </declare-styleable>
+    <declare-styleable name="GPUImageView">
+        <attr format="enum" name="gpuimage_surface_type">
+            <enum name="surface_view" value="0"/>
+            <enum name="texture_view" value="1"/>
+        </attr>
+        <attr format="boolean" name="gpuimage_show_loading"/>
     </declare-styleable>
     <declare-styleable name="GradientColor">
         
@@ -992,5 +1036,25 @@
         <attr format="reference" name="fastScrollVerticalTrackDrawable"/>
         <attr format="reference" name="fastScrollHorizontalThumbDrawable"/>
         <attr format="reference" name="fastScrollHorizontalTrackDrawable"/>
+    </declare-styleable>
+    <declare-styleable name="StateListDrawable">
+        
+        <attr name="android:visible"/>
+        
+        <attr name="android:variablePadding"/>
+        
+        <attr name="android:constantSize"/>
+        
+        <attr name="android:dither"/>
+        
+        <attr name="android:enterFadeDuration"/>
+        
+        <attr name="android:exitFadeDuration"/>
+        
+        
+    </declare-styleable>
+    <declare-styleable name="StateListDrawableItem">
+        
+        <attr name="android:drawable"/>
     </declare-styleable>
 </resources>

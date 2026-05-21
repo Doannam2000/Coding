@@ -18,7 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
@@ -45,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -63,7 +64,8 @@ private val NeonCyan = Color(0xFF67E8F9)
 
 @Composable
 fun SettingsPage(onNavigate: (AppRoute) -> Unit) {
-    val viewModel: SettingsViewModel = viewModel()
+    val context = LocalContext.current
+    val viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory(context))
     val uiState by viewModel.uiState.collectAsState()
 
     LazyColumn(
@@ -243,7 +245,7 @@ fun SettingsPage(onNavigate: (AppRoute) -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Privacy Policy", color = TextPrimary, style = MaterialTheme.typography.bodyLarge)
-                    Icon(Icons.Default.ArrowForward, contentDescription = null, tint = TextMuted, modifier = Modifier.size(18.dp))
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = TextMuted, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -323,7 +325,7 @@ private fun SettingRow(title: String, subtitle: String, trailingText: String) {
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(trailingText, color = TextMuted, style = MaterialTheme.typography.labelSmall)
-            Icon(Icons.Default.ArrowForward, contentDescription = null, tint = TextMuted, modifier = Modifier.size(18.dp))
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = TextMuted, modifier = Modifier.size(18.dp))
         }
     }
 }

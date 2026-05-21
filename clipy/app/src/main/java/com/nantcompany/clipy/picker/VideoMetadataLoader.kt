@@ -41,4 +41,14 @@ object VideoMetadataLoader {
             type = MediaItemType.VIDEO
         )
     }
+
+    fun loadThumbnail(context: android.content.Context, uri: Uri): Bitmap? {
+        return runCatching {
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(context, uri)
+            val bitmap = retriever.getFrameAtTime(1000000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            retriever.release()
+            bitmap
+        }.getOrNull()
+    }
 }

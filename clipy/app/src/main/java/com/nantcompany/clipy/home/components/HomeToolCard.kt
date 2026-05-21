@@ -1,73 +1,66 @@
 package com.nantcompany.clipy.home.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.nantcompany.clipy.home.model.ToolCardModel
+import androidx.compose.ui.unit.sp
+import com.nantcompany.clipy.theme.ClipyDesignTokens
 
 @Composable
-fun HomeToolCard(item: ToolCardModel, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun HomeToolCard(
+    title: String,
+    icon: ImageVector,
+    color: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Card(
         modifier = modifier
-            .height(142.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0x66303A4A)),
-        border = CardDefaults.outlinedCardBorder().copy(width = 1.dp, brush = Brush.linearGradient(listOf(Color(0x33FFFFFF), Color(0x22FFFFFF))))
+            .height(100.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(ClipyDesignTokens.cardCorner),
+        colors = CardDefaults.cardColors(containerColor = ClipyDesignTokens.cardSurface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, ClipyDesignTokens.cardBorder)
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.fillMaxSize().padding(12.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Box(contentAlignment = Alignment.TopEnd) {
-                Surface(shape = CircleShape, color = item.accent.copy(alpha = 0.2f), modifier = Modifier.size(56.dp)) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(item.icon, contentDescription = item.title, tint = item.accent, modifier = Modifier.size(28.dp))
-                    }
-                }
-                if (item.pro) {
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = Color(0x3300CBE6),
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 2.dp)
-                    ) {
-                        Text(
-                            "PRO",
-                            color = Color(0xFF5DE6FF),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
-                        )
-                    }
+            Surface(
+                modifier = Modifier.size(42.dp),
+                shape = CircleShape,
+                color = color.copy(alpha = 0.15f)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = title,
+                        tint = color,
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
             }
-            Text(item.title, color = Color(0xFFF8FAFC), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, fontWeight = FontWeight.Medium)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = title,
+                color = Color.White,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }

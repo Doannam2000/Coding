@@ -40,4 +40,21 @@ object ImageMetadataLoader {
             type = MediaItemType.IMAGE
         )
     }
+
+    fun loadThumbnail(context: android.content.Context, uri: Uri): Bitmap? {
+        return runCatching {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                // We can't reuse the stream easily, but thumbnails are small
+                // In production, we'd use a better way
+                BitmapFactory.decodeStream(input, null, bounds)
+                
+                context.contentResolver.openInputStream(uri)?.use { freshInput ->
+                    val sample = maxOf(1, minOf(bounds.outWidth / 256, bounds.outHeight / 256))
+                    val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sample }
+                    BitmapFactory.decodeStream(freshInput, null, decodeOptions)
+                }
+            }
+        }.getOrNull()
+    }
 }

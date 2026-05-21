@@ -1,6 +1,8 @@
 package com.nantcompany.clipy.settings
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import com.nantcompany.clipy.export.output.LocalOutputRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,6 +19,7 @@ data class SettingsUiState(
 )
 
 class SettingsViewModel(
+    private val context: Context,
     private val outputRepository: LocalOutputRepository = LocalOutputRepository()
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(
@@ -40,15 +43,33 @@ class SettingsViewModel(
     }
 
     fun clearTempFiles() {
-        val root = File(System.getProperty("java.io.tmpdir") ?: ".", "clipy")
-        val removed = runCatching {
-            root.listFiles()
-                ?.filter { it.isFile && (it.name.startsWith("clipy-") || it.name.endsWith(".tmp")) }
-                ?.count { it.delete() } ?: 0
-        }.getOrDefault(0)
+        val importsDir = File(context.filesDir, "imports")
+        val outputsDir = File(context.filesDir, "outputs")
+        
+        var removed = 0
+        removed += deleteDirectoryContents(importsDir)
+        removed += deleteDirectoryContents(outputsDir, keepFiles = setOf("clipy_output_history.json"))
+        
         _uiState.value = _uiState.value.copy(
-            message = "Cleared $removed temporary files. Exported media files were not removed."
+            message = "Cleared $removed files from cache."
         )
+    }
+
+    private fun deleteDirectoryContents(dir: File, keepFiles: Set<String> = emptySet()): Int {
+        if (!dir.exists()) return 0
+        val files = dir.listFiles() ?: return 0
+        var count = 0
+        files.forEach { file ->
+            if (file.name !in keepFiles) {
+                if (file.isDirectory) {
+                    count += deleteDirectoryContents(file)
+                    file.delete()
+                } else {
+                    if (file.delete()) count++
+                }
+            }
+        }
+        return count
     }
 
     fun askClearHistory() {
@@ -72,11 +93,16 @@ class SettingsViewModel(
     }
 
     private fun resolveOutputHistoryPath(): String {
-        val root = File(System.getProperty("java.io.tmpdir") ?: ".")
-        return File(root, "clipy/clipy_output_history.json").absolutePath
+        return File(context.filesDir, "outputs/clipy_output_history.json").absolutePath
     }
 
     private fun resolveAppVersionLabel(): String {
         return "Clipy v1.0"
+    }
+
+    class Factory(private val context: Context) : ViewModelProvider.Factory {
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            return SettingsViewModel(context) as T
+        }
     }
 }

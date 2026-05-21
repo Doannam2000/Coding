@@ -1,26 +1,26 @@
 [
     {
-        "merged": "com.nantcompany.clipy.app-debug-38:/xml_file_paths.xml.flat",
-        "source": "com.nantcompany.clipy.app-main-40:/xml/file_paths.xml"
+        "merged": "com.nantcompany.clipy.app-debug-49:/drawable_ic_launcher_foreground.xml.flat",
+        "source": "com.nantcompany.clipy.app-main-51:/drawable/ic_launcher_foreground.xml"
     },
     {
-        "merged": "com.nantcompany.clipy.app-debug-38:/drawable_ic_launcher_foreground.xml.flat",
-        "source": "com.nantcompany.clipy.app-main-40:/drawable/ic_launcher_foreground.xml"
+        "merged": "com.nantcompany.clipy.app-debug-49:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "com.nantcompany.clipy.app-main-51:/mipmap-anydpi-v26/ic_launcher_round.xml"
     },
     {
-        "merged": "com.nantcompany.clipy.app-debug-38:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
-        "source": "com.nantcompany.clipy.app-main-40:/mipmap-anydpi-v26/ic_launcher_round.xml"
+        "merged": "com.nantcompany.clipy.app-debug-49:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "com.nantcompany.clipy.app-main-51:/mipmap-anydpi-v26/ic_launcher.xml"
     },
     {
-        "merged": "com.nantcompany.clipy.app-debug-38:/xml_data_extraction_rules.xml.flat",
-        "source": "com.nantcompany.clipy.app-main-40:/xml/data_extraction_rules.xml"
+        "merged": "com.nantcompany.clipy.app-debug-49:/xml_file_paths.xml.flat",
+        "source": "com.nantcompany.clipy.app-main-51:/xml/file_paths.xml"
     },
     {
-        "merged": "com.nantcompany.clipy.app-debug-38:/xml_backup_rules.xml.flat",
-        "source": "com.nantcompany.clipy.app-main-40:/xml/backup_rules.xml"
+        "merged": "com.nantcompany.clipy.app-debug-49:/xml_backup_rules.xml.flat",
+        "source": "com.nantcompany.clipy.app-main-51:/xml/backup_rules.xml"
     },
     {
-        "merged": "com.nantcompany.clipy.app-debug-38:/mipmap-anydpi-v26_ic_launcher.xml.flat",
-        "source": "com.nantcompany.clipy.app-main-40:/mipmap-anydpi-v26/ic_launcher.xml"
+        "merged": "com.nantcompany.clipy.app-debug-49:/xml_data_extraction_rules.xml.flat",
+        "source": "com.nantcompany.clipy.app-main-51:/xml/data_extraction_rules.xml"
     }
 ]

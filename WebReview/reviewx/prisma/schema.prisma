@@ -1,0 +1,452 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum LinkStatus {
+  ACTIVE
+  INACTIVE
+  BROKEN
+}
+
+enum ShortLinkStatus {
+  PENDING
+  RESOLVED
+  CONVERTED
+  FAILED
+  CAPTCHA_REQUIRED
+  DUPLICATE
+}
+
+enum CrawlerJobStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  RETRYING
+  CAPTCHA_REQUIRED
+}
+
+enum CrawlerJobType {
+  PRODUCT_BY_URL
+  PRODUCT_BY_KEYWORD
+  REVIEW_BY_PRODUCT
+  SHORT_LINK_RESOLVE
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  role      String   @default("admin")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Category {
+  id             String     @id @default(cuid())
+  name           String
+  slug           String     @unique
+  icon           String?
+  image          String?
+  description    String?
+  seoTitle       String?
+  seoDescription String?
+  sortOrder      Int        @default(0)
+  status         PublishStatus @default(DRAFT)
+  parentId       String?
+  parent         Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children       Category[] @relation("CategoryTree")
+  products       Product[]
+  reviews        Review[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([parentId])
+}
+
+model Brand {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  logo        String?
+  website     String?
+  country     String?
+  description String?
+  seoTitle    String?
+  seoDescription String?
+  trustScore  Int      @default(0)
+  status      PublishStatus @default(DRAFT)
+  products    Product[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Product {
+  id            String        @id @default(cuid())
+  name          String
+  slug          String        @unique
+  brandId       String
+  categoryId    String
+  thumbnail     String?
+  thumbnailAlt  String?
+  description   String?
+  shortDescription String?
+  fullDescription  String?
+  badge         String?
+  priceMin      Int?
+  priceMax      Int?
+  currentPrice  Int?
+  originalPrice Int?
+  discountPercent Int?
+  priceRangeMin Int?
+  priceRangeMax Int?
+  currency      String        @default("VND")
+  priceUpdatedAt DateTime?
+  rating        Float?
+  soldCount     Int?          @default(0)
+  worthScore    Float?
+  verdict       String?
+  verdictLabel  String?
+  shouldBuyIf   String?
+  considerIf    String?
+  avoidIfText   String?
+  buyUnderPrice Int?
+  considerAbovePrice Int?
+  finalVerdict  String?
+  pros          String?
+  cons          String?
+  prosJson      String?
+  consJson      String?
+  bestFor       String?
+  avoidIf       String?
+  suitableForJson String?
+  notSuitableForJson String?
+  specs         String?
+  praisedPointsJson String?
+  complainedPointsJson String?
+  sentimentScore Float?
+  insightNote   String?
+  dataSourceNote String?
+  seoTitle      String?
+  seoDescription String?
+  seoOgImage    String?
+  canonicalUrl  String?
+  noindex       Boolean       @default(false)
+  shopeeOriginalUrl String?
+  shopeeAffiliateUrl String?
+  shopeeTrackingNote String?
+  lazadaOriginalUrl String?
+  lazadaAffiliateUrl String?
+  tikiOriginalUrl String?
+  tikiAffiliateUrl String?
+  officialStoreUrl String?
+  primaryPlatform String?
+  ctaLabel      String?
+  linkStatus    String?
+  status        PublishStatus @default(DRAFT)
+  brand         Brand         @relation(fields: [brandId], references: [id])
+  category      Category      @relation(fields: [categoryId], references: [id])
+  images        ProductImage[]
+  productSpecs  ProductSpec[]
+  sources       ProductSource[]
+  reviews       Review[]
+  affiliateLinks AffiliateLink[]
+  deals         Deal[]
+  productTags   ProductTag[]
+  comparisonItems ComparisonItem[]
+  clickEvents    ClickEvent[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([brandId])
+  @@index([categoryId])
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  url       String
+  alt       String?
+  sortOrder Int      @default(0)
+  product   Product  @relation(fields: [productId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+}
+
+model ProductSpec {
+  id        String   @id @default(cuid())
+  productId String
+  key       String
+  value     String
+  group     String?
+  sortOrder Int      @default(0)
+  product   Product  @relation(fields: [productId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+}
+
+model ProductSource {
+  id            String   @id @default(cuid())
+  productId     String
+  sourceType    String
+  sourceUrl     String?
+  rawData       String
+  crawlerJobId  String?
+  product       Product  @relation(fields: [productId], references: [id])
+  crawlerJob    CrawlerJob? @relation(fields: [crawlerJobId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([productId])
+  @@index([crawlerJobId])
+}
+
+model Review {
+  id              String        @id @default(cuid())
+  productId       String
+  categoryId      String?
+  author          String?
+  title           String
+  slug            String        @unique
+  summary         String?
+  content         String?
+  contentBlocks   String?
+  score           Float?
+  readingTimeMinutes Int?
+  pros            String?
+  cons            String?
+  coverImage      String?
+  scoreBreakdown  String?
+  verdict         String?
+  bestFor          String?
+  avoidIf          String?
+  sentimentScore   Float?     @default(0)
+  relatedReviewIds String?
+  relatedProductIds String?
+  faqText         String?
+  ctaBlocks       String?
+  seoTitle        String?
+  seoDescription  String?
+  seoOgImage      String?
+  canonicalUrl    String?
+  noindex         Boolean       @default(false)
+  status          PublishStatus @default(DRAFT)
+  publishedAt     DateTime?
+  product        Product       @relation(fields: [productId], references: [id])
+  category       Category?     @relation(fields: [categoryId], references: [id])
+  insights       ReviewInsight[]
+  affiliateLinks AffiliateLink[]
+  faqs           FAQ[]
+  clickEvents    ClickEvent[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([productId])
+  @@index([categoryId])
+}
+
+model ReviewInsight {
+  id        String   @id @default(cuid())
+  reviewId  String
+  positive  String?
+  negative  String?
+  keywords  String?
+  review    Review   @relation(fields: [reviewId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([reviewId])
+}
+
+model AffiliateLink {
+  id           String     @id @default(cuid())
+  productId    String
+  reviewId     String?
+  platform     String
+  label        String
+  originalUrl  String
+  affiliateUrl String?
+  trackingId   String?
+  note         String?
+  isPrimary    Boolean    @default(false)
+  allowOriginalUrlFallback Boolean @default(false)
+  lastCheckedAt DateTime?
+  internalUrl  String     @unique
+  clickCount   Int        @default(0)
+  status       LinkStatus @default(ACTIVE)
+  product      Product    @relation(fields: [productId], references: [id])
+  review       Review?    @relation(fields: [reviewId], references: [id])
+  clickEvents  ClickEvent[]
+  deals        Deal[]
+  shortLinks   ShortLink[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([productId])
+  @@index([reviewId])
+}
+
+model ClickEvent {
+  id              String   @id @default(cuid())
+  affiliateLinkId String
+  productId       String
+  reviewId        String?
+  dealId          String?
+  platform        String
+  sourcePage      String?
+  deviceType      String?
+  utmSource       String?
+  utmMedium       String?
+  utmCampaign     String?
+  utmTerm         String?
+  utmContent      String?
+  referrer        String?
+  userAgent       String?
+  ipHash          String?
+  affiliateLink   AffiliateLink @relation(fields: [affiliateLinkId], references: [id])
+  product         Product       @relation(fields: [productId], references: [id])
+  review          Review?       @relation(fields: [reviewId], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([affiliateLinkId])
+  @@index([productId])
+  @@index([reviewId])
+}
+
+model ShortLink {
+  id               String          @id @default(cuid())
+  inputUrl         String
+  resolvedUrl      String?
+  platform         String
+  shopId           String?
+  itemId           String?
+  productName      String?
+  affiliateLinkId  String?
+  internalTrackingUrl String?
+  status           ShortLinkStatus @default(PENDING)
+  errorMessage     String?
+  affiliateLink    AffiliateLink?  @relation(fields: [affiliateLinkId], references: [id])
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([affiliateLinkId])
+}
+
+model CrawlerJob {
+  id          String           @id @default(cuid())
+  type        CrawlerJobType
+  input       String
+  status      CrawlerJobStatus @default(PENDING)
+  logs        String?
+  rawResult   String?
+  sources     ProductSource[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model FAQ {
+  id        String   @id @default(cuid())
+  reviewId  String
+  question  String
+  answer    String
+  sortOrder Int      @default(0)
+  review    Review   @relation(fields: [reviewId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([reviewId])
+}
+
+model Tag {
+  id          String      @id @default(cuid())
+  name        String
+  slug        String      @unique
+  productTags ProductTag[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model ProductTag {
+  id        String   @id @default(cuid())
+  productId String
+  tagId     String
+  product   Product  @relation(fields: [productId], references: [id])
+  tag       Tag      @relation(fields: [tagId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, tagId])
+  @@index([productId])
+  @@index([tagId])
+}
+
+model Deal {
+  id              String     @id @default(cuid())
+  productId       String
+  affiliateLinkId String
+  title           String?
+  platform        String?
+  currentPrice    String
+  oldPrice        String
+  discount        String
+  couponNote      String?
+  originalUrl     String?
+  affiliateUrl    String?
+  isFeatured      Boolean    @default(false)
+  sortPriority    Int        @default(0)
+  allowOriginalUrlFallback Boolean @default(false)
+  startTime       DateTime
+  endTime         DateTime
+  status          String
+  couponCode      String?
+  product         Product    @relation(fields: [productId], references: [id])
+  affiliateLink   AffiliateLink @relation(fields: [affiliateLinkId], references: [id])
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([productId])
+  @@index([affiliateLinkId])
+}
+
+model ComparisonGroup {
+  id        String           @id @default(cuid())
+  title     String
+  slug      String           @unique
+  items     ComparisonItem[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+}
+
+model ComparisonItem {
+  id                String          @id @default(cuid())
+  comparisonGroupId String
+  productId         String
+  sortOrder         Int             @default(0)
+  comparisonGroup   ComparisonGroup @relation(fields: [comparisonGroupId], references: [id])
+  product           Product         @relation(fields: [productId], references: [id])
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([comparisonGroupId])
+  @@index([productId])
+}
+
+
+
+

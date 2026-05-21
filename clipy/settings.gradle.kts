@@ -23,4 +23,5 @@ rootProject.name = "Clipy"
 include(":app")
 include(":edit")
 include(":export")
+include(":gpu-filters")
  

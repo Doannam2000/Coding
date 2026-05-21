@@ -1,56 +1,53 @@
 package com.nantcompany.clipy.home.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nantcompany.clipy.home.HomeTab
+import com.nantcompany.clipy.theme.ClipyDesignTokens
 
 @Composable
 fun BottomGlassNav(
     currentIndex: Int,
-    modifier: Modifier = Modifier,
-    onTabClick: (Int) -> Unit
+    onTabClick: (Int) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(999.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xCC16111B)),
-        border = CardDefaults.outlinedCardBorder().copy(width = 1.dp, brush = Brush.linearGradient(listOf(Color(0x26FFFFFF), Color(0x1FFFFFFF))))
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(72.dp)
+            .clip(RoundedCornerShape(36.dp))
+            .background(ClipyDesignTokens.bgNav.copy(alpha = 0.85f))
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(36.dp))
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 6.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
             HomeTab.entries.forEachIndexed { index, tab ->
-                BottomNavItem(
+                val active = currentIndex == index
+                NavItem(
                     label = tab.label,
                     icon = tab.icon,
-                    active = index == currentIndex,
-                    onClick = { onTabClick(index) },
-                    modifier = Modifier.weight(1f)
+                    active = active,
+                    onClick = { onTabClick(index) }
                 )
             }
         }
@@ -58,25 +55,43 @@ fun BottomGlassNav(
 }
 
 @Composable
-private fun BottomNavItem(
+private fun RowScope.NavItem(
     label: String,
     icon: ImageVector,
     active: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    onClick: () -> Unit
 ) {
-    val tint = if (active) Color(0xFF00CBE6) else Color(0xFF94A3B8)
-    val chipBg = if (active) Color(0x1A00CBE6) else Color.Transparent
+    val tint = if (active) ClipyDesignTokens.primaryAccent else ClipyDesignTokens.secondaryText
     Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(chipBg)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight()
+            .clickable(interactionSource = null, indication = null) { onClick() },
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+        verticalArrangement = Arrangement.Center
     ) {
-        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(18.dp))
-        Text(label, color = tint, style = MaterialTheme.typography.labelSmall, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium)
+        Box(contentAlignment = Alignment.Center) {
+            if (active) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .blur(16.dp)
+                        .background(ClipyDesignTokens.primaryAccent.copy(alpha = 0.25f), CircleShape)
+                )
+            }
+            Icon(
+                icon, 
+                contentDescription = label, 
+                tint = tint, 
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            label, 
+            color = tint, 
+            style = MaterialTheme.typography.labelSmall, 
+            fontWeight = if (active) FontWeight.ExtraBold else FontWeight.Medium
+        )
     }
 }

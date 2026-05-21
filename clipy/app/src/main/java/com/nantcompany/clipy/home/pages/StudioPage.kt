@@ -39,8 +39,13 @@ fun StudioPage(
         ToolCardModel("Cut", Icons.Default.Build, Color(0xFFFF6B9A), AppRoute.PICK_VIDEO, ToolTarget.CUT),
         ToolCardModel("Compress", Icons.Default.Star, Color(0xFF22D3EE), AppRoute.PICK_VIDEO, ToolTarget.COMPRESS, pro = true),
         ToolCardModel("Merge", Icons.AutoMirrored.Filled.ArrowForward, Color(0xFF60A5FA), AppRoute.PICK_MULTIPLE_VIDEOS, ToolTarget.MERGE),
+        ToolCardModel("Crop", Icons.Default.Build, Color(0xFF4ADE80), AppRoute.PICK_VIDEO, ToolTarget.CROP),
+        ToolCardModel("Speed", Icons.Default.PlayArrow, Color(0xFFFFB224), AppRoute.PICK_VIDEO, ToolTarget.SPEED),
+        ToolCardModel("Filters", Icons.Default.Star, Color(0xFFF472B6), AppRoute.PICK_VIDEO, ToolTarget.FILTERS),
+        ToolCardModel("Reverse", Icons.Default.Settings, Color(0xFF818CF8), AppRoute.PICK_VIDEO, ToolTarget.REVERSE),
         ToolCardModel("Extract\nAudio", Icons.Default.Star, Color(0xFFC084FC), AppRoute.PICK_VIDEO, ToolTarget.EXTRACT_AUDIO),
         ToolCardModel("Slideshow", Icons.Default.PlayArrow, Color(0xFF38BDF8), AppRoute.PICK_IMAGES, ToolTarget.SLIDESHOW),
+        ToolCardModel("Rotate", Icons.Default.Build, Color(0xFFFB923C), AppRoute.PICK_VIDEO, ToolTarget.ROTATE),
         ToolCardModel("More", Icons.Default.Settings, Color(0xFF94A3B8), AppRoute.FUTURE_TOOLS)
     )
 
@@ -51,7 +56,7 @@ fun StudioPage(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item { HeaderRow() }
-        item { HeroCard(onPickVideo = { onNavigate(AppRoute.PICK_VIDEO) }) }
+        item { HeroCard(onPickVideo = { onToolSelected(AppRoute.PICK_VIDEO, null) }) }
         item {
             Text(
                 "Quick Tools",
@@ -68,12 +73,24 @@ fun StudioPage(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 val first = tools[startIndex]
-                HomeToolCard(first, onClick = { onToolSelected(first.route, first.target) }, modifier = Modifier.weight(1f))
+                HomeToolCard(
+                    title = first.title,
+                    icon = first.icon,
+                    color = first.accent,
+                    onClick = { onToolSelected(first.route, first.target) },
+                    modifier = Modifier.weight(1f)
+                )
 
                 val secondIndex = startIndex + 1
                 if (secondIndex < tools.size) {
                     val second = tools[secondIndex]
-                    HomeToolCard(second, onClick = { onToolSelected(second.route, second.target) }, modifier = Modifier.weight(1f))
+                    HomeToolCard(
+                        title = second.title,
+                        icon = second.icon,
+                        color = second.accent,
+                        onClick = { onToolSelected(second.route, second.target) },
+                        modifier = Modifier.weight(1f)
+                    )
                 } else {
                     Spacer(modifier = Modifier.weight(1f))
                 }

@@ -1,0 +1,14 @@
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:20128/v1",
+    "ANTHROPIC_AUTH_TOKEN": "sk-8a30e67b3a1f2d51-8uifin-91b2ab1e",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "combo",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "just_codexer",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "combo_free"
+  },
+  "skipDangerousModePermissionPrompt": true,
+  "hasCompletedOnboarding": true,
+  "model": "sonnet",
+  "hooks": {
+  }
+}

@@ -1,125 +1,135 @@
 package com.nantcompany.clipy.home.components
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.nantcompany.clipy.export.output.OutputMedia
+import com.nantcompany.clipy.theme.ClipyDesignTokens
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
-fun ExportItemCard(output: OutputMedia, onClick: () -> Unit) {
-    val isAudio = output.fileName.endsWith(".mp3", true) || output.fileName.endsWith(".wav", true)
-    val formatTag = if (isAudio) "WAV" else "MP4"
-    val qualityTag = if (isAudio) "" else if (output.sizeInBytes > 800_000_000L) "4K" else "1080P"
-    val thumbTime = if (isAudio) "" else if (output.sizeInBytes > 800_000_000L) "03:45" else "12:10"
-    val subtitle = buildString {
-        append(
-            when {
-                output.sizeInBytes >= 1_000_000_000L -> "1.2 GB"
-                output.sizeInBytes >= 100_000_000L -> "450 MB"
-                else -> "45 MB"
-            }
-        )
-        append(" • ")
-        append(output.operation)
-    }
-
+fun ExportItemCard(
+    output: OutputMedia,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .height(96.dp)
             .clickable { onClick() },
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF17253F)),
-        border = CardDefaults.outlinedCardBorder().copy(width = 1.dp, brush = Brush.linearGradient(listOf(Color(0xFF2D3F63), Color(0xFF212F4A))))
+        shape = RoundedCornerShape(ClipyDesignTokens.cardCorner),
+        colors = CardDefaults.cardColors(containerColor = ClipyDesignTokens.cardSurface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, ClipyDesignTokens.cardBorder)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 10.dp, vertical = 10.dp),
+            modifier = Modifier.padding(14.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Surface(modifier = Modifier.size(70.dp), shape = RoundedCornerShape(12.dp), color = Color(0xFF0D1629)) {
+            // Thumbnail / Icon
+            Surface(
+                color = ClipyDesignTokens.primaryAccent.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.size(64.dp)
+            ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        if (isAudio) Icons.Default.Star else Icons.Default.PlayArrow,
+                        Icons.Default.PlayArrow,
                         contentDescription = null,
-                        tint = if (isAudio) Color(0xFF22D3EE) else Color(0xFFA78BFA),
+                        tint = ClipyDesignTokens.primaryAccent,
                         modifier = Modifier.size(28.dp)
                     )
-                    if (thumbTime.isNotBlank()) {
-                        Text(
-                            thumbTime,
-                            color = Color(0xFFD6E2FF),
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(4.dp)
-                        )
-                    }
                 }
             }
 
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    MiniTag(formatTag)
-                    if (qualityTag.isNotBlank()) MiniTag(qualityTag)
-                }
                 Text(
-                    output.fileName,
-                    color = Color(0xFFD5E0F5),
-                    style = MaterialTheme.typography.titleMedium,
+                    text = output.fileName,
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        color = Color.White.copy(alpha = 0.05f),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = output.operation.uppercase(),
+                            color = ClipyDesignTokens.secondaryText,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Black,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+                    
+                    Text(
+                        text = formatBytes(output.sizeInBytes),
+                        color = ClipyDesignTokens.textMuted,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+
                 Text(
-                    subtitle,
-                    color = Color(0xFF7F95BC),
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    text = formatDate(output.createdAtEpochMs),
+                    color = ClipyDesignTokens.textMuted,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp
                 )
             }
-            Icon(Icons.Default.MoreVert, contentDescription = null, tint = Color(0xFF8FA4C6), modifier = Modifier.size(18.dp))
+
+            IconButton(
+                onClick = onClick,
+                modifier = Modifier.size(40.dp).background(Color.White.copy(alpha = 0.03f), CircleShape)
+            ) {
+                Icon(
+                    Icons.Default.Share,
+                    contentDescription = "Open",
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }
 
-@Composable
-private fun MiniTag(text: String) {
-    Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFF675E8A).copy(alpha = 0.55f)) {
-        Text(
-            text = text,
-            color = Color(0xFFDCD1FF),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-        )
-    }
+private fun formatBytes(bytes: Long): String {
+    if (bytes < 1024) return "$bytes B"
+    val exp = (Math.log(bytes.toDouble()) / Math.log(1024.0)).toInt()
+    val pre = "KMGTPE"[exp - 1]
+    return String.format(Locale.getDefault(), "%.1f %sB", bytes / Math.pow(1024.0, exp.toDouble()), pre)
+}
+
+private fun formatDate(epochMs: Long): String {
+    return runCatching {
+        val sdf = SimpleDateFormat("MMM dd, yyyy • HH:mm", Locale.getDefault())
+        sdf.format(Date(epochMs))
+    }.getOrDefault("Recently")
 }

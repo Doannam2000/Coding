@@ -1,0 +1,223 @@
+﻿- [x] Product detail ph?i ?n pros/cons r?ng ho?c y?u c?u nh?p d? tru?c publish.
+- [x] X?a m?i text dev nhu `Placeholder zoom/lightbox s? du?c b? sung ? bu?c sau`.
+- [x] Product detail gallery ph?i c? ?nh ch?nh.
+- [x] Product detail gallery ph?i c? thumbnail.
+- [x] Product detail gallery ph?i c? preview modal.
+- [x] Product detail gallery ph?i c? next/prev.
+- [x] Product detail gallery ph?i c? close modal.
+- [x] Product detail gallery ph?i c? alt text.
+- [x] Product detail c?n hi?n th? ng?y c?p nh?t gi?/link.
+- [x] Product detail c?n Product schema.
+- [x] Product detail c?n AggregateRating schema n?u d? d? li?u.
+- [x] Product detail c?n Offer schema n?u d? d? li?u.
+- [x] Fix `/review/sony-wh-ch520` dang b?o `Kh?ng t?m th?y review`.
+- [x] Review detail ph?i d?c data t? Prisma.
+- [x] Review detail không dùng hardcoded/mock map khác với category.
+- [x] Seed review `sony-wh-ch520` vào Prisma nếu public vẫn hiển thị review này.
+- [x] Nếu review không tồn tại trong Prisma, public không được render link tới review đó.
+- [x] Review card trên Home/Category/Latest Reviews phải dùng đúng slug từ Prisma.
+- [x] Review detail phải liên kết đúng product từ database.
+- [x] Review detail phải liên kết đúng category từ database.
+- [x] Review detail phải hiển thị đúng score từ database.
+- [x] Review detail phải dùng đúng affiliate CTA từ database.
+- [x] Review detail phải dùng đúng FAQ từ database.
+- [x] Review draft kh?ng du?c hi?n tr?n Home.
+- [x] Review draft kh?ng du?c hi?n tr?n Category.
+- [x] Review draft không được hiện trên Sitemap.
+- [x] Review detail c?n Article schema.
+- [x] Review detail cần FAQ schema nếu có FAQ.
+- [x] Tạo seed data tối thiểu cho category `cong-nghe`.
+- [x] Tạo seed data tối thiểu cho product `sony-wh-ch520`.
+- [x] Tạo seed data tối thiểu cho review `sony-wh-ch520`.
+- [x] Tạo seed data tối thiểu cho deal liên quan tới `sony-wh-ch520`.
+- [x] Tạo seed data tối thiểu cho affiliate link Shopee của `sony-wh-ch520`.
+- [x] Seed data ch? d?ng d? init/test, public v?n ph?i d?c t? Prisma.
+- [x] Kh?ng d?ng hardcoded fallback r?i trong component public n?u DB d? c? data.
+- [x] Home ph?i render featured product th?t t? Prisma ho?c empty state r?.
+- [x] Home ph?i render latest reviews th?t t? Prisma ho?c empty state r?.
+- [x] Home ph?i render hot deals th?t t? Prisma ho?c empty state r?.
+- [x] Kh?ng d? heading `B?i vi?t review m?i nh?t` tr?ng n?i dung.
+- [x] Không để heading `Deal hot` trống nội dung.
+- [x] Home kh?ng du?c render product link n?u detail page kh?ng t?n t?i.
+- [x] Home kh?ng du?c render review link n?u detail page kh?ng t?n t?i.
+- [x] Home không được render deal link nếu route deal/affiliate không hợp lệ.
+- [x] Home kh?ng du?c d?ng hardcoded item c? slug kh?ng t?n t?i trong Prisma.
+- [x] N?u DB r?ng, seed d? li?u test t?i thi?u ho?c render empty state r?.
+- [x] Kh?ng claim `D? li?u th?t t? Shopee` n?u chua c? ngu?n d? li?u th?t.
+- [x] `/deals` ph?i render deal cards th?t t? Prisma.
+- [x] `/deals` phải dùng cùng data source với Home `Deal hot`.
+- [x] `/deals` ph?i d?ng c?ng data source v?i Category deals.
+- [x] N?u kh?ng c? deal active, hi?n empty state r? `Chua c? deal active`.
+- [x] Deals filter kh?ng du?c l?m m?t to?n b? list m?c d?nh khi v?a v?o trang.
+- [x] Kiểm tra `/api/public/deals` có trả data đúng không.
+- [x] Seed ít nhất 2 deal thật nếu DB đang rỗng.
+- [x] Deal card ph?i c? ?nh.
+- [x] Deal card ph?i c? product name.
+- [x] Deal card ph?i c? platform.
+- [x] Deal card ph?i c? sale price.
+- [x] Deal card ph?i c? original price.
+- [x] Deal card ph?i c? discount.
+- [x] Deal card ph?i c? coupon n?u c?.
+- [x] Deal card ph?i c? status active/expired.
+- [x] Deal card ph?i c? CTA affiliate n?u link h?p l?.
+- [x] Deal expired ph?i c? badge `?? h?t h?n`.
+- [x] Deal expired ph?i disable CTA.
+- [x] Deal thi?u affiliate link kh?ng du?c hi?n CTA click du?c ngo?i public.
+- [x] Filter deals ph?i ho?t d?ng theo category.
+- [x] Filter deals ph?i ho?t d?ng theo platform.
+- [x] Filter deals ph?i ho?t d?ng theo discount range.
+- [x] Filter deals ph?i ho?t d?ng theo active/expired/all.
+- [x] Filter deals ph?i ho?t d?ng theo newest.
+- [x] Filter deals ph?i ho?t d?ng theo biggest discount.
+- [x] Filter deals ph?i ho?t d?ng theo lowest price.
+- [x] Filter deals ph?i ho?t d?ng theo ending soon.
+- [x] Filter deals ph?i ho?t d?ng theo coupon only.
+- [x] Deals filter ph?i update URL query.
+- [x] `/recommends/sony-wh-ch520` kh?ng du?c render trang tr?ng/r?ng.
+- [x] `/recommends/deal-sony-wh-ch520` kh?ng du?c render trang tr?ng/r?ng.
+- [x] N?u affiliate ID h?p l?, `/recommends/[id]` ph?i log click r?i redirect sang affiliate URL.
+- [x] N?u affiliate ID kh?ng h?p l?, `/recommends/[id]` ph?i redirect `/link-error?reason=missing-affiliate-link`.
+- [x] `/link-error` ph?i hi?n th? message r? r?ng.
+- [x] `/link-error` kh?ng du?c tr?ng trang.
+- [x] CTA `Xem gi? Shopee` kh?ng du?c d?ng product slug n?u `/recommends/[id]` expects affiliate link ID.
+- [x] Th?m route `/go/product/[slug]`.
+- [x] Th?m route `/go/deal/[slug]`.
+- [x] `/go/product/[slug]` ph?i t?m primary active affiliate link c?a product.
+- [x] `/go/product/[slug]` ph?i log click.
+- [x] `/go/product/[slug]` ph?i redirect sang affiliate URL.
+- [x] `/go/deal/[slug]` ph?i t?m affiliate link c?a deal.
+- [x] `/go/deal/[slug]` ph?i log click.
+- [x] `/go/deal/[slug]` ph?i redirect sang affiliate URL.
+- [x] N?u `/go/product/[slug]` thi?u link, redirect `/link-error?reason=missing-product-affiliate`.
+- [x] N?u `/go/deal/[slug]` thi?u link, redirect `/link-error?reason=missing-deal-affiliate`.
+- [x] CTA affiliate public ph?i d?ng `/go/product/[slug]` ho?c `/go/deal/[slug]`.
+- [x] Login b?ng `admin/admin`.
+- [x] Sau login ph?i redirect d?ng v? `/admin` ho?c route trong query `from`.
+- [x] N?u login sai, ph?i hi?n l?i r?.
+- [x] Logout ph?i clear session/cookie.
+- [x] Logout xong v?o `/admin/products` ph?i redirect v? login.
+- [x] Test route `/admin`.
+- [x] Test route `/admin/products`.
+- [x] Test route `/admin/products/new`.
+- [x] Test route `/admin/reviews`.
+- [x] Test route `/admin/reviews/new`.
+- [x] Test route `/admin/deals`.
+- [x] Test route `/admin/deals/new`.
+- [x] Test route `/admin/categories`.
+- [x] Test route `/admin/brands`.
+- [x] Test route `/admin/affiliate-links`.
+- [x] Test route `/admin/analytics`.
+- [ ] T?o 1 product test d?y d? ?nh + link Shopee + Shopee affiliate.
+- [ ] Publish product v? m? `/san-pham/[slug]` ki?m tra hi?n th? d?ng.
+- [ ] T?o 1 review g?n v?i product test.
+- [ ] Publish review v? m? `/review/[slug]` ki?m tra hi?n th? d?ng.
+- [ ] T?o 1 deal Shopee g?n v?i product test.
+- [ ] Publish deal v? m? `/deals` ki?m tra deal xu?t hi?n.
+- [ ] T?o 1 category test v? ki?m tra `/danh-muc`.
+- [ ] T?o 1 brand test v? ki?m tra product form ch?n du?c brand.
+- [ ] T?o 1 affiliate link primary.
+- [ ] B?m CTA Shopee ngo?i public, ki?m tra redirect d?ng affiliate URL.
+- [x] `/so-sanh` ph?i c? autocomplete l?y product t? Prisma.
+- [x] Cho ch?n t?i da 4 s?n ph?m.
+- [x] Render compare table khi ch?n s?n ph?m.
+- [x] Compare table ph?i c? ?nh.
+- [x] Compare table ph?i c? t?n.
+- [x] Compare table ph?i c? score.
+- [x] Compare table ph?i c? gi?.
+- [x] Compare table ph?i c? brand.
+- [x] Compare table ph?i c? category.
+- [x] Compare table ph?i c? pros.
+- [x] Compare table ph?i c? cons.
+- [x] Compare table ph?i c? specs.
+- [x] Compare table ph?i c? verdict.
+- [x] Compare table ph?i c? CTA mua h?ng.
+- [x] Cho remove t?ng s?n ph?m kh?i compare.
+- [x] Cho share URL d?ng `/so-sanh?items=slug1,slug2`.
+- [x] Product detail ph?i c? n?t `Th?m v?o so s?nh`.
+- [x] Header/hero search ph?i redirect `/search?q=...`.
+- [x] Implement `/search` page th?t.
+- [x] `/search` ph?i t?m product t? Prisma.
+- [x] `/search` ph?i t?m review t? Prisma.
+- [x] `/search` ph?i t?m deal t? Prisma.
+- [x] Search ph?i t?m theo product name.
+- [x] Search ph?i t?m theo brand.
+- [x] Search ph?i t?m theo category.
+- [x] Search ph?i t?m theo review title.
+- [x] Search ph?i t?m theo specs.
+- [x] Search ph?i t?m theo tags.
+- [x] Search result chia tab T?t c?.
+- [x] Search result chia tab S?n ph?m.
+- [x] Search result chia tab Review.
+- [x] Search result chia tab Deal.
+- [x] Search no result ph?i c? g?i ? category/deal ph? bi?n.
+- [x] `/cong-cu/chon-san-pham` wizard ph?i ch?y d? step category.
+- [x] `/cong-cu/chon-san-pham` wizard ph?i ch?y d? step budget.
+- [x] `/cong-cu/chon-san-pham` wizard ph?i ch?y d? step needs.
+- [x] `/cong-cu/chon-san-pham` wizard ph?i ch?y d? step priorities.
+- [x] `/cong-cu/chon-san-pham` wizard ph?i ch?y d? step result.
+- [x] Product picker ph?i l?y category t? Prisma.
+- [x] Product picker ph?i l?y product t? Prisma.
+- [x] K?t qu? ph?i rank theo score.
+- [x] K?t qu? ph?i rank theo budget.
+- [x] K?t qu? ph?i rank theo needs.
+- [x] K?t qu? ph?i rank theo tags/useCases.
+- [x] K?t qu? ph?i gi?i th?ch v? sao g?i ? s?n ph?m d?.
+- [x] K?t qu? ph?i c? CTA xem s?n ph?m.
+- [x] K?t qu? ph?i c? CTA xem review.
+- [x] K?t qu? ph?i c? CTA xem Shopee.
+- [x] K?t qu? ph?i c? CTA th?m v?o so s?nh.
+- [x] Admin Products c?n field tags/useCases n?u chua c?.
+- [x] Vi?t h?a to?n b? About page.
+- [x] ??i `About ReviewX` sang ti?ng Vi?t.
+- [x] ??i `Our mission` sang ti?ng Vi?t.
+- [x] Vi?t h?a to?n b? C?ch ch?m di?m.
+- [x] ??i `Scoring framework` sang ti?ng Vi?t.
+- [x] Vi?t h?a footer text kh?ng d?u nhu `Nen tang`.
+- [x] Vi?t h?a footer text kh?ng d?u nhu `Chung toi`.
+- [x] Vi?t h?a footer text kh?ng d?u nhu `Ket noi`.
+- [x] Kh?ng tr?n `Who should buy` trong b?i ti?ng Vi?t.
+- [x] Kh?ng tr?n `Specifications` trong b?i ti?ng Vi?t.
+- [x] Kh?ng tr?n `Related reviews` trong b?i ti?ng Vi?t.
+- [x] Th?ng nh?t to?n site d?ng ti?ng Vi?t c? d?u.
+- [ ] Th?m meta title/description ri?ng cho t?ng page public.
+- [x] Th?m OpenGraph/Twitter card.
+- [x] Th?m canonical URL.
+- [x] Th?m sitemap.xml t? published products/reviews/categories.
+- [x] Th?m robots.txt.
+- [x] Product page c?n Product schema.
+- [x] Review page c?n Article/Review schema.
+- [x] FAQ c?n FAQPage schema.
+- [x] Breadcrumb c?n BreadcrumbList schema.
+- [x] Affiliate disclosure ph?i hi?n g?n CTA mua h?ng.
+- [x] Affiliate disclosure ph?i hi?n ? d?u review.
+- [x] Test route `/`.
+- [x] Test route `/danh-muc`.
+- [x] Test route `/danh-muc/cong-nghe`.
+- [x] Test route `/san-pham/sony-wh-ch520`.
+- [x] Test route `/san-pham/jbl-go-3`.
+- [x] Test route `/san-pham/aula-f75`.
+- [x] Test route `/review/sony-wh-ch520`.
+- [x] Test route `/deals`.
+- [x] Test route `/so-sanh`.
+- [x] Test route `/cong-cu/chon-san-pham`.
+- [x] Test route `/about`.
+- [x] Test route `/affiliate-policy`.
+- [x] Test route `/contact`.
+- [x] Test route `/recommends/sony-wh-ch520`.
+- [ ] Test route `/recommends/deal-sony-wh-ch520`.
+- [x] Test route `/go/product/sony-wh-ch520`.
+- [ ] Test t?t c? CTA affiliate public kh?ng d?n t?i route tr?ng/404.
+- [ ] Test t?t c? internal links t? Home m? du?c.
+- [ ] Test t?t c? product links t? Category m? du?c.
+- [ ] Test t?t c? review links t? Category m? du?c.
+- [x] Run `npm run build`.
+- [x] Fix to?n b? TypeScript/build error.
+- [ ] Fix to?n b? lint error n?u project c? lint.
+- [ ] Kh?ng d? console error nghi?m tr?ng tr?n public pages.
+- [ ] Kh?ng d? hydration mismatch.
+- [x] Kh?ng d? server action/API write ch?y khi chua auth.
+- [x] Kh?ng d? route public crash n?u thi?u d? li?u.
+- [ ] Kh?ng d? image l?i l?m v? layout.
+- [x] Kh?ng d? affiliate redirect crash n?u link thi?u.
+- [ ] Th?m test ho?c script crawl basic internal links d? b?t 404/trang tr?ng.
+

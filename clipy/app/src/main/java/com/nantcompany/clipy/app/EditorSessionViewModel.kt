@@ -25,10 +25,26 @@ class EditorSessionViewModel : ViewModel() {
         _state.value = _state.value.copy(multipleVideoPaths = current.filterIndexed { i, _ -> i != index })
     }
 
+    fun moveMultipleVideo(fromIndex: Int, toIndex: Int) {
+        val current = _state.value.multipleVideoPaths.toMutableList()
+        if (fromIndex !in current.indices || toIndex !in current.indices) return
+        val item = current.removeAt(fromIndex)
+        current.add(toIndex, item)
+        _state.value = _state.value.copy(multipleVideoPaths = current)
+    }
+
     fun removeImageAt(index: Int) {
         val current = _state.value.imagePaths
         if (index !in current.indices) return
         _state.value = _state.value.copy(imagePaths = current.filterIndexed { i, _ -> i != index })
+    }
+
+    fun moveImage(fromIndex: Int, toIndex: Int) {
+        val current = _state.value.imagePaths.toMutableList()
+        if (fromIndex !in current.indices || toIndex !in current.indices) return
+        val item = current.removeAt(fromIndex)
+        current.add(toIndex, item)
+        _state.value = _state.value.copy(imagePaths = current)
     }
 
     fun clearSingleVideo() {
@@ -55,6 +71,14 @@ class EditorSessionViewModel : ViewModel() {
 
     fun setImagePaths(paths: List<String>) {
         _state.value = _state.value.copy(imagePaths = paths)
+    }
+
+    fun setSlideshowAudioPath(path: String?) {
+        _state.value = _state.value.copy(slideshowAudioPath = path)
+    }
+
+    fun clearSlideshowAudioPath() {
+        _state.value = _state.value.copy(slideshowAudioPath = null)
     }
 
     fun setPendingRequest(request: ProcessingRequest) {

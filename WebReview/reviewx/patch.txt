@@ -1,0 +1,52 @@
+﻿*** Begin Patch
+*** a/app/review/[slug]/page.tsx
+*** b/app/review/[slug]/page.tsx
+***************
+*** 321,340 ****
+  const reviewSchema = {
+    "@context": "https://schema.org",
+    "@type": "Review",
+    itemReviewed: {
+      "@type": "Product",
+      name: review.productName,
+    },
+    author: { "@type": "Organization", name: "ReviewX" },
+    reviewRating: { "@type": "Rating", ratingValue: review.score, bestRating: 10 },
+    reviewBody: review.shortVerdict,
+  };
+
+  const faqSchema = {
+--- 321,348 ----
+  const reviewSchema = {
+    "@context": "https://schema.org",
+    "@type": "Review",
+    itemReviewed: {
+      "@type": "Product",
+      name: review.productName,
+    },
+    author: { "@type": "Organization", name: "ReviewX" },
+    reviewRating: { "@type": "Rating", ratingValue: review.score, bestRating: 10 },
+    reviewBody: review.shortVerdict,
+  };
+
++ const articleSchema = {
++   "@context": "https://schema.org",
++   "@type": "Article",
++   headline: review.title,
++   author: { "@type": "Organization", name: "ReviewX" },
++   datePublished: review.publishedDate,
++   dateModified: review.updatedDate,
++   description: review.summary,
++ };
++
+  const faqSchema = {
+***************
+*** 359,364 ****
+--- 367,373 ----
+  return (
+    <PageContainer>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(reviewSchema) }} />
++     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }} />
+*** End Patch
