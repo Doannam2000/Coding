@@ -66,53 +66,67 @@ export function AppHeader() {
         </div>
       </PageContainer>
 
-      {menuOpen ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <button
-            aria-label="Đóng menu"
+      {/* Mobile Menu Drawer */}
+      {menuOpen && (
+        <div className="fixed inset-0 z-[100] lg:hidden" role="dialog" aria-modal="true" aria-labelledby="mobile-menu-title">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
             onClick={() => setMenuOpen(false)}
-            className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+            aria-hidden="true"
           />
-          <div className="absolute right-0 top-0 h-full w-80 max-w-[90vw] overflow-y-auto border-l border-slate-200/50 bg-white/95 backdrop-blur-xl p-5 shadow-2xl">
-            <div className="mb-5 flex items-center justify-between">
-              <p className="text-base font-semibold text-slate-900">Menu</p>
-              <button
-                onClick={() => setMenuOpen(false)}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-all hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                aria-label="Đóng menu"
-              >
-                Đóng
-              </button>
+
+          {/* Drawer Panel */}
+          <div className="absolute right-0 top-0 h-full w-80 max-w-[90vw] overflow-y-auto border-l border-slate-200/50 bg-white/95 backdrop-blur-xl shadow-2xl transition-transform">
+            {/* Drawer Header */}
+            <div className="sticky top-0 z-10 border-b border-slate-200/50 bg-white/95 backdrop-blur-xl p-4">
+              <div className="flex items-center justify-between">
+                <h2 id="mobile-menu-title" className="text-base font-semibold text-slate-900">Menu</h2>
+                <button
+                  onClick={() => setMenuOpen(false)}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-all hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  aria-label="Đóng menu"
+                >
+                  ✕ Đóng
+                </button>
+              </div>
             </div>
 
-            <input
-              aria-label="Tìm kiếm sản phẩm"
-              placeholder="Tìm sản phẩm..."
-              className="mb-4 w-full rounded-xl border border-slate-200/70 bg-white/80 backdrop-blur-sm px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-all focus-visible:border-blue-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20"
-            />
+            {/* Search Input */}
+            <div className="p-4">
+              <input
+                aria-label="Tìm kiếm sản phẩm"
+                placeholder="Tìm sản phẩm..."
+                className="w-full rounded-xl border border-slate-200/70 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-all focus-visible:border-blue-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              />
+            </div>
 
-            <nav className="flex flex-col gap-1" aria-label="Điều hướng di động">
+            {/* Navigation Links */}
+            <nav className="flex flex-col gap-1 p-4 pt-0" aria-label="Điều hướng di động">
               {navItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
                   onClick={() => setMenuOpen(false)}
-                  className="rounded-xl px-3 py-3 text-sm font-medium text-slate-600 transition-all hover:bg-slate-100/80 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="rounded-xl px-4 py-3 text-sm font-medium text-slate-700 transition-all hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 >
                   {item.label}
                 </Link>
               ))}
+
+              <div className="my-2 border-t border-slate-200" />
+
               <Link
                 href="/admin"
                 onClick={() => setMenuOpen(false)}
-                className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-700 transition-all hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                className="rounded-xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-800 transition-all hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
               >
-                Admin
+                ⚙️ Admin
               </Link>
             </nav>
           </div>
         </div>
-      ) : null}
+      )}
     </header>
   );
 }
