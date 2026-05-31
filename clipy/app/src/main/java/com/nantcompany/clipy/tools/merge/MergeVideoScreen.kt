@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,7 +32,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,7 +47,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -71,7 +67,8 @@ import java.io.File
 private val MergePanelColor = Color(0xFF101725)
 private val MergeTrackColor = Color(0xFF08111F)
 private val MergeBorderColor = Color(0x1FFFFFFF)
-private val MergeSlotColor = Color(0xFF172033)
+private val MergeNodeColor = Color(0xFF172033)
+private val MergeClipSurface = Color(0xFF111A2B)
 
 @Composable
 fun MergeVideoScreen(
@@ -145,15 +142,6 @@ fun MergeVideoScreen(
                     )
                 }
 
-                if (showMixedWarning) {
-                    MergeFormatWarning(
-                        warningExpanded = warningExpanded,
-                        onToggle = { warningExpanded = !warningExpanded },
-                        resolutions = distinctResolutions.ifEmpty { setOf("Unknown") }.joinToString(),
-                        orientations = distinctOrientations.ifEmpty { setOf("Unknown") }.joinToString()
-                    )
-                }
-
                 MergeTimelinePanel(
                     inputPaths = inputPaths,
                     clipSpecs = clipSpecs,
@@ -179,6 +167,15 @@ fun MergeVideoScreen(
                             .coerceIn(0, (inputPaths.size - 1).coerceAtLeast(0))
                     }
                 )
+
+                if (showMixedWarning) {
+                    MergeFormatWarning(
+                        warningExpanded = warningExpanded,
+                        onToggle = { warningExpanded = !warningExpanded },
+                        resolutions = distinctResolutions.ifEmpty { setOf("Unknown") }.joinToString(),
+                        orientations = distinctOrientations.ifEmpty { setOf("Unknown") }.joinToString()
+                    )
+                }
 
                 TransitionPanel(
                     selectedTransition = selectedTransition,
@@ -221,22 +218,22 @@ private fun MergeTimelinePanel(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(24.dp),
         color = MergePanelColor,
         border = BorderStroke(1.dp, MergeBorderColor)
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Merge timeline",
+                        "Timeline",
                         color = Color.White,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.ExtraBold
@@ -250,29 +247,29 @@ private fun MergeTimelinePanel(
                     )
                 }
 
-                TextButton(onClick = onAddMore) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = ClipyDesignTokens.primaryAccent
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Add Clip", color = ClipyDesignTokens.primaryAccent, fontWeight = FontWeight.ExtraBold)
-                }
+                TimelinePillButton(
+                    label = "Add",
+                    enabled = true,
+                    filled = true,
+                    onClick = onAddMore
+                )
             }
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(MergeTrackColor)
-                    .border(1.dp, MergeBorderColor, RoundedCornerShape(24.dp))
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xFF0B1321), MergeTrackColor)
+                        )
+                    )
+                    .border(1.dp, MergeBorderColor, RoundedCornerShape(20.dp))
                     .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 10.dp, vertical = 12.dp)
+                    .padding(horizontal = 6.dp, vertical = 7.dp)
             ) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(0.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     InsertSlot(
@@ -315,45 +312,42 @@ private fun InsertSlot(
     active: Boolean,
     onClick: () -> Unit
 ) {
-    val borderColor = if (active) ClipyDesignTokens.primaryAccent else Color.White.copy(alpha = 0.08f)
-    val background = if (active) {
-        ClipyDesignTokens.primaryAccent.copy(alpha = 0.16f)
+    val nodeSize = if (active) 25.dp else 20.dp
+    val nodeColor = if (active) ClipyDesignTokens.primaryAccent else MergeNodeColor
+    val lineColor = if (active) {
+        ClipyDesignTokens.primaryAccent.copy(alpha = 0.68f)
     } else {
-        MergeSlotColor
+        Color.White.copy(alpha = 0.13f)
     }
 
-    Column(
+    Box(
         modifier = Modifier
-            .width(42.dp)
-            .height(128.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(background)
-            .border(1.dp, borderColor, RoundedCornerShape(20.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
+            .width(28.dp)
+            .height(78.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
-                .size(24.dp)
-                .background(if (active) ClipyDesignTokens.primaryAccent else Color.White.copy(alpha = 0.08f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "Insert slot $index",
-                tint = if (active) Color.Black else Color.White,
-                modifier = Modifier.size(16.dp)
-            )
-        }
-        Text(
-            text = index.toString(),
-            color = if (active) ClipyDesignTokens.primaryAccent else ClipyDesignTokens.textMuted,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
+                .fillMaxWidth()
+                .height(2.dp)
+                .background(lineColor, RoundedCornerShape(99.dp))
         )
+        Surface(
+            modifier = Modifier.size(nodeSize),
+            shape = CircleShape,
+            color = nodeColor,
+            border = BorderStroke(1.dp, if (active) Color.White.copy(alpha = 0.38f) else Color.White.copy(alpha = 0.08f))
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Insert slot $index",
+                    tint = if (active) Color.Black else ClipyDesignTokens.secondaryText,
+                    modifier = Modifier.size(if (active) 15.dp else 12.dp)
+                )
+            }
+        }
     }
 }
 
@@ -370,98 +364,79 @@ private fun MergeClipTile(
     val file = remember(path) { File(path) }
     val borderColor = if (selected) ClipyDesignTokens.primaryAccent else Color.White.copy(alpha = 0.08f)
 
-    Column(
+    Box(
         modifier = Modifier
-            .width(154.dp)
-            .height(128.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(Color.White.copy(alpha = 0.04f))
-            .border(if (selected) 2.dp else 1.dp, borderColor, RoundedCornerShape(20.dp))
+            .width(82.dp)
+            .height(78.dp)
+            .clip(RoundedCornerShape(15.dp))
+            .background(MergeClipSurface)
+            .border(if (selected) 2.dp else 1.dp, borderColor, RoundedCornerShape(15.dp))
             .clickable(onClick = onClick)
-            .padding(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .padding(4.dp)
     ) {
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(file)
+                .decoderFactory(VideoFrameDecoder.Factory())
+                .crossfade(true)
+                .size(260)
+                .build(),
+            contentDescription = file.name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(11.dp))
+                .background(Color.Black)
+        )
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(76.dp)
-                .clip(RoundedCornerShape(15.dp))
-                .background(Color.Black)
-        ) {
-            AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(file)
-                    .decoderFactory(VideoFrameDecoder.Factory())
-                    .crossfade(true)
-                    .size(320)
-                    .build(),
-                contentDescription = file.name,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color.Black.copy(alpha = 0.05f), Color.Black.copy(alpha = 0.58f))
-                        )
+                .fillMaxSize()
+                .clip(RoundedCornerShape(11.dp))
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color.Black.copy(alpha = 0.02f), Color.Black.copy(alpha = 0.68f))
                     )
-            )
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(6.dp),
-                shape = CircleShape,
-                color = if (selected) ClipyDesignTokens.primaryAccent else Color.Black.copy(alpha = 0.62f)
-            ) {
-                Text(
-                    text = (index + 1).toString(),
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    color = if (selected) Color.Black else Color.White,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.ExtraBold
                 )
-            }
+        )
+        Surface(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(5.dp),
+            shape = CircleShape,
+            color = if (selected) ClipyDesignTokens.primaryAccent else Color.Black.copy(alpha = 0.62f)
+        ) {
             Text(
-                text = formatDurationShort(clipSpec?.durationMs ?: 0L),
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(7.dp),
-                color = Color.White,
+                text = (index + 1).toString(),
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                color = if (selected) Color.Black else Color.White,
                 style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.ExtraBold
             )
-            IconButton(
-                onClick = onRemove,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .size(32.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Remove",
-                    tint = Color.White.copy(alpha = 0.92f),
-                    modifier = Modifier.size(18.dp)
-                )
-            }
         }
-
         Text(
-            text = file.name,
+            text = formatDurationShort(clipSpec?.durationMs ?: 0L),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(6.dp),
             color = Color.White,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = clipSpec?.resolutionLabel.orEmpty().ifBlank { "Unknown size" },
-            color = ClipyDesignTokens.textMuted,
             style = MaterialTheme.typography.labelSmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            fontWeight = FontWeight.ExtraBold
         )
+        IconButton(
+            onClick = onRemove,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(4.dp)
+                .size(21.dp)
+                .background(Color.Black.copy(alpha = 0.50f), CircleShape)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = "Remove",
+                tint = Color.White.copy(alpha = 0.92f),
+                modifier = Modifier.size(12.dp)
+            )
+        }
     }
 }
 
@@ -482,43 +457,87 @@ private fun MergeTimelineActions(
         selectedInsertIndex != selectedClipIndex &&
         selectedInsertIndex != selectedClipIndex + 1
 
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "Insert slot",
+                color = ClipyDesignTokens.textMuted,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                slotLabel,
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        TimelinePillButton(label = "Move", enabled = canMove, filled = false, onClick = onMoveSelected)
+        TimelinePillButton(label = "Add here", enabled = true, filled = false, onClick = onAddMore)
+    }
+}
+
+@Composable
+private fun TimelinePillButton(
+    label: String,
+    enabled: Boolean,
+    filled: Boolean,
+    onClick: () -> Unit
+) {
+    val activeColor = ClipyDesignTokens.primaryAccent
+    val backgroundColor = when {
+        !enabled -> Color.White.copy(alpha = 0.035f)
+        filled -> activeColor
+        else -> activeColor.copy(alpha = 0.13f)
+    }
+    val borderColor = when {
+        !enabled -> Color.White.copy(alpha = 0.05f)
+        filled -> activeColor
+        else -> activeColor.copy(alpha = 0.32f)
+    }
+    val textColor = when {
+        !enabled -> ClipyDesignTokens.textMuted
+        filled -> Color.Black
+        else -> activeColor
+    }
+
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = Color.White.copy(alpha = 0.045f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+        modifier = Modifier
+            .height(34.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        color = backgroundColor,
+        border = BorderStroke(1.dp, borderColor)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = if (filled) 12.dp else 11.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "Insert slot",
-                    color = ClipyDesignTokens.textMuted,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    slotLabel,
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.ExtraBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+            if (filled) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = null,
+                    tint = textColor,
+                    modifier = Modifier.size(15.dp)
                 )
             }
-            TextButton(onClick = onMoveSelected, enabled = canMove) {
-                Text(
-                    "Move Here",
-                    color = if (canMove) ClipyDesignTokens.primaryAccent else ClipyDesignTokens.textMuted,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
-            TextButton(onClick = onAddMore) {
-                Text("Add Here", color = ClipyDesignTokens.primaryAccent, fontWeight = FontWeight.ExtraBold)
-            }
+            Text(
+                text = label,
+                color = textColor,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1
+            )
         }
     }
 }
@@ -660,25 +679,65 @@ private fun MergeFormatWarning(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(18.dp),
         color = Color(0xFF451A03).copy(alpha = 0.34f),
         border = BorderStroke(1.dp, Color(0xFFF97316).copy(alpha = 0.3f))
     ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFF97316))
-                Text("Mixed formats detected", style = MaterialTheme.typography.titleSmall, color = Color.White, fontWeight = FontWeight.Bold)
-            }
-            Text(
-                "Clips have different orientation or resolution. Clipy will fit clips automatically for export.",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFFFED7AA)
-            )
-            TextButton(onClick = onToggle, contentPadding = PaddingValues(0.dp)) {
-                Text(if (warningExpanded) "Hide details" else "Show details", color = Color(0xFFF97316), fontWeight = FontWeight.Bold)
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = Color(0xFFF97316),
+                    modifier = Modifier.size(20.dp)
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Mixed formats",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Text(
+                        "Auto-fit on export",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFFED7AA),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Surface(
+                    modifier = Modifier
+                        .height(32.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(onClick = onToggle),
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFF97316).copy(alpha = 0.14f),
+                    border = BorderStroke(1.dp, Color(0xFFF97316).copy(alpha = 0.24f))
+                ) {
+                    Box(
+                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            if (warningExpanded) "Hide" else "Details",
+                            color = Color(0xFFF97316),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                }
             }
             if (warningExpanded) {
                 HorizontalDivider(color = Color(0x33F97316))
+                Text(
+                    "Clips have different orientation or resolution. Clipy will fit clips automatically for export.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFFED7AA)
+                )
                 Text("Resolutions: $resolutions", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFED7AA))
                 Text("Orientations: $orientations", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFED7AA))
             }
