@@ -1,6 +1,7 @@
 package com.nantcompany.clipy.tools.merge
 
 import android.media.MediaMetadataRetriever
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,13 +52,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
 import coil.compose.AsyncImage
 import coil.decode.VideoFrameDecoder
 import coil.request.ImageRequest
 import com.nantcompany.clipy.app.MediaFileUtils
 import com.nantcompany.clipy.design.ClipyPrimaryButton
 import com.nantcompany.clipy.design.ClipyScaffold
+import com.nantcompany.clipy.design.ClipyVideoPlayer
 import com.nantcompany.clipy.edit.common.TransitionType
 import com.nantcompany.clipy.edit.tools.merge.MergeRequest
 import com.nantcompany.clipy.export.job.ProcessingRequest
@@ -81,16 +90,71 @@ fun MergeVideoScreen(
     viewModel: MergeVideoViewModel = viewModel()
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val latestInputPaths by rememberUpdatedState(inputPaths)
     var selectedTransition by remember { mutableStateOf(TransitionType.CROSSFADE) }
     var selectedClipIndex by remember { mutableStateOf<Int?>(null) }
     var selectedInsertIndex by remember { mutableStateOf(inputPaths.size) }
+    var previewClipIndex by remember { mutableStateOf(0) }
     val clipSpecs = remember(inputPaths) { inputPaths.map(::readClipSpec) }
     val totalDurationMs = remember(clipSpecs) { clipSpecs.sumOf { it.durationMs ?: 0L } }
 
     LaunchedEffect(inputPaths.size) {
         selectedInsertIndex = selectedInsertIndex.coerceIn(0, inputPaths.size)
         selectedClipIndex = selectedClipIndex?.takeIf { it in inputPaths.indices }
+        previewClipIndex = previewClipIndex.coerceIn(0, inputPaths.lastIndex.coerceAtLeast(0))
+    }
+
+    val previewPlayer = remember(inputPaths, context) {
+        if (inputPaths.isEmpty()) {
+            null
+        } else {
+            ExoPlayer.Builder(context).build().apply {
+                setMediaItems(
+                    inputPaths.map { path ->
+                        MediaItem.fromUri(Uri.fromFile(File(path)))
+                    }
+                )
+                repeatMode = Player.REPEAT_MODE_ALL
+                playWhenReady = true
+                prepare()
+            }
+        }
+    }
+
+    DisposableEffect(previewPlayer, lifecycleOwner, inputPaths.size) {
+        val player = previewPlayer
+        if (player == null) {
+            onDispose { }
+        } else {
+            val listener = object : Player.Listener {
+                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                    previewClipIndex = player.currentMediaItemIndex.coerceIn(0, inputPaths.lastIndex.coerceAtLeast(0))
+                }
+            }
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_PAUSE) player.pause()
+            }
+            player.addListener(listener)
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
+                player.removeListener(listener)
+                player.release()
+            }
+        }
+    }
+
+    LaunchedEffect(previewClipIndex, previewPlayer, inputPaths.size) {
+        val player = previewPlayer ?: return@LaunchedEffect
+        if (inputPaths.isEmpty()) return@LaunchedEffect
+        val targetIndex = previewClipIndex.coerceIn(0, inputPaths.lastIndex)
+        if (targetIndex < player.mediaItemCount) {
+            if (player.currentMediaItemIndex != targetIndex) {
+                player.seekTo(targetIndex, 0L)
+            }
+            player.play()
+        }
     }
 
     val distinctResolutions = remember(clipSpecs) {
@@ -142,13 +206,25 @@ fun MergeVideoScreen(
                     )
                 }
 
+                previewPlayer?.let { player ->
+                    MergePreviewPanel(
+                        player = player,
+                        activeClipIndex = previewClipIndex,
+                        clipCount = inputPaths.size,
+                        totalDurationMs = totalDurationMs
+                    )
+                }
+
                 MergeTimelinePanel(
                     inputPaths = inputPaths,
                     clipSpecs = clipSpecs,
                     totalDurationMs = totalDurationMs,
                     selectedClipIndex = selectedClipIndex,
                     selectedInsertIndex = selectedInsertIndex,
-                    onClipSelected = { index -> selectedClipIndex = index },
+                    onClipSelected = { index ->
+                        selectedClipIndex = index
+                        previewClipIndex = index
+                    },
                     onInsertSelected = { index -> selectedInsertIndex = index.coerceIn(0, inputPaths.size) },
                     onMoveSelected = {
                         val fromIndex = selectedClipIndex ?: return@MergeTimelinePanel
@@ -157,6 +233,7 @@ fun MergeVideoScreen(
                             onMove(fromIndex, targetIndex)
                             selectedClipIndex = targetIndex
                             selectedInsertIndex = targetIndex
+                            previewClipIndex = targetIndex
                         }
                     },
                     onAddMore = { onAddMoreAt(selectedInsertIndex.coerceIn(0, inputPaths.size)) },
@@ -198,6 +275,67 @@ fun MergeVideoScreen(
                     )
                     onSubmitRequest(ProcessingRequest.Merge(request))
                 }
+            )
+        }
+    }
+}
+
+@Composable
+private fun MergePreviewPanel(
+    player: ExoPlayer,
+    activeClipIndex: Int,
+    clipCount: Int,
+    totalDurationMs: Long
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = MergePanelColor,
+        border = BorderStroke(1.dp, MergeBorderColor)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Preview",
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Text(
+                        "Clip ${(activeClipIndex + 1).coerceIn(1, clipCount.coerceAtLeast(1))} | ${formatDurationShort(totalDurationMs)} total",
+                        color = ClipyDesignTokens.secondaryText,
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Surface(
+                    shape = CircleShape,
+                    color = ClipyDesignTokens.primaryAccent.copy(alpha = 0.14f),
+                    border = BorderStroke(1.dp, ClipyDesignTokens.primaryAccent.copy(alpha = 0.22f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = ClipyDesignTokens.primaryAccent,
+                        modifier = Modifier.padding(9.dp).size(18.dp)
+                    )
+                }
+            }
+
+            ClipyVideoPlayer(
+                player = player,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(186.dp)
             )
         }
     }
