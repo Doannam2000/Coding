@@ -148,9 +148,17 @@ fun ClipyApp(
                     AppRoute.PICK_MULTIPLE_VIDEOS -> GalleryPickerScreen(
                         type = MediaItemType.VIDEO,
                         isMultiSelect = true,
-                        onBack = { navigatorViewModel.goBack() },
+                        onBack = {
+                            sessionViewModel.clearPendingMergeInsertIndex()
+                            navigatorViewModel.goBack()
+                        },
                         onMediaPicked = { paths ->
-                            sessionViewModel.setMultipleVideoPaths(paths)
+                            val pendingInsertIndex = sessionState.pendingMergeInsertIndex
+                            if (sessionState.multipleVideoPaths.isNotEmpty() && pendingInsertIndex != null) {
+                                sessionViewModel.insertMultipleVideoPaths(pendingInsertIndex, paths)
+                            } else {
+                                sessionViewModel.setMultipleVideoPaths(paths)
+                            }
                             navigatorViewModel.navigateTo(AppRoute.MERGE_VIDEO)
                         }
                     )
@@ -198,7 +206,10 @@ fun ClipyApp(
                             sessionViewModel.setPendingRequest(request)
                             navigatorViewModel.navigateTo(AppRoute.PROCESSING)
                         },
-                        onAddMore = { navigatorViewModel.navigateTo(AppRoute.PICK_MULTIPLE_VIDEOS) },
+                        onAddMoreAt = { insertIndex ->
+                            sessionViewModel.setPendingMergeInsertIndex(insertIndex)
+                            navigatorViewModel.navigateTo(AppRoute.PICK_MULTIPLE_VIDEOS)
+                        },
                         onRemoveAt = sessionViewModel::removeMultipleVideoAt,
                         onMove = sessionViewModel::moveMultipleVideo
                     )

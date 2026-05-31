@@ -21,6 +21,7 @@ enum class ToolTarget {
 data class EditorSessionState(
     val singleVideoPath: String? = null,
     val multipleVideoPaths: List<String> = emptyList(),
+    val pendingMergeInsertIndex: Int? = null,
     val imagePaths: List<String> = emptyList(),
     val slideshowAudioPath: String? = null,
     val toolTarget: ToolTarget? = null,

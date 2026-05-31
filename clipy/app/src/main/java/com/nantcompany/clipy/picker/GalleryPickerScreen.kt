@@ -93,6 +93,7 @@ fun GalleryPickerScreen(
     }
 
     LaunchedEffect(Unit) {
+        viewModel.clearSelection()
         if (permissionState != PermissionState.DENIED) {
             viewModel.loadMedia(context, type, isMultiSelect)
         }

@@ -33,6 +33,25 @@ class EditorSessionViewModel : ViewModel() {
         _state.value = _state.value.copy(multipleVideoPaths = current)
     }
 
+    fun setPendingMergeInsertIndex(index: Int?) {
+        _state.value = _state.value.copy(pendingMergeInsertIndex = index?.coerceAtLeast(0))
+    }
+
+    fun clearPendingMergeInsertIndex() {
+        _state.value = _state.value.copy(pendingMergeInsertIndex = null)
+    }
+
+    fun insertMultipleVideoPaths(index: Int, paths: List<String>) {
+        if (paths.isEmpty()) return
+        val current = _state.value.multipleVideoPaths.toMutableList()
+        val insertIndex = index.coerceIn(0, current.size)
+        current.addAll(insertIndex, paths)
+        _state.value = _state.value.copy(
+            multipleVideoPaths = current,
+            pendingMergeInsertIndex = null
+        )
+    }
+
     fun removeImageAt(index: Int) {
         val current = _state.value.imagePaths
         if (index !in current.indices) return
@@ -52,7 +71,10 @@ class EditorSessionViewModel : ViewModel() {
     }
 
     fun clearMultipleVideos() {
-        _state.value = _state.value.copy(multipleVideoPaths = emptyList())
+        _state.value = _state.value.copy(
+            multipleVideoPaths = emptyList(),
+            pendingMergeInsertIndex = null
+        )
     }
 
     fun clearImages() {
@@ -60,7 +82,10 @@ class EditorSessionViewModel : ViewModel() {
     }
 
     fun setMultipleVideoPaths(paths: List<String>) {
-        _state.value = _state.value.copy(multipleVideoPaths = paths)
+        _state.value = _state.value.copy(
+            multipleVideoPaths = paths,
+            pendingMergeInsertIndex = null
+        )
     }
 
     fun appendMultipleVideoPaths(paths: List<String>) {
