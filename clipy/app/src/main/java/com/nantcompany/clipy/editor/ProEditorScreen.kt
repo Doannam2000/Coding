@@ -1,5 +1,6 @@
 package com.nantcompany.clipy.editor
 
+import android.graphics.ColorMatrix
 import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.compose.foundation.BorderStroke
@@ -7,8 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -24,7 +25,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -45,8 +45,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -296,52 +294,24 @@ fun ProEditorScreen(
                 return@ClipyScaffold
             }
 
-            Box(
+            EditorPreviewStage(
+                player = player,
+                state = state,
+                previewColorMatrix = previewColorMatrix,
+                isPlaying = isPlaying,
+                onPreviewSizeChanged = { width, height ->
+                    previewWidth = width
+                    previewHeight = height
+                },
+                previewWidth = previewWidth,
+                previewHeight = previewHeight,
+                onMoveText = viewModel::setTextPos,
+                onPlayPause = ::togglePlayback,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(Color(0xFF10221F), Color.Black),
-                            radius = 850f
-                        )
-                    )
-                    .onSizeChanged {
-                        previewWidth = it.width.toFloat()
-                        previewHeight = it.height.toFloat()
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                if (player != null) {
-                    ClipyVideoPlayer(
-                        player = player,
-                        previewColorMatrix = previewColorMatrix,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer {
-                                rotationZ = state.rotation.toFloat()
-                                scaleX = if (state.flipHorizontal) -1f else 1f
-                            }
-                    )
-                    if (state.overlayText.isNotBlank()) {
-                        DraggableOverlayText(
-                            text = state.overlayText,
-                            x = state.textX,
-                            y = state.textY,
-                            previewWidth = previewWidth,
-                            previewHeight = previewHeight,
-                            onMove = viewModel::setTextPos
-                        )
-                    }
-                    PreviewControlDock(
-                        isPlaying = isPlaying,
-                        onPlayPause = ::togglePlayback,
-                        modifier = Modifier.align(Alignment.BottomCenter)
-                    )
-                }
-            }
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            )
 
             QuickActionStrip(
                 onSplit = {
@@ -398,13 +368,13 @@ private fun EditorTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(50.dp)
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
-            Icon(Icons.Default.Close, contentDescription = "Close editor", tint = Color.White)
+        IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
+            Icon(Icons.Default.Close, contentDescription = "Close editor", tint = Color.White, modifier = Modifier.size(21.dp))
         }
         Text(
             text = formatClock(currentMs),
@@ -419,7 +389,7 @@ private fun EditorTopBar(
             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
@@ -438,12 +408,106 @@ private fun EditorTopBar(
                 disabledContentColor = Color.Black.copy(alpha = 0.45f)
             ),
             contentPadding = PaddingValues(horizontal = 13.dp, vertical = 0.dp),
-            modifier = Modifier.height(38.dp)
+            modifier = Modifier.height(34.dp)
         ) {
             Text("Export", fontWeight = FontWeight.Black, style = MaterialTheme.typography.labelMedium)
             Spacer(Modifier.width(5.dp))
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(14.dp).graphicsLayer(rotationZ = 90f))
         }
+    }
+}
+
+@Composable
+private fun EditorPreviewStage(
+    player: ExoPlayer?,
+    state: ProEditorState,
+    previewColorMatrix: ColorMatrix?,
+    isPlaying: Boolean,
+    previewWidth: Float,
+    previewHeight: Float,
+    onPreviewSizeChanged: (Float, Float) -> Unit,
+    onMoveText: (Float, Float) -> Unit,
+    onPlayPause: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color(0xFF07111B), Color(0xFF02040A))
+                )
+            )
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(18.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxHeight(0.80f)
+                .aspectRatio(9f / 16f)
+                .clip(RoundedCornerShape(30.dp))
+                .background(Color(0xFF010309))
+                .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(30.dp))
+                .padding(5.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Color.Black)
+                    .onSizeChanged {
+                        onPreviewSizeChanged(it.width.toFloat(), it.height.toFloat())
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                if (player != null) {
+                    ClipyVideoPlayer(
+                        player = player,
+                        previewColorMatrix = previewColorMatrix,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                rotationZ = state.rotation.toFloat()
+                                scaleX = if (state.flipHorizontal) -1f else 1f
+                            }
+                    )
+                }
+                if (state.overlayText.isNotBlank()) {
+                    DraggableOverlayText(
+                        text = state.overlayText,
+                        x = state.textX,
+                        y = state.textY,
+                        previewWidth = previewWidth,
+                        previewHeight = previewHeight,
+                        onMove = onMoveText
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 7.dp)
+                        .width(54.dp)
+                        .height(10.dp)
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(Color.Black.copy(alpha = 0.72f))
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 8.dp)
+                        .width(44.dp)
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(Color.White.copy(alpha = 0.34f))
+                )
+            }
+        }
+        PreviewControlDock(
+            isPlaying = isPlaying,
+            onPlayPause = onPlayPause,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 }
 
@@ -490,25 +554,25 @@ private fun PreviewControlDock(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier.padding(bottom = 12.dp),
+        modifier = modifier.padding(bottom = 8.dp),
         shape = RoundedCornerShape(99.dp),
-        color = Color.Black.copy(alpha = 0.46f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+        color = Color(0xD9040710),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(18.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             SmallEditorIcon(Icons.Default.Refresh, "Undo", Color.White.copy(alpha = 0.82f)) {}
-            IconButton(onClick = onPlayPause, modifier = Modifier.size(36.dp)) {
+            IconButton(onClick = onPlayPause, modifier = Modifier.size(32.dp)) {
                 if (isPlaying) {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Box(Modifier.size(width = 5.dp, height = 20.dp).background(Color.White, RoundedCornerShape(2.dp)))
-                        Box(Modifier.size(width = 5.dp, height = 20.dp).background(Color.White, RoundedCornerShape(2.dp)))
+                        Box(Modifier.size(width = 4.dp, height = 17.dp).background(Color.White, RoundedCornerShape(2.dp)))
+                        Box(Modifier.size(width = 4.dp, height = 17.dp).background(Color.White, RoundedCornerShape(2.dp)))
                     }
                 } else {
-                    Icon(Icons.Default.PlayArrow, contentDescription = "Play preview", tint = Color.White, modifier = Modifier.size(25.dp))
+                    Icon(Icons.Default.PlayArrow, contentDescription = "Play preview", tint = Color.White, modifier = Modifier.size(23.dp))
                 }
             }
             SmallEditorIcon(Icons.Default.Refresh, "Redo", Color.White.copy(alpha = 0.82f)) {}
@@ -528,10 +592,10 @@ private fun QuickActionStrip(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(62.dp)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .height(50.dp)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         EditorActionButton("Split", Icons.Default.Build, onSplit, modifier = Modifier.weight(1f))
         EditorActionButton("Speed", Icons.Default.Refresh, onSpeed, modifier = Modifier.weight(1f))
@@ -539,11 +603,11 @@ private fun QuickActionStrip(
         EditorActionButton("Delete", Icons.Default.Delete, onDelete, modifier = Modifier.weight(1f))
         Surface(
             modifier = Modifier
-                .width(86.dp)
-                .height(44.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .width(74.dp)
+                .height(36.dp)
+                .clip(RoundedCornerShape(9.dp))
                 .clickable(onClick = onAudio),
-            shape = RoundedCornerShape(10.dp),
+            shape = RoundedCornerShape(9.dp),
             color = Color.White,
             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
         ) {
@@ -552,9 +616,9 @@ private fun QuickActionStrip(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
-                Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(5.dp))
-                Text("Add\naudio", color = Color.Black, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, lineHeight = 12.sp)
+                Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Add\naudio", color = Color.Black, style = MaterialTheme.typography.labelSmall, fontSize = 9.sp, fontWeight = FontWeight.Black, lineHeight = 10.sp)
             }
         }
     }
@@ -570,18 +634,18 @@ private fun EditorActionButton(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .clip(RoundedCornerShape(9.dp))
+            .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(19.dp))
-        Spacer(Modifier.height(3.dp))
+        Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(17.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
             label,
             color = Color.White,
             style = MaterialTheme.typography.labelSmall,
-            fontSize = 10.sp,
+            fontSize = 9.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -600,19 +664,19 @@ private fun EditorTimeline(
     val context = LocalContext.current
     var trackWidth by remember { mutableFloatStateOf(1f) }
     val thumbnailCount = remember(trackWidth, durationMs) {
-        ((trackWidth / 76f).roundToInt()).coerceIn(4, 14)
+        ((trackWidth / 92f).roundToInt()).coerceIn(4, 10)
     }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .height(158.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+            .height(116.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(18.dp),
+                .height(15.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.Bottom
         ) {
@@ -623,10 +687,10 @@ private fun EditorTimeline(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(118.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .height(92.dp)
+                .clip(RoundedCornerShape(10.dp))
                 .background(EditorTrack)
-                .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(12.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
                 .onSizeChanged { trackWidth = it.width.toFloat().coerceAtLeast(1f) }
                 .pointerInput(durationMs, trackWidth) {
                     detectDragGestures(
@@ -643,10 +707,10 @@ private fun EditorTimeline(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
-                    .height(76.dp)
-                    .padding(horizontal = 32.dp, vertical = 10.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.Black)
+                    .height(58.dp)
+                    .padding(horizontal = 28.dp, vertical = 8.dp)
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(Color.Black.copy(alpha = 0.78f))
             ) {
                 repeat(thumbnailCount) { index ->
                     val frameMs = if (thumbnailCount <= 1) 0L else durationMs * index / (thumbnailCount - 1)
@@ -661,19 +725,28 @@ private fun EditorTimeline(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .background(Color.DarkGray),
+                            .background(Color(0xFF111827)),
                         contentScale = ContentScale.Crop
                     )
                 }
             }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .height(58.dp)
+                    .padding(horizontal = 28.dp, vertical = 8.dp)
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(Color.Black.copy(alpha = 0.22f))
+            )
             splitMarks.forEach { mark ->
                 if (durationMs > 0L) {
                     val x = (mark.toFloat() / durationMs.toFloat() * trackWidth).roundToInt()
                     Box(
                         modifier = Modifier
-                            .offset { IntOffset(x - 1, 26) }
+                            .offset { IntOffset(x - 1, 20) }
                             .width(2.dp)
-                            .height(70.dp)
+                            .height(56.dp)
                             .background(EditorAmber)
                     )
                 }
@@ -684,13 +757,13 @@ private fun EditorTimeline(
                     modifier = Modifier
                         .offset { IntOffset(x - 2, 0) }
                         .width(4.dp)
-                        .height(118.dp)
+                        .height(92.dp)
                         .background(Color.White)
                 )
                 Box(
                     modifier = Modifier
                         .offset { IntOffset(x - 9, 0) }
-                        .size(width = 18.dp, height = 13.dp)
+                        .size(width = 18.dp, height = 12.dp)
                         .clip(RoundedCornerShape(bottomStart = 4.dp, bottomEnd = 4.dp))
                         .background(Color.White)
                 )
@@ -716,17 +789,17 @@ private fun ToolPanel(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(210.dp),
+            .height(182.dp),
         color = EditorPanel,
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.07f)),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
     ) {
         Column {
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 when (activeTool) {
                     EditorTool.EDIT -> EditPanel(
@@ -761,14 +834,14 @@ private fun EditPanel(
     onRotate: () -> Unit,
     onFlip: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             EditorChip("Speed ${formatSpeed(state.speedFactor)}", active = true, accent = EditorAmber)
             EditorChip("Rotate ${state.rotation}deg", active = state.rotation != 0, onClick = onRotate)
             EditorChip("Flip", active = state.flipHorizontal, onClick = onFlip)
             EditorChip(formatClock(durationMs), active = false)
         }
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)) { speed ->
                 EditorChip(
                     label = formatSpeed(speed),
@@ -783,7 +856,7 @@ private fun EditPanel(
 
 @Composable
 private fun AudioPanel(volume: Float, onVolumeChange: (Float) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
         Text("Main audio", color = Color.White, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
         LabeledSlider(
             label = "Volume",
@@ -797,9 +870,9 @@ private fun AudioPanel(volume: Float, onVolumeChange: (Float) -> Unit) {
 
 @Composable
 private fun TextPanel(text: String, onTextChange: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ClipyTextField(value = text, onValueChange = onTextChange, placeholder = "Add title text")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             EditorChip("Title", active = text.isNotBlank(), onClick = { onTextChange(if (text.isBlank()) "Clipy title" else text) })
             EditorChip("Clear", active = false, onClick = { onTextChange("") })
         }
@@ -808,7 +881,7 @@ private fun TextPanel(text: String, onTextChange: (String) -> Unit) {
 
 @Composable
 private fun OverlayPanel() {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(listOf("Frame", "Glow", "Safe area", "Grid", "Caption bar")) { item ->
             PreviewTile(label = item, accent = overlayAccent(item), active = item == "Frame")
         }
@@ -817,7 +890,7 @@ private fun OverlayPanel() {
 
 @Composable
 private fun StickerPanel() {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(listOf("Badge", "Arrow", "Circle", "Label", "Spark")) { item ->
             PreviewTile(label = item, accent = overlayAccent(item), active = item == "Badge")
         }
@@ -829,7 +902,7 @@ private fun EffectPanel(
     selected: ClipyFilterType,
     onSelect: (ClipyFilterType) -> Unit
 ) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(listOf(ClipyFilterType.NONE, ClipyFilterType.DRAMATIC, ClipyFilterType.CYBERPUNK, ClipyFilterType.VINTAGE, ClipyFilterType.LOMO, ClipyFilterType.TOON)) { filter ->
             PreviewTile(
                 label = filter.displayName,
@@ -847,8 +920,8 @@ private fun FilterPanel(
     onSelect: (ClipyFilterType) -> Unit,
     onAdjustmentsChange: (Float, Float, Float) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(ClipyFilterType.entries) { filter ->
                 PreviewTile(
                     label = filter.displayName,
@@ -858,7 +931,7 @@ private fun FilterPanel(
                 )
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             MiniAdjust("Bright", state.brightness, -0.5f..0.5f, Modifier.weight(1f)) {
                 onAdjustmentsChange(it, state.contrast, state.saturation)
             }
@@ -874,32 +947,31 @@ private fun BottomToolDock(activeTool: EditorTool, onToolChange: (EditorTool) ->
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(72.dp)
+            .height(58.dp)
             .background(Color(0xF2050810))
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 10.dp),
+            .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
         EditorTool.entries.forEach { tool ->
             val active = tool == activeTool
             Column(
                 modifier = Modifier
-                    .width(68.dp)
-                    .height(58.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (active) ClipyDesignTokens.primaryAccent.copy(alpha = 0.16f) else Color.Transparent)
+                    .width(46.dp)
+                    .height(46.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (active) ClipyDesignTokens.primaryAccent.copy(alpha = 0.18f) else Color.Transparent)
                     .clickable { onToolChange(tool) },
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Icon(tool.icon, contentDescription = tool.label, tint = if (active) ClipyDesignTokens.primaryAccent else Color.White, modifier = Modifier.size(19.dp))
-                Spacer(Modifier.height(4.dp))
+                Icon(tool.icon, contentDescription = tool.label, tint = if (active) ClipyDesignTokens.primaryAccent else Color.White, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.height(3.dp))
                 Text(
                     tool.label,
                     color = if (active) ClipyDesignTokens.primaryAccent else Color.White,
                     style = MaterialTheme.typography.labelSmall,
-                    fontSize = 10.sp,
+                    fontSize = 8.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -917,20 +989,20 @@ private fun PreviewTile(
 ) {
     Surface(
         modifier = Modifier
-            .width(96.dp)
-            .height(82.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .width(78.dp)
+            .height(60.dp)
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         color = if (active) accent.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.04f),
         border = BorderStroke(if (active) 2.dp else 1.dp, if (active) accent else Color.White.copy(alpha = 0.06f))
     ) {
-        Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Column(modifier = Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(36.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .height(25.dp)
+                    .clip(RoundedCornerShape(8.dp))
                     .background(
                         Brush.horizontalGradient(
                             listOf(accent.copy(alpha = 0.86f), Color.White.copy(alpha = 0.22f), accent.copy(alpha = 0.42f))
@@ -941,6 +1013,7 @@ private fun PreviewTile(
                 label,
                 color = if (active) Color.White else ClipyDesignTokens.secondaryText,
                 style = MaterialTheme.typography.labelSmall,
+                fontSize = 9.sp,
                 fontWeight = FontWeight.ExtraBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -958,18 +1031,19 @@ private fun EditorChip(
 ) {
     Surface(
         modifier = Modifier
-            .height(34.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .height(29.dp)
+            .clip(RoundedCornerShape(10.dp))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(10.dp),
         color = if (active) accent.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.045f),
         border = BorderStroke(1.dp, if (active) accent.copy(alpha = 0.7f) else Color.White.copy(alpha = 0.08f))
     ) {
-        Box(modifier = Modifier.padding(horizontal = 11.dp), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.padding(horizontal = 9.dp), contentAlignment = Alignment.Center) {
             Text(
                 label,
                 color = if (active) accent else ClipyDesignTokens.secondaryText,
                 style = MaterialTheme.typography.labelMedium,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.ExtraBold,
                 maxLines = 1
             )
@@ -985,22 +1059,14 @@ private fun LabeledSlider(
     valueText: String,
     onValueChange: (Float) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, color = ClipyDesignTokens.secondaryText, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-            Text(valueText, color = EditorCyan, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
-        }
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            valueRange = valueRange,
-            colors = SliderDefaults.colors(
-                thumbColor = Color.White,
-                activeTrackColor = EditorCyan,
-                inactiveTrackColor = Color.White.copy(alpha = 0.10f)
-            )
-        )
-    }
+    CompactSlider(
+        label = label,
+        value = value,
+        valueRange = valueRange,
+        valueText = valueText,
+        accent = EditorCyan,
+        onValueChange = onValueChange
+    )
 }
 
 @Composable
@@ -1011,18 +1077,93 @@ private fun MiniAdjust(
     modifier: Modifier = Modifier,
     onChange: (Float) -> Unit
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, color = ClipyDesignTokens.secondaryText, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-        Slider(
-            value = value,
-            onValueChange = onChange,
-            valueRange = range,
-            colors = SliderDefaults.colors(
-                thumbColor = Color.White,
-                activeTrackColor = ClipyDesignTokens.primaryAccent,
-                inactiveTrackColor = Color.White.copy(alpha = 0.10f)
+    CompactSlider(
+        label = label,
+        value = value,
+        valueRange = range,
+        valueText = "%.2f".format(value),
+        accent = ClipyDesignTokens.primaryAccent,
+        modifier = modifier,
+        onValueChange = onChange
+    )
+}
+
+@Composable
+private fun CompactSlider(
+    label: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    valueText: String,
+    accent: Color,
+    modifier: Modifier = Modifier,
+    onValueChange: (Float) -> Unit
+) {
+    var trackWidth by remember { mutableFloatStateOf(1f) }
+    val span = valueRange.endInclusive - valueRange.start
+    val fraction = if (span == 0f) 0f else ((value - valueRange.start) / span).coerceIn(0f, 1f)
+
+    fun updateValue(x: Float) {
+        val next = valueRange.start + (x / trackWidth).coerceIn(0f, 1f) * span
+        onValueChange(next.coerceIn(valueRange.start, valueRange.endInclusive))
+    }
+
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                label,
+                color = ClipyDesignTokens.secondaryText,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
             )
-        )
+            Text(
+                valueText,
+                color = accent,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Black,
+                maxLines = 1
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(20.dp)
+                .onSizeChanged { trackWidth = it.width.toFloat().coerceAtLeast(1f) }
+                .pointerInput(valueRange, trackWidth) {
+                    detectDragGestures(
+                        onDragStart = { updateValue(it.x) },
+                        onDrag = { change, _ ->
+                            change.consume()
+                            updateValue(change.position.x)
+                        }
+                    )
+                }
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(Color.White.copy(alpha = 0.10f))
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxWidth(fraction)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(accent)
+            )
+            Box(
+                modifier = Modifier
+                    .offset { IntOffset((fraction * trackWidth).roundToInt() - 7, 3) }
+                    .size(14.dp)
+                    .clip(CircleShape)
+                    .background(Color.White)
+                    .border(3.dp, accent, CircleShape)
+            )
+        }
     }
 }
 
