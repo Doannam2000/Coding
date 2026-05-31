@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,7 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nantcompany.clipy.design.ClipyPrimaryButton
 import com.nantcompany.clipy.design.ClipySecondaryButton
-import com.nantcompany.clipy.design.ClipyThemeBackground
+import com.nantcompany.clipy.design.ClipyScaffold
 import com.nantcompany.clipy.theme.ClipyDesignTokens
 
 data class OnboardingPage(
@@ -50,14 +52,14 @@ fun OnboardingScreen(
     val page = pages[pageIndex]
     val isLast = pageIndex == pages.lastIndex
 
-    ClipyThemeBackground {
+    ClipyScaffold(showTopBar = false) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Spacer(modifier = Modifier.height(24.dp))
             Text("Welcome to Clipy", style = MaterialTheme.typography.headlineMedium, color = Color.White)
 
             Box(
@@ -92,7 +94,7 @@ fun OnboardingScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(40.dp))
 
             ClipyPrimaryButton(
                 label = if (isLast) "Get Started" else "Next",
@@ -107,6 +109,8 @@ fun OnboardingScreen(
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 onClick = onFinish
             )
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }

@@ -32,5 +32,6 @@ dependencies {
     implementation(libs.gson)
     compileOnly(files("libs/ffmpeg-kit-full-gpl-5.1.LTS-16K-full.aar"))
     implementation("com.arthenica:smart-exception-java:0.2.1")
-}
 
+    testImplementation(libs.junit)
+}

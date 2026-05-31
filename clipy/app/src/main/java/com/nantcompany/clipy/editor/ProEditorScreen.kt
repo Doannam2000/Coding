@@ -82,6 +82,14 @@ fun ProEditorScreen(
     var durationMs by remember { mutableLongStateOf(0L) }
     var previewWidth by remember { mutableFloatStateOf(1f) }
     var previewHeight by remember { mutableFloatStateOf(1f) }
+    val previewColorMatrix = remember(state.brightness, state.contrast, state.saturation, state.selectedFilter) {
+        ClipyGpuFilterManager.createPreviewColorMatrix(
+            brightness = state.brightness,
+            contrast = state.contrast,
+            saturation = state.saturation,
+            filterType = state.selectedFilter
+        )
+    }
 
     LaunchedEffect(player) {
         if (player == null) return@LaunchedEffect
@@ -92,18 +100,6 @@ fun ProEditorScreen(
         }
     }
 
-    // Sync Effects & Speed
-    LaunchedEffect(state.brightness, state.contrast, state.saturation, state.selectedFilter, player) {
-        if (player != null) {
-            val effects = ClipyGpuFilterManager.createEffects(
-                state.brightness, 
-                state.contrast, 
-                state.saturation, 
-                state.selectedFilter
-            )
-            player.setVideoEffects(effects)
-        }
-    }
     LaunchedEffect(state.speedFactor, player) { player?.setPlaybackSpeed(state.speedFactor) }
 
     ClipyScaffold(
@@ -151,10 +147,14 @@ fun ProEditorScreen(
                 contentAlignment = Alignment.Center
             ) {
                 if (player != null) {
-                    ClipyVideoPlayer(player = player, modifier = Modifier.fillMaxSize().graphicsLayer {
-                        rotationZ = state.rotation.toFloat()
-                        scaleX = if (state.flipHorizontal) -1f else 1f
-                    })
+                    ClipyVideoPlayer(
+                        player = player,
+                        previewColorMatrix = previewColorMatrix,
+                        modifier = Modifier.fillMaxSize().graphicsLayer {
+                            rotationZ = state.rotation.toFloat()
+                            scaleX = if (state.flipHorizontal) -1f else 1f
+                        }
+                    )
 
                     if (state.overlayText.isNotEmpty()) {
                         Text(

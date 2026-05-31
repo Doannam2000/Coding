@@ -169,7 +169,7 @@ fun ExtractAudioScreen(
                 Text(message, color = Color(0xFFFF4B4B), style = MaterialTheme.typography.labelSmall)
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(24.dp))
 
             ClipyPrimaryButton(
                 modifier = Modifier.fillMaxWidth().height(56.dp),

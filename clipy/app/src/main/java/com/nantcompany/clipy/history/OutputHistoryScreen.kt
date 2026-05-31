@@ -4,6 +4,9 @@ import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -44,11 +47,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,6 +75,8 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private enum class HistoryFilter { ALL, VIDEOS, AUDIO }
 
@@ -75,6 +84,7 @@ private enum class HistoryFilter { ALL, VIDEOS, AUDIO }
 fun OutputHistoryScreen(
     onNavigate: (AppRoute) -> Unit,
     onOutputSelected: (OutputMedia) -> Unit,
+    onPlayOutput: (OutputMedia) -> Unit,
     viewModel: OutputHistoryViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -139,6 +149,7 @@ fun OutputHistoryScreen(
                         HistoryItem(
                             output = output,
                             onOutputSelected = onOutputSelected,
+                            onPlayOutput = onPlayOutput,
                             onDeleteRequest = { pendingDelete = it }
                         )
                     }
@@ -177,6 +188,7 @@ fun OutputHistoryScreen(
 private fun HistoryItem(
     output: OutputMedia,
     onOutputSelected: (OutputMedia) -> Unit,
+    onPlayOutput: (OutputMedia) -> Unit,
     onDeleteRequest: (OutputMedia) -> Unit
 ) {
     val context = LocalContext.current
@@ -186,9 +198,18 @@ private fun HistoryItem(
 
     val mime = resolveMimeType(output.fileName)
     val isVideo = mime.startsWith("video")
+    val thumbnail by produceState<Bitmap?>(initialValue = null, key1 = output.path, key2 = exists, key3 = isVideo) {
+        value = if (exists && isVideo) withContext(Dispatchers.IO) {
+            loadHistoryVideoThumbnail(output.path)
+        } else {
+            null
+        }
+    }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = exists) { onPlayOutput(output) },
         shape = RoundedCornerShape(ClipyDesignTokens.cardCorner),
         colors = CardDefaults.cardColors(containerColor = ClipyDesignTokens.cardSurface),
         border = androidx.compose.foundation.BorderStroke(1.dp, ClipyDesignTokens.cardBorder)
@@ -199,17 +220,43 @@ private fun HistoryItem(
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Surface(
-                modifier = Modifier.size(56.dp),
-                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.size(width = 82.dp, height = 58.dp),
+                shape = RoundedCornerShape(12.dp),
                 color = Color.Black.copy(alpha = 0.2f)
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = if (isVideo) Icons.Default.PlayArrow else Icons.Default.Star,
-                        contentDescription = null,
-                        tint = if (isVideo) ClipyDesignTokens.primaryAccent else ClipyDesignTokens.secondaryAccent,
-                        modifier = Modifier.size(28.dp)
-                    )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (thumbnail != null) {
+                        Image(
+                            bitmap = thumbnail!!.asImageBitmap(),
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.22f))
+                        )
+                    }
+                    Surface(
+                        modifier = Modifier.size(30.dp),
+                        shape = CircleShape,
+                        color = Color.Black.copy(alpha = if (thumbnail != null) 0.52f else 0.18f)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = if (isVideo) Icons.Default.PlayArrow else Icons.Default.Star,
+                                contentDescription = null,
+                                tint = if (isVideo) ClipyDesignTokens.primaryAccent else ClipyDesignTokens.secondaryAccent,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
                 }
             }
 
@@ -246,7 +293,7 @@ private fun HistoryItem(
                         leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White) },
                         onClick = {
                             showMenu = false
-                            if (exists) openFile(context, file)
+                            if (exists) onPlayOutput(output)
                         },
                         enabled = exists
                     )
@@ -307,5 +354,18 @@ private fun resolveMimeType(fileName: String): String {
         lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".mkv") -> "video/*"
         lower.endsWith(".mp3") || lower.endsWith(".m4a") || lower.endsWith(".aac") || lower.endsWith(".wav") -> "audio/*"
         else -> "*/*"
+    }
+}
+
+private fun loadHistoryVideoThumbnail(path: String): Bitmap? {
+    val retriever = MediaMetadataRetriever()
+    return runCatching {
+        retriever.setDataSource(path)
+        val frame = retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            ?: retriever.frameAtTime
+            ?: return@runCatching null
+        Bitmap.createScaledBitmap(frame, 220, 140, true)
+    }.getOrNull().also {
+        runCatching { retriever.release() }
     }
 }

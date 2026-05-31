@@ -24,8 +24,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
@@ -125,13 +127,15 @@ fun PickAudioScreen(
         title = "Pick Audio",
         onBackClick = { onNavigate(AppRoute.HOME) }
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            if (!permissionGranted) {
+        if (!permissionGranted) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 ClipyEmptyState(
                     title = "Permission Required",
                     message = "Media access is needed to pick audio files.",
@@ -141,9 +145,7 @@ fun PickAudioScreen(
                 ClipyPrimaryButton(
                     modifier = Modifier.fillMaxWidth(),
                     label = "Grant Permission",
-                    onClick = {
-                        launcher.launch(permission)
-                    }
+                    onClick = { launcher.launch(permission) }
                 )
                 
                 ClipySecondaryButton(
@@ -156,11 +158,19 @@ fun PickAudioScreen(
                         context.startActivity(intent)
                     }
                 )
-            } else {
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 ClipyTextField(
                     value = uiState.searchQuery,
                     onValueChange = { viewModel.updateSearchQuery(it) },
-                    placeholder = "Search audio files..."
+                    placeholder = "Search audio files...",
+                    modifier = Modifier.padding(top = 16.dp)
                 )
 
                 if (uiState.isLoading) {
@@ -175,7 +185,7 @@ fun PickAudioScreen(
                     LazyColumn(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(bottom = 16.dp)
+                        contentPadding = PaddingValues(bottom = 24.dp)
                     ) {
                         items(filteredAudio) { item ->
                             AudioPickerItem(

@@ -13,6 +13,7 @@ data class FiltersVideoUiState(
     val brightness: Float = 0.0f,
     val contrast: Float = 0.0f,
     val saturation: Float = 1.0f,
+    val filterIntensity: Float = 1.0f,
     val selectedFilter: ClipyFilterType = ClipyFilterType.NONE
 )
 
@@ -21,7 +22,10 @@ class FiltersVideoViewModel : ViewModel() {
     val uiState: StateFlow<FiltersVideoUiState> = _uiState.asStateFlow()
 
     fun setInputPath(path: String?) {
-        _uiState.update { it.copy(inputPath = path) }
+        _uiState.update { current ->
+            if (current.inputPath == path) current.copy(inputPath = path)
+            else FiltersVideoUiState(inputPath = path)
+        }
     }
 
     fun setBrightness(value: Float) {
@@ -36,11 +40,23 @@ class FiltersVideoViewModel : ViewModel() {
         _uiState.update { it.copy(saturation = value.coerceIn(0.0f, 3.0f)) }
     }
 
+    fun setFilterIntensity(value: Float) {
+        _uiState.update { it.copy(filterIntensity = value.coerceIn(0.0f, 1.0f)) }
+    }
+
     fun setFilter(filter: ClipyFilterType) {
         _uiState.update { it.copy(selectedFilter = filter) }
     }
 
     fun reset() {
-        _uiState.update { it.copy(brightness = 0.0f, contrast = 0.0f, saturation = 1.0f, selectedFilter = ClipyFilterType.NONE) }
+        _uiState.update {
+            it.copy(
+                brightness = 0.0f,
+                contrast = 0.0f,
+                saturation = 1.0f,
+                filterIntensity = 1.0f,
+                selectedFilter = ClipyFilterType.NONE
+            )
+        }
     }
 }

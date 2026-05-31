@@ -190,7 +190,7 @@ fun CropVideoScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(24.dp))
 
             ClipyPrimaryButton(
                 modifier = Modifier.fillMaxWidth().height(56.dp),

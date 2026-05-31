@@ -6,40 +6,35 @@ import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.nantcompany.clipy.design.ClipyPrimaryButton
+import com.nantcompany.clipy.design.ClipyScaffold
 import com.nantcompany.clipy.design.ClipySecondaryButton
-import com.nantcompany.clipy.design.ScreenLayout
 import com.nantcompany.clipy.export.output.OutputMedia
 import com.nantcompany.clipy.navigation.AppRoute
 import com.nantcompany.clipy.theme.ClipyDesignTokens
@@ -49,104 +44,86 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-import com.nantcompany.clipy.design.ClipyScaffold
-
 @Composable
 fun ResultScreen(
     output: OutputMedia?,
     onNavigate: (AppRoute) -> Unit
 ) {
     val context = LocalContext.current
-    val message = remember { mutableStateOf<String?>(null) }
-
-    val createAnotherRoute = when (output?.operation?.lowercase(Locale.US)) {
-        "cut", "compress", "extractaudio", "extract_audio", "extract-audio" -> AppRoute.PICK_VIDEO
-        "merge" -> AppRoute.PICK_MULTIPLE_VIDEOS
-        "slideshow" -> AppRoute.PICK_IMAGES
-        else -> AppRoute.HOME
-    }
+    val file = remember(output?.path) { output?.path?.let { File(it) } }
+    val exists = file?.exists() == true
+    val message = remember { mutableStateOf("") }
 
     ClipyScaffold(
-        title = "Export Complete",
+        title = "Export Success",
         onBackClick = { onNavigate(AppRoute.HOME) }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(80.dp)
-                    .background(Color(0xFF5ED6A8).copy(alpha = 0.15f), CircleShape),
-                contentAlignment = Alignment.Center
+            Surface(
+                color = ClipyDesignTokens.success.copy(alpha = 0.1f),
+                shape = CircleShape,
+                modifier = Modifier.size(100.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = "Success",
-                    tint = Color(0xFF5ED6A8),
-                    modifier = Modifier.size(40.dp)
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = ClipyDesignTokens.success,
+                        modifier = Modifier.size(60.dp)
+                    )
+                }
+            }
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Your video is ready!",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "The file has been saved to your internal storage.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ClipyDesignTokens.secondaryText,
+                    textAlign = TextAlign.Center
                 )
             }
 
-            if (output == null) {
-                Text("No recent output available.", style = MaterialTheme.typography.bodyMedium, color = ClipyDesignTokens.secondaryText)
-            } else {
-                val file = File(output.path)
-                val exists = file.exists() && file.length() > 0L
-                val mimeType = resolveMimeType(file.name)
-                
+            if (output != null) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(ClipyDesignTokens.cardCorner),
                     colors = CardDefaults.cardColors(containerColor = ClipyDesignTokens.cardSurface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x22FFFFFF))
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ClipyDesignTokens.cardBorder)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Text(
-                            output.fileName, 
-                            style = MaterialTheme.typography.titleMedium, 
-                            maxLines = 1, 
-                            overflow = TextOverflow.Ellipsis, 
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
-                        
-                        InfoRow(label = "Format", value = mimeType.substringAfterLast('/'))
-                        InfoRow(label = "Operation", value = output.operation)
-                        InfoRow(label = "Size", value = formatFileSize(output.sizeInBytes))
-                        InfoRow(label = "Created", value = formatDate(output.createdAtEpochMs))
-                        
-                        androidx.compose.material3.HorizontalDivider(color = Color(0x11FFFFFF))
-
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("Saved location", style = MaterialTheme.typography.labelSmall, color = ClipyDesignTokens.secondaryText)
-                            Text(output.path, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis, color = ClipyDesignTokens.secondaryText)
-                        }
-                        
-                        if (!exists) {
-                            Text("File not found on disk.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
-                        }
+                    Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        ResultInfoRow("File Name", output.fileName)
+                        ResultInfoRow("Operation", output.operation)
+                        ResultInfoRow("Size", formatBytes(output.sizeInBytes))
+                        ResultInfoRow("Date", formatDate(output.createdAtEpochMs))
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.weight(1f))
+            if (message.value.isNotEmpty()) {
+                Text(message.value, color = ClipyDesignTokens.primaryAccent, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+            }
 
+            if (file != null) {
                 Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         ClipyPrimaryButton(
                             modifier = Modifier.weight(1f),
                             label = "Play File",
                             enabled = exists,
-                            onClick = {
-                                val ok = openFile(context, file)
-                                if (!ok) message.value = "Could not open this file."
-                            }
+                            onClick = { onNavigate(AppRoute.VIDEO_PLAYER) }
                         )
                         ClipySecondaryButton(
                             modifier = Modifier.weight(1f),
@@ -171,87 +148,58 @@ fun ResultScreen(
                     )
 
                     ClipyPrimaryButton(
-                        modifier = Modifier.fillMaxWidth(),
-                        label = "Create Another",
-                        onClick = { onNavigate(createAnotherRoute) }
-                    )
-                    
-                    ClipySecondaryButton(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
                         label = "Back to Home",
                         onClick = { onNavigate(AppRoute.HOME) }
                     )
                 }
             }
 
-            message.value?.let { 
-                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) 
-            }
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
 
 @Composable
-private fun InfoRow(label: String, value: String) {
+private fun ResultInfoRow(label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = ClipyDesignTokens.secondaryText)
-        Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, color = Color.White)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = ClipyDesignTokens.secondaryText)
+        Text(value, style = MaterialTheme.typography.bodySmall, color = Color.White, fontWeight = FontWeight.Bold)
     }
 }
 
 private fun openFile(context: Context, file: File): Boolean {
-    if (!file.exists()) return false
     val mimeType = resolveMimeType(file.name)
-    val uri = fileUri(context, file)
-    val intent = Intent(Intent.ACTION_VIEW)
-        .setDataAndType(uri, mimeType)
-        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    return try {
-        context.startActivity(intent)
-        true
-    } catch (_: ActivityNotFoundException) {
-        false
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, mimeType)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
+    return runCatching { context.startActivity(intent); true }.getOrDefault(false)
 }
 
 private fun shareFile(context: Context, file: File): Boolean {
-    if (!file.exists()) return false
-    val uri = fileUri(context, file)
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
     val mimeType = resolveMimeType(file.name)
-    val intent = Intent(Intent.ACTION_SEND)
-        .setType(mimeType)
-        .putExtra(Intent.EXTRA_STREAM, uri)
-        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    intent.clipData = ClipData.newRawUri(file.name, uri)
-    return try {
-        context.startActivity(Intent.createChooser(intent, "Share export"))
-        true
-    } catch (_: ActivityNotFoundException) {
-        false
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = mimeType
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        clipData = ClipData.newRawUri(file.name, uri)
     }
+    return runCatching { context.startActivity(Intent.createChooser(intent, "Share video")); true }.getOrDefault(false)
 }
 
-private fun fileUri(context: Context, file: File): Uri {
-    return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-}
-
-private fun formatFileSize(bytes: Long): String {
-    if (bytes <= 0L) return "0 B"
-    val kb = 1024.0
-    val mb = kb * 1024.0
-    val gb = mb * 1024.0
-    val value = bytes.toDouble()
-    return when {
-        value >= gb -> "%.2f GB".format(value / gb)
-        value >= mb -> "%.2f MB".format(value / mb)
-        value >= kb -> "%.1f KB".format(value / kb)
-        else -> "$bytes B"
-    }
+private fun formatBytes(bytes: Long): String {
+    if (bytes < 1024) return "$bytes B"
+    val exp = (Math.log(bytes.toDouble()) / Math.log(1024.0)).toInt()
+    val pre = "KMGTPE"[exp - 1]
+    return String.format(Locale.getDefault(), "%.1f %sB", bytes / Math.pow(1024.0, exp.toDouble()), pre)
 }
 
 private fun formatDate(epochMs: Long): String {
     return runCatching {
-        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(epochMs))
+        SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date(epochMs))
     }.getOrDefault("Unknown date")
 }
 

@@ -2,6 +2,7 @@ package com.nantcompany.clipy.export.output
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import java.io.File
@@ -12,8 +13,16 @@ class LocalOutputRepositoryTest {
 
     @Before
     fun setup() {
+        LocalOutputRepository.storageDir = createTempDir(prefix = "clipy-output-test-")
         repository = LocalOutputRepository()
         repository.clear()
+    }
+
+    @After
+    fun tearDown() {
+        repository.clear()
+        LocalOutputRepository.storageDir?.deleteRecursively()
+        LocalOutputRepository.storageDir = null
     }
 
     @Test
@@ -23,7 +32,6 @@ class LocalOutputRepositoryTest {
             fileName = "test.mp4",
             path = "/tmp/test.mp4",
             sizeInBytes = 1024L,
-            durationMs = 5000L,
             operation = "cut"
         )
 
@@ -36,7 +44,6 @@ class LocalOutputRepositoryTest {
         assertEquals(output.fileName, retrieved.fileName)
         assertEquals(output.path, retrieved.path)
         assertEquals(output.sizeInBytes, retrieved.sizeInBytes)
-        assertEquals(output.durationMs, retrieved.durationMs)
         assertEquals(output.operation, retrieved.operation)
     }
 

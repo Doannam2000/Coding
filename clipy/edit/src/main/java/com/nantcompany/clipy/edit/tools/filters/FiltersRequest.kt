@@ -6,5 +6,6 @@ data class FiltersRequest(
     val brightness: Float = 0f,
     val contrast: Float = 0f,
     val saturation: Float = 1f,
+    val filterIntensity: Float = 1f,
     val filterName: String = "Normal"
 )

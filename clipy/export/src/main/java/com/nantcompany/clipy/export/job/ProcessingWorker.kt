@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
@@ -44,7 +45,7 @@ class ProcessingWorker(
             }
             is ProcessEvent.Cancelled -> {
                 notificationManager.cancel(NOTIFICATION_ID)
-                Result.success(workDataOf("status" to "cancelled"))
+                Result.failure(workDataOf("status" to "cancelled"))
             }
             is ProcessEvent.Failed -> {
                 showFailureNotification(result.error.message ?: "Processing error")
@@ -56,7 +57,16 @@ class ProcessingWorker(
 
     private fun createForegroundInfo(progress: Int, status: String): ForegroundInfo {
         createChannel()
-        return ForegroundInfo(NOTIFICATION_ID, createNotification(progress, status, true))
+        val notification = createNotification(progress, status, true)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ForegroundInfo(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            ForegroundInfo(NOTIFICATION_ID, notification)
+        }
     }
 
     private fun createChannel() {

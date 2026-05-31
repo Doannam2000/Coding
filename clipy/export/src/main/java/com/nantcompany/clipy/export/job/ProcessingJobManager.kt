@@ -28,8 +28,8 @@ import java.util.Locale
 
 @UnstableApi
 class ProcessingJobManager(
-    private val context: Context,
-    private val outputRepository: LocalOutputRepository
+    private val context: Context? = null,
+    private val outputRepository: LocalOutputRepository = LocalOutputRepository()
 ) {
     interface ProgressCallback {
         fun onProgress(event: ProcessEvent.ProgressUpdate)
@@ -47,26 +47,14 @@ class ProcessingJobManager(
         outputFile.parentFile?.mkdirs()
         if (outputFile.exists()) outputFile.delete()
 
-        val useHardware = request is ProcessingRequest.Cut || 
-                          request is ProcessingRequest.Compress || 
-                          request is ProcessingRequest.Rotate ||
-                          request is ProcessingRequest.Speed ||
-                          request is ProcessingRequest.Crop
-
-        if (useHardware) {
-            progressCallback?.onProgress(ProcessEvent.ProgressUpdate(5, 0L, "Accelerating via GPU"))
-            val hwResult = runCatching { executeWithTransformer(request, outputFile, progressCallback) }.getOrNull()
-            if (hwResult is ProcessEvent.Completed || hwResult is ProcessEvent.Cancelled) return@withContext hwResult
-            progressCallback?.onProgress(ProcessEvent.ProgressUpdate(10, 0L, "Switching to Compatibility Engine"))
-        }
-
         val totalDurationMs = resolveDurationMs(request)
         val plan = try { buildExecutionPlan(request) } catch (error: Throwable) { return@withContext ProcessEvent.Failed(asFriendlyError(error)) }
         executeFFmpegPlan(request, plan, outputFile, totalDurationMs, progressCallback)
     }
 
     private suspend fun executeWithTransformer(request: ProcessingRequest, outputFile: File, progressCallback: ProgressCallback?): ProcessEvent = callbackFlow {
-        val transformer = Transformer.Builder(context).build()
+        val appContext = context ?: error("Context is required for hardware export.")
+        val transformer = Transformer.Builder(appContext).build()
         activeTransformer = transformer
         val listener = object : Transformer.Listener {
             override fun onCompleted(composition: Composition, exportResult: ExportResult) {
@@ -146,7 +134,11 @@ class ProcessingJobManager(
                             ProcessEvent.Completed(output)
                         }
                     }
-                    else -> ProcessEvent.Failed(asFriendlyError(IllegalStateException("FFmpeg error")))
+                    else -> {
+                        val logs = session.allLogsAsString
+                        val lastLogs = logs.split("\n").takeLast(10).joinToString("\n")
+                        ProcessEvent.Failed(asFriendlyError(IllegalStateException("FFmpeg error: $lastLogs")))
+                    }
                 }
                 resultRef.set(result); done.countDown()
             }, null, { stats ->
@@ -164,37 +156,53 @@ class ProcessingJobManager(
         cancelled = true; activeTransformer?.cancel(); FFmpegKit.cancel()
     }
 
-    private fun buildExecutionPlan(request: ProcessingRequest): ExecutionPlan {
+    internal fun buildExecutionPlan(request: ProcessingRequest): ExecutionPlan {
+        val commonVf = "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p"
+
         return when (request) {
             is ProcessingRequest.Cut -> {
                 val r = (request as ProcessingRequest.Cut).request
-                ExecutionPlan(listOf("-y", "-i", r.inputPath, "-ss", formatSeconds(r.startMs), "-to", formatSeconds(r.endMs), "-c:v", "libx264", "-c:a", "aac", request.outputPath), "cut")
+                val durationMs = (r.endMs - r.startMs).coerceAtLeast(1L)
+                ExecutionPlan(listOf("-y", "-ss", formatSeconds(r.startMs), "-i", r.inputPath, "-t", formatSeconds(durationMs), "-vf", commonVf, "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", request.outputPath), "cut")
             }
             is ProcessingRequest.Compress -> {
                 val r = (request as ProcessingRequest.Compress).request
-                val args = mutableListOf("-y", "-i", r.inputPath, "-b:v", "${r.bitrateKbps}k", "-c:v", "libx264", "-preset", "fast")
-                r.targetHeight?.let { args.addAll(listOf("-vf", "scale=-2:$it")) }
+                val vf = if (r.targetHeight != null) "scale=-2:${r.targetHeight},format=yuv420p" else commonVf
+                val args = mutableListOf("-y", "-i", r.inputPath, "-b:v", "${r.bitrateKbps}k", "-vf", vf, "-c:v", "libx264", "-preset", "fast")
                 if (r.keepAudio) args.addAll(listOf("-c:a", "aac")) else args.add("-an")
                 args.add(request.outputPath); ExecutionPlan(args, "compress")
             }
             is ProcessingRequest.Merge -> {
                 val r = (request as ProcessingRequest.Merge).request
-                if (r.transition == "none") {
-                    val listFile = File.createTempFile("merge-", ".txt")
-                    listFile.writeText(r.inputPaths.joinToString("\n") { "file '${it.replace("'", "'\\''")}'" })
-                    ExecutionPlan(listOf("-y", "-f", "concat", "-safe", "0", "-i", listFile.absolutePath, "-c:v", "libx264", "-c:a", "aac", request.outputPath), "merge", listOf(listFile))
+                val requestedTransition = normalizeTransitionName(r.transition)
+                val inputDurationsMs = r.inputPaths.map { probeDurationMs(it).coerceAtLeast(1L) }
+                val hasAudioTracks = r.inputPaths.map { probeHasAudioTrack(it) }
+                if (requestedTransition == "none") {
+                    val args = mutableListOf("-y")
+                    r.inputPaths.forEach { args.addAll(listOf("-i", it)) }
+
+                    val filter = StringBuilder()
+                    r.inputPaths.forEachIndexed { i, _ ->
+                        filter.append("[$i:v]${fitToPortraitCanvas()}[v$i];")
+                        filter.append(mergeAudioSource(i, hasAudioTracks[i], inputDurationsMs[i]))
+                    }
+                    r.inputPaths.indices.forEach { i -> filter.append("[v$i][a$i]") }
+                    filter.append("concat=n=${r.inputPaths.size}:v=1:a=1[outv][outa]")
+
+                    args.addAll(listOf("-filter_complex", filter.toString(), "-map", "[outv]", "-map", "[outa]", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-movflags", "+faststart", request.outputPath))
+                    ExecutionPlan(args, "merge")
                 } else {
                     val args = mutableListOf("-y")
                     r.inputPaths.forEach { args.addAll(listOf("-i", it)) }
                     
                     val filter = StringBuilder()
                     r.inputPaths.forEachIndexed { i, _ ->
-                        filter.append("[$i:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1[v$i];")
-                        filter.append("[$i:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a$i];")
+                        filter.append("[$i:v]${fitToPortraitCanvas()}[v$i];")
+                        filter.append(mergeAudioSource(i, hasAudioTracks[i], inputDurationsMs[i]))
                     }
                     
                     val transDur = r.transitionDurationMs / 1000.0
-                    val durations = r.inputPaths.map { probeDurationMs(it) / 1000.0 }
+                    val durations = inputDurationsMs.map { it / 1000.0 }
                     var currentOffset = 0.0
                     var lastV = "v0"
                     var lastA = "a0"
@@ -208,7 +216,7 @@ class ProcessingJobManager(
                         val outV = "m0v$i"
                         val outA = "m0a$i"
                         
-                        filter.append("[$lastV][$nextV]xfade=transition=${r.transition}:duration=$transDur:offset=$currentOffset")
+                        filter.append("[$lastV][$nextV]xfade=transition=$requestedTransition:duration=$transDur:offset=$currentOffset")
                         if (i < r.inputPaths.size - 1) {
                             filter.append("[$outV];")
                             lastV = outV
@@ -225,29 +233,45 @@ class ProcessingJobManager(
                         }
                     }
                     
-                    args.addAll(listOf("-filter_complex", filter.toString(), "-map", "[outv]", "-map", "[outa]", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", request.outputPath))
+                    args.addAll(listOf("-filter_complex", filter.toString(), "-map", "[outv]", "-map", "[outa]", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", request.outputPath))
                     ExecutionPlan(args, "merge-transition")
                 }
             }
             is ProcessingRequest.ExtractAudio -> {
                 val r = (request as ProcessingRequest.ExtractAudio).request
-                ExecutionPlan(listOf("-y", "-i", r.inputPath, "-vn", "-c:a", "libmp3lame", "-b:a", "${r.bitrateKbps}k", request.outputPath), "extract-audio")
+                val format = r.format.lowercase(Locale.US)
+                val codec = if (format == "m4a" || format == "aac") "aac" else "libmp3lame"
+                ExecutionPlan(listOf("-y", "-i", r.inputPath, "-vn", "-c:a", codec, "-b:a", "${r.bitrateKbps}k", request.outputPath), "extract-audio")
             }
             is ProcessingRequest.Slideshow -> {
                 val r = (request as ProcessingRequest.Slideshow).request
-                if (r.transition == "none") {
-                    val listFile = File.createTempFile("slide-", ".txt")
-                    val lines = r.imagePaths.flatMap { listOf("file '$it'", "duration ${r.secondsPerImage}") } + "file '${r.imagePaths.last()}'"
-                    listFile.writeText(lines.joinToString("\n"))
-                    ExecutionPlan(listOf("-y", "-f", "concat", "-safe", "0", "-i", listFile.absolutePath, "-pix_fmt", "yuv420p", "-c:v", "libx264", request.outputPath), "slideshow", listOf(listFile))
+                val requestedTransition = normalizeTransitionName(r.transition)
+                if (requestedTransition == "none") {
+                    val args = mutableListOf("-y")
+                    r.imagePaths.forEach { args.addAll(listOf("-loop", "1", "-t", r.secondsPerImage.toString(), "-i", it)) }
+                    r.audioPath?.let { args.addAll(listOf("-i", it)) }
+
+                    val filter = StringBuilder()
+                    r.imagePaths.forEachIndexed { i, _ ->
+                        filter.append("[$i:v]${fitToPortraitCanvas()},fps=30[v$i];")
+                    }
+                    r.imagePaths.indices.forEach { i -> filter.append("[v$i]") }
+                    filter.append("concat=n=${r.imagePaths.size}:v=1:a=0[outv]")
+
+                    args.addAll(listOf("-filter_complex", filter.toString(), "-map", "[outv]"))
+                    if (r.audioPath != null) {
+                        args.addAll(listOf("-map", "${r.imagePaths.size}:a", "-c:a", "aac", "-shortest"))
+                    }
+                    args.addAll(listOf("-pix_fmt", "yuv420p", "-c:v", "libx264", "-preset", "ultrafast", "-movflags", "+faststart", request.outputPath))
+                    ExecutionPlan(args, "slideshow")
                 } else {
                     val args = mutableListOf("-y")
                     r.imagePaths.forEach { args.addAll(listOf("-loop", "1", "-t", "${r.secondsPerImage}", "-i", it)) }
+                    r.audioPath?.let { args.addAll(listOf("-i", it)) }
                     
                     val filter = StringBuilder()
-                    // Scale all to 720x1280 (portrait) and set sar
                     r.imagePaths.forEachIndexed { i, _ ->
-                        filter.append("[$i:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1[v$i];")
+                        filter.append("[$i:v]${fitToPortraitCanvas()},fps=30[v$i];")
                     }
                     
                     var lastLabel = "v0"
@@ -256,7 +280,7 @@ class ProcessingJobManager(
                         val nextIdx = i + 1
                         val offset = (nextIdx * r.secondsPerImage) - (nextIdx * transDur)
                         val outLabel = "v0$nextIdx"
-                        filter.append("[$lastLabel][v$nextIdx]xfade=transition=${r.transition}:duration=$transDur:offset=$offset")
+                        filter.append("[$lastLabel][v$nextIdx]xfade=transition=$requestedTransition:duration=$transDur:offset=$offset")
                         if (nextIdx < r.imagePaths.size - 1) {
                             filter.append("[$outLabel];")
                             lastLabel = outLabel
@@ -267,72 +291,81 @@ class ProcessingJobManager(
                     
                     args.addAll(listOf("-filter_complex", filter.toString(), "-map", "[outv]"))
                     if (r.audioPath != null) {
-                        args.addAll(listOf("-i", r.audioPath!!, "-map", "${r.imagePaths.size}:a", "-c:a", "aac", "-shortest"))
+                        args.addAll(listOf("-map", "${r.imagePaths.size}:a", "-c:a", "aac", "-shortest"))
                     }
-                    args.addAll(listOf("-pix_fmt", "yuv420p", "-c:v", "libx264", "-preset", "ultrafast", request.outputPath))
+                    args.addAll(listOf("-pix_fmt", "yuv420p", "-c:v", "libx264", "-preset", "ultrafast", "-movflags", "+faststart", request.outputPath))
                     ExecutionPlan(args, "slideshow-transition")
                 }
             }
             is ProcessingRequest.Filters -> {
                 val r = (request as ProcessingRequest.Filters).request
-                val filters = mutableListOf("eq=brightness=${r.brightness}:contrast=${r.contrast + 1f}:saturation=${r.saturation}")
-                when (r.filterName.uppercase()) {
-                    "SEPIA" -> filters.add("colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131")
-                    "GRAYSCALE" -> filters.add("hue=s=0")
-                    "CYBERPUNK" -> filters.add("hue=h=-150:s=1.4,eq=contrast=1.15")
-                }
-                ExecutionPlan(listOf("-y", "-i", r.inputPath, "-vf", filters.joinToString(","), "-c:v", "libx264", "-c:a", "copy", request.outputPath), "filters")
+                val vf = buildFilterVideoChain(
+                    filterName = r.filterName,
+                    brightness = r.brightness,
+                    contrast = r.contrast,
+                    saturation = r.saturation,
+                    finalScale = commonVf,
+                    filterIntensity = r.filterIntensity
+                )
+                ExecutionPlan(listOf("-y", "-i", r.inputPath, "-vf", vf, "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-movflags", "+faststart", request.outputPath), "filters")
             }
             is ProcessingRequest.Rotate -> {
                 val r = (request as ProcessingRequest.Rotate).request
-                val vf = mutableListOf<String>()
+                val vf = mutableListOf(commonVf)
                 when (r.rotation) { 90 -> vf.add("transpose=1"); 180 -> vf.add("transpose=2,transpose=2"); 270 -> vf.add("transpose=2") }
                 if (r.flipHorizontal) vf.add("hflip")
                 if (r.flipVertical) vf.add("vflip")
-                ExecutionPlan(listOf("-y", "-i", r.inputPath, "-vf", vf.joinToString(","), "-c:v", "libx264", "-c:a", "copy", request.outputPath), "rotate")
+                ExecutionPlan(listOf("-y", "-i", r.inputPath, "-vf", vf.joinToString(","), "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", request.outputPath), "rotate")
             }
             is ProcessingRequest.Speed -> {
                 val r = (request as ProcessingRequest.Speed).request
-                ExecutionPlan(listOf("-y", "-i", r.inputPath, "-vf", "setpts=${1f/r.speedFactor}*PTS", "-af", "atempo=${r.speedFactor}", "-c:v", "libx264", "-c:a", "aac", request.outputPath), "speed")
+                ExecutionPlan(listOf("-y", "-i", r.inputPath, "-vf", "setpts=${1f/r.speedFactor}*PTS,$commonVf", "-af", buildAtempoFilter(r.speedFactor), "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", request.outputPath), "speed")
             }
             is ProcessingRequest.Crop -> {
                 val r = (request as ProcessingRequest.Crop).request
-                ExecutionPlan(listOf("-y", "-i", r.inputPath, "-vf", "crop=${r.width}:${r.height}:${r.x}:${r.y}", "-c:v", "libx264", "-c:a", "copy", request.outputPath), "crop")
+                val vf = "crop=${r.width}:${r.height}:${r.x}:${r.y},$commonVf"
+                ExecutionPlan(listOf("-y", "-i", r.inputPath, "-vf", vf, "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", request.outputPath), "crop")
             }
             is ProcessingRequest.Reverse -> {
                 val r = (request as ProcessingRequest.Reverse).request
-                ExecutionPlan(listOf("-y", "-i", r.inputPath, "-vf", "reverse", "-af", "areverse", "-c:v", "libx264", "-c:a", "aac", request.outputPath), "reverse")
+                ExecutionPlan(listOf("-y", "-i", r.inputPath, "-vf", "reverse,$commonVf", "-af", "areverse", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", request.outputPath), "reverse")
             }
             is ProcessingRequest.Stickers -> {
                 val r = (request as ProcessingRequest.Stickers).request
-                // Use main_w and main_h (or W/H) for percentage-based positioning
-                ExecutionPlan(listOf("-y", "-i", r.inputPath, "-i", r.stickerPath, "-filter_complex", "[0:v][1:v]overlay=(W*${r.x}/100):(H*${r.y}/100)", "-c:v", "libx264", request.outputPath), "stickers")
+                val stickerWidth = r.width
+                val stickerInput = if (stickerWidth != null && stickerWidth > 0) {
+                    "[1:v]scale=$stickerWidth:-1[sticker];[0:v][sticker]"
+                } else {
+                    "[0:v][1:v]"
+                }
+                val timing = if (r.endTimeMs > r.startTimeMs) {
+                    ":enable='between(t\\,${formatSeconds(r.startTimeMs)}\\,${formatSeconds(r.endTimeMs)})'"
+                } else {
+                    ""
+                }
+                val filter = "${stickerInput}overlay=(W*${r.x}/100):(H*${r.y}/100)$timing,$commonVf[v]"
+                ExecutionPlan(listOf("-y", "-i", r.inputPath, "-i", r.stickerPath, "-filter_complex", filter, "-map", "[v]", "-map", "0:a?", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-movflags", "+faststart", request.outputPath), "stickers")
             }
             is ProcessingRequest.TextOverlay -> {
                 val r = (request as ProcessingRequest.TextOverlay).request
-                // Use w and h for percentage-based positioning. Also handle font.
                 val color = r.fontColor.lowercase()
                 val fontPath = "/system/fonts/Roboto-Regular.ttf"
-                val vf = "drawtext=text='${r.text}':x=(w*${r.x}/100):y=(h*${r.y}/100):fontsize=${r.fontSize}:fontcolor=$color:fontfile=$fontPath"
-                ExecutionPlan(listOf("-y", "-i", r.inputPath, "-vf", vf, "-c:v", "libx264", request.outputPath), "text")
+                val vf = "drawtext=text='${escapeDrawText(r.text)}':x=(w*${r.x}/100):y=(h*${r.y}/100):fontsize=${r.fontSize}:fontcolor=$color:fontfile=$fontPath,$commonVf"
+                ExecutionPlan(listOf("-y", "-i", r.inputPath, "-vf", vf, "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", request.outputPath), "text")
             }
             is ProcessingRequest.Studio -> {
                 val r = (request as ProcessingRequest.Studio).request
                 val vf = mutableListOf<String>()
                 when (r.rotation) { 90 -> vf.add("transpose=1"); 180 -> vf.add("transpose=2,transpose=2"); 270 -> vf.add("transpose=2") }
                 if (r.flipHorizontal) vf.add("hflip")
-                vf.add("eq=brightness=${r.brightness}:contrast=${r.contrast + 1f}:saturation=${r.saturation}")
-                when (r.filterName.uppercase()) {
-                    "SEPIA" -> vf.add("colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131")
-                    "GRAYSCALE" -> vf.add("hue=s=0")
-                    "CYBERPUNK" -> vf.add("hue=h=-150:s=1.4,eq=contrast=1.15")
-                }
+                vf.add(buildFilterVideoChain(r.filterName, r.brightness, r.contrast, r.saturation, finalScale = null))
                 if (r.speedFactor != 1.0f) vf.add("setpts=${1f/r.speedFactor}*PTS")
                 r.textLayers.forEach { layer ->
-                    val colorHex = String.format("#%06X", 0xFFFFFF and layer.color)
+                    val colorHex = String.format("0x%06X", 0xFFFFFF and layer.color)
                     val fontPath = "/system/fonts/Roboto-Regular.ttf"
-                    vf.add("drawtext=text='${layer.text}':x=(w*${layer.x}/100):y=(h*${layer.y}/100):fontsize=28:fontcolor=$colorHex:fontfile=$fontPath")
+                    vf.add("drawtext=text='${escapeDrawText(layer.text)}':x=(w*${layer.x}/100):y=(h*${layer.y}/100):fontsize=28:fontcolor=$colorHex:fontfile=$fontPath")
                 }
+                vf.add(commonVf)
                 val args = mutableListOf("-y", "-ss", formatSeconds(r.startMs), "-i", r.inputPath)
                 if (r.audioTracks.isNotEmpty()) {
                     r.audioTracks.forEach { args.addAll(listOf("-i", it.path)) }
@@ -344,7 +377,7 @@ class ProcessingJobManager(
                     args.addAll(listOf("-filter_complex", amix.toString(), "-map", "0:v", "-map", "[outa]"))
                 }
                 if (vf.isNotEmpty()) args.addAll(listOf("-vf", vf.joinToString(",")))
-                if (r.speedFactor != 1.0f) args.addAll(listOf("-af", "atempo=${r.speedFactor}"))
+                if (r.speedFactor != 1.0f) args.addAll(listOf("-af", buildAtempoFilter(r.speedFactor)))
                 args.addAll(listOf("-t", formatSeconds(r.endMs - r.startMs), "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", request.outputPath))
                 ExecutionPlan(args, "studio-composite")
             }
@@ -385,7 +418,6 @@ class ProcessingJobManager(
             is ProcessingRequest.ExtractAudio -> probeDurationMs((request as ProcessingRequest.ExtractAudio).request.inputPath)
             is ProcessingRequest.Stickers -> probeDurationMs((request as ProcessingRequest.Stickers).request.inputPath)
             is ProcessingRequest.TextOverlay -> probeDurationMs((request as ProcessingRequest.TextOverlay).request.inputPath)
-            else -> 0L
         }
     }
 
@@ -396,7 +428,199 @@ class ProcessingJobManager(
         }.getOrNull() ?: 0L
     }
 
+    private fun probeHasAudioTrack(path: String): Boolean {
+        return runCatching {
+            val mediaInformation = FFprobeKit.getMediaInformation(path).mediaInformation ?: return@runCatching true
+            val streams = mediaInformation.streams ?: return@runCatching true
+            streams.any { stream -> stream.type.equals("audio", ignoreCase = true) }
+        }.getOrDefault(true)
+    }
+
     private fun formatSeconds(ms: Long) = String.format(Locale.US, "%.3f", ms / 1000.0)
-    private fun asFriendlyError(e: Throwable) = IllegalStateException(e.message ?: "Processing Failed")
-    private data class ExecutionPlan(val arguments: List<String>, val operation: String, val tempFiles: List<File> = emptyList())
+
+    private fun fitToPortraitCanvas(): String {
+        return "scale=720:1280:force_original_aspect_ratio=decrease," +
+            "pad=720:1280:(ow-iw)/2:(oh-ih)/2," +
+            "setsar=1,format=yuv420p"
+    }
+
+    private fun standardizeAudio(): String {
+        return "aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo"
+    }
+
+    private fun mergeAudioSource(index: Int, hasAudioTrack: Boolean, durationMs: Long): String {
+        return if (hasAudioTrack) {
+            "[$index:a]${standardizeAudio()}[a$index];"
+        } else {
+            "anullsrc=channel_layout=stereo:sample_rate=44100:d=${formatSeconds(durationMs)}[a$index];"
+        }
+    }
+
+    private fun normalizeTransitionName(name: String): String {
+        return when (name.lowercase(Locale.US)) {
+            "xfade", "crossfade" -> "fade"
+            else -> name.lowercase(Locale.US)
+        }
+    }
+
+    private fun buildAtempoFilter(speedFactor: Float): String {
+        var remaining = speedFactor.coerceIn(0.25f, 4.0f)
+        val parts = mutableListOf<Float>()
+        while (remaining < 0.5f) {
+            parts.add(0.5f)
+            remaining /= 0.5f
+        }
+        while (remaining > 2.0f) {
+            parts.add(2.0f)
+            remaining /= 2.0f
+        }
+        parts.add(remaining)
+        return parts.joinToString(",") { part -> String.format(Locale.US, "atempo=%.3f", part) }
+    }
+
+    private fun buildFilterVideoChain(
+        filterName: String,
+        brightness: Float,
+        contrast: Float,
+        saturation: Float,
+        finalScale: String?,
+        filterIntensity: Float = 1f
+    ): String {
+        val filters = mutableListOf<String>()
+        val intensity = filterIntensity.coerceIn(0f, 1f)
+        if (intensity > 0.001f) {
+            if (intensity >= 0.999f) {
+                when (filterName.uppercase(Locale.US)) {
+                    "SEPIA" -> filters.addAll(listOf(
+                        "hue=h=28:s=0.45",
+                        "eq=contrast=1.2800:brightness=0.0600"
+                    ))
+                    "GRAYSCALE" -> filters.addAll(listOf("hue=s=0", "eq=contrast=1.2200"))
+                    "INVERT" -> filters.add("negate")
+                    "WARM" -> filters.addAll(listOf("hue=h=22:s=1.28", "eq=brightness=0.0600"))
+                    "COOL" -> filters.addAll(listOf("hue=h=-28:s=1.30", "eq=contrast=1.1200"))
+                    "VINTAGE" -> filters.addAll(listOf("hue=h=22:s=0.38", "eq=contrast=0.7200:brightness=0.0600"))
+                    "DRAMATIC" -> filters.addAll(listOf("hue=s=0.65", "eq=contrast=1.7200:brightness=-0.0800"))
+                    "TOON" -> filters.add("eq=contrast=1.7500:saturation=1.6500")
+                    "SKETCH" -> filters.addAll(listOf("hue=s=0", "eq=contrast=1.8500:brightness=0.0800"))
+                    "VIGNETTE" -> filters.add("eq=brightness=-0.1800:contrast=1.3000")
+                    "KUWAHARA" -> filters.add("eq=contrast=0.7000:saturation=1.4500")
+                    "PIXEL" -> filters.add("eq=contrast=1.5500:saturation=1.3500")
+                    "POSTER" -> filters.add("eq=contrast=1.7500:saturation=1.5500")
+                    "LOMO" -> filters.addAll(listOf("hue=h=12:s=1.42", "eq=contrast=1.5500"))
+                    "CYBERPUNK" -> filters.addAll(listOf("hue=h=-150:s=1.85", "eq=contrast=1.5500:brightness=0.0400"))
+                    "NONE", "NORMAL" -> Unit
+                }
+            } else {
+                when (filterName.uppercase(Locale.US)) {
+                    "SEPIA" -> filters.addAll(listOf(
+                        hueFilter(hue = 28f * intensity, saturation = lerp(1f, 0.45f, intensity)),
+                        eqFilter(contrast = lerp(1f, 1.28f, intensity), brightness = 0.06f * intensity)
+                    ))
+                    "GRAYSCALE" -> filters.addAll(listOf(
+                        hueFilter(saturation = 1f - intensity),
+                        eqFilter(contrast = lerp(1f, 1.22f, intensity))
+                    ))
+                    "INVERT" -> filters.add(invertFilter(intensity))
+                    "WARM" -> filters.addAll(listOf(
+                        hueFilter(hue = 22f * intensity, saturation = lerp(1f, 1.28f, intensity)),
+                        eqFilter(brightness = 0.06f * intensity)
+                    ))
+                    "COOL" -> filters.addAll(listOf(
+                        hueFilter(hue = -28f * intensity, saturation = lerp(1f, 1.30f, intensity)),
+                        eqFilter(contrast = lerp(1f, 1.12f, intensity))
+                    ))
+                    "VINTAGE" -> filters.addAll(listOf(
+                        hueFilter(hue = 22f * intensity, saturation = lerp(1f, 0.38f, intensity)),
+                        eqFilter(contrast = lerp(1f, 0.72f, intensity), brightness = 0.06f * intensity)
+                    ))
+                    "DRAMATIC" -> filters.addAll(listOf(
+                        hueFilter(saturation = lerp(1f, 0.65f, intensity)),
+                        eqFilter(contrast = lerp(1f, 1.72f, intensity), brightness = -0.08f * intensity)
+                    ))
+                    "TOON" -> filters.add(eqFilter(contrast = lerp(1f, 1.75f, intensity), saturation = lerp(1f, 1.65f, intensity)))
+                    "SKETCH" -> filters.addAll(listOf(
+                        hueFilter(saturation = 1f - intensity),
+                        eqFilter(contrast = lerp(1f, 1.85f, intensity), brightness = 0.08f * intensity)
+                    ))
+                    "VIGNETTE" -> filters.add(eqFilter(brightness = -0.18f * intensity, contrast = lerp(1f, 1.30f, intensity)))
+                    "KUWAHARA" -> filters.add(eqFilter(contrast = lerp(1f, 0.70f, intensity), saturation = lerp(1f, 1.45f, intensity)))
+                    "PIXEL" -> filters.add(eqFilter(contrast = lerp(1f, 1.55f, intensity), saturation = lerp(1f, 1.35f, intensity)))
+                    "POSTER" -> filters.add(eqFilter(contrast = lerp(1f, 1.75f, intensity), saturation = lerp(1f, 1.55f, intensity)))
+                    "LOMO" -> filters.addAll(listOf(
+                        hueFilter(hue = 12f * intensity, saturation = lerp(1f, 1.42f, intensity)),
+                        eqFilter(contrast = lerp(1f, 1.55f, intensity))
+                    ))
+                    "CYBERPUNK" -> filters.addAll(listOf(
+                        hueFilter(hue = -150f * intensity, saturation = lerp(1f, 1.85f, intensity)),
+                        eqFilter(contrast = lerp(1f, 1.55f, intensity), brightness = 0.04f * intensity)
+                    ))
+                    "NONE", "NORMAL" -> Unit
+                }
+            }
+        }
+
+        val adjustedContrast = (contrast + 1f).coerceIn(0.01f, 3.0f)
+        val adjustedSaturation = saturation.coerceIn(0.0f, 3.0f)
+        val adjustedBrightness = brightness.coerceIn(-1.0f, 1.0f)
+        filters.add(
+            "eq=" +
+                "brightness=${formatFilterFloat(adjustedBrightness)}:" +
+                "contrast=${formatFilterFloat(adjustedContrast)}:" +
+                "saturation=${formatFilterFloat(adjustedSaturation)}"
+        )
+        if (finalScale != null) filters.add(finalScale)
+        return filters.joinToString(",")
+    }
+
+    private fun formatFilterFloat(value: Float): String = String.format(Locale.US, "%.4f", value)
+
+    private fun lerp(start: Float, end: Float, amount: Float): Float = start + (end - start) * amount.coerceIn(0f, 1f)
+
+    private fun hueFilter(hue: Float? = null, saturation: Float? = null): String {
+        val parts = mutableListOf<String>()
+        if (hue != null) parts.add("h=${formatFilterFloat(hue)}")
+        if (saturation != null) parts.add("s=${formatFilterFloat(saturation)}")
+        return "hue=${parts.joinToString(":")}"
+    }
+
+    private fun eqFilter(
+        brightness: Float? = null,
+        contrast: Float? = null,
+        saturation: Float? = null
+    ): String {
+        val parts = mutableListOf<String>()
+        if (brightness != null) parts.add("brightness=${formatFilterFloat(brightness)}")
+        if (contrast != null) parts.add("contrast=${formatFilterFloat(contrast)}")
+        if (saturation != null) parts.add("saturation=${formatFilterFloat(saturation)}")
+        return "eq=${parts.joinToString(":")}"
+    }
+
+    private fun invertFilter(intensity: Float): String {
+        val keep = formatFilterFloat(1f - 2f * intensity.coerceIn(0f, 1f))
+        val offset = formatFilterFloat(255f * intensity.coerceIn(0f, 1f))
+        return "lutrgb=r=val*$keep+$offset:g=val*$keep+$offset:b=val*$keep+$offset"
+    }
+
+    private fun escapeDrawText(text: String): String {
+        return text
+            .replace("\\", "\\\\")
+            .replace(":", "\\:")
+            .replace("'", "\\'")
+            .replace("%", "\\%")
+            .replace("\n", "\\n")
+    }
+
+    internal fun asFriendlyError(e: Throwable): IllegalStateException {
+        val raw = e.message.orEmpty()
+        val lower = raw.lowercase(Locale.US)
+        val message = when {
+            "no such file" in lower || "not found" in lower -> "Could not read file."
+            "invalid data" in lower || "unsupported" in lower -> "Format not supported."
+            "no space" in lower || "enospc" in lower -> "Not enough storage."
+            else -> "Export failed. Please try another file."
+        }
+        return IllegalStateException(message)
+    }
+    internal data class ExecutionPlan(val arguments: List<String>, val operation: String, val tempFiles: List<File> = emptyList())
 }

@@ -42,18 +42,21 @@ class ProcessingViewModel(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ProcessingUiState())
     val uiState: StateFlow<ProcessingUiState> = _uiState.asStateFlow()
-    
+
     private val workManager = WorkManager.getInstance(context)
 
     fun start(request: ProcessingRequest) {
         if (_uiState.value.isRunning) return
-        
+
         _uiState.update { it.copy(
-            progressPercent = 5, 
-            statusText = "Preparing...", 
-            phase = ProcessingPhase.Preparing, 
-            isRunning = true, 
-            activeRequest = request 
+            progressPercent = 5,
+            statusText = "Preparing...",
+            phase = ProcessingPhase.Preparing,
+            isRunning = true,
+            errorMessage = null,
+            isCompleted = false,
+            output = null,
+            activeRequest = request
         ) }
 
         val workRequest = OneTimeWorkRequestBuilder<ProcessingWorker>()
@@ -70,20 +73,39 @@ class ProcessingViewModel(
         viewModelScope.launch {
             workManager.getWorkInfoByIdFlow(workRequest.id).collect { workInfo ->
                 if (workInfo == null) return@collect
-                
+
                 when (workInfo.state) {
                     WorkInfo.State.RUNNING -> {
                         val progress = workInfo.progress.getInt("progress", 0)
                         val status = workInfo.progress.getString("status") ?: "Processing..."
                         _uiState.update { it.copy(
-                            progressPercent = progress, 
-                            statusText = status, 
-                            phase = ProcessingPhase.Processing 
+                            progressPercent = progress,
+                            statusText = status,
+                            phase = ProcessingPhase.Processing
                         ) }
                     }
                     WorkInfo.State.SUCCEEDED -> {
+                        if (workInfo.outputData.getString("status") == "cancelled") {
+                            _uiState.update { it.copy(
+                                isRunning = false,
+                                phase = ProcessingPhase.Cancelled,
+                                statusText = "Cancelled",
+                                activeRequest = null
+                            ) }
+                            return@collect
+                        }
                         val path = workInfo.outputData.getString("output_path") ?: ""
                         val id = workInfo.outputData.getString("output_id") ?: ""
+                        if (path.isBlank()) {
+                            _uiState.update { it.copy(
+                                isRunning = false,
+                                phase = ProcessingPhase.Failed,
+                                statusText = "Failed",
+                                errorMessage = "Export did not return an output file.",
+                                activeRequest = request
+                            ) }
+                            return@collect
+                        }
                         val output = OutputMedia(
                             id = id,
                             path = path,
@@ -93,29 +115,39 @@ class ProcessingViewModel(
                             createdAtEpochMs = System.currentTimeMillis()
                         )
                         _uiState.update { it.copy(
-                            progressPercent = 100, 
-                            statusText = "Complete", 
-                            phase = ProcessingPhase.Success, 
-                            isRunning = false, 
-                            isCompleted = true, 
-                            output = output, 
-                            activeRequest = null 
+                            progressPercent = 100,
+                            statusText = "Complete",
+                            phase = ProcessingPhase.Success,
+                            isRunning = false,
+                            isCompleted = true,
+                            output = output,
+                            activeRequest = null
                         ) }
                     }
                     WorkInfo.State.FAILED -> {
+                        if (workInfo.outputData.getString("status") == "cancelled") {
+                            _uiState.update { it.copy(
+                                isRunning = false,
+                                phase = ProcessingPhase.Cancelled,
+                                statusText = "Cancelled",
+                                activeRequest = null
+                            ) }
+                            return@collect
+                        }
                         val error = workInfo.outputData.getString("error") ?: "Processing failed"
                         _uiState.update { it.copy(
-                            isRunning = false, 
-                            phase = ProcessingPhase.Failed, 
-                            errorMessage = error, 
-                            activeRequest = null 
+                            isRunning = false,
+                            phase = ProcessingPhase.Failed,
+                            errorMessage = error,
+                            statusText = "Failed",
+                            activeRequest = request
                         ) }
                     }
                     WorkInfo.State.CANCELLED -> {
                         _uiState.update { it.copy(
-                            isRunning = false, 
-                            phase = ProcessingPhase.Cancelled, 
-                            activeRequest = null 
+                            isRunning = false,
+                            phase = ProcessingPhase.Cancelled,
+                            activeRequest = null
                         ) }
                     }
                     else -> {}
@@ -126,9 +158,9 @@ class ProcessingViewModel(
 
     fun consumeCompletion() { _uiState.update { it.copy(isCompleted = false) } }
     fun clearFailure() { _uiState.update { it.copy(errorMessage = null, phase = ProcessingPhase.Idle) } }
-    fun cancel() { 
+    fun cancel() {
         workManager.cancelUniqueWork("clipy_export")
-        jobManager.cancelProcessing() 
+        jobManager.cancelProcessing()
     }
 
     class Factory(private val context: Context) : ViewModelProvider.Factory {

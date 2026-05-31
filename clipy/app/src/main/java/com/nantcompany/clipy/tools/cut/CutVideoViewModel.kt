@@ -12,8 +12,9 @@ data class CutVideoUiState(
     val inputPath: String? = null,
     val startMs: Long = 0L,
     val endMs: Long = 5000L,
+    val durationMs: Long = 0L,
     val validationError: String? = null,
-    val minDurationMs: Long = 300L
+    val minDurationMs: Long = 500L
 )
 
 class CutVideoViewModel(
@@ -23,21 +24,55 @@ class CutVideoViewModel(
     val uiState: StateFlow<CutVideoUiState> = _uiState.asStateFlow()
 
     fun setInputPath(path: String?) {
-        _uiState.update { it.copy(inputPath = path) }
+        _uiState.update { state ->
+            if (state.inputPath == path) {
+                state
+            } else {
+                CutVideoUiState(inputPath = path)
+            }
+        }
+    }
+
+    fun setDurationMs(durationMs: Long) {
+        if (durationMs <= 0L) return
+        _uiState.update { state ->
+            val endMs = when {
+                state.endMs > durationMs -> durationMs
+                state.endMs == DEFAULT_END_MS -> durationMs
+                else -> state.endMs
+            }
+            val startMs = state.startMs.coerceIn(0L, (endMs - state.minDurationMs).coerceAtLeast(0L))
+            state.copy(durationMs = durationMs, startMs = startMs, endMs = endMs)
+        }
+        validateRange()
     }
 
     fun setStartMs(ms: Long) {
-        _uiState.update { it.copy(startMs = ms.coerceAtLeast(0L)) }
+        _uiState.update { state ->
+            val maxStart = (state.endMs - state.minDurationMs).coerceAtLeast(0L)
+            state.copy(startMs = ms.coerceIn(0L, maxStart))
+        }
         validateRange()
     }
 
     fun setEndMs(ms: Long) {
-        _uiState.update { it.copy(endMs = ms.coerceAtLeast(0L)) }
+        _uiState.update { state ->
+            val maxEnd = state.durationMs.takeIf { it > 0L } ?: Long.MAX_VALUE
+            val minEnd = state.startMs + state.minDurationMs
+            val endMs = if (maxEnd < minEnd) maxEnd else ms.coerceIn(minEnd, maxEnd)
+            state.copy(endMs = endMs)
+        }
         validateRange()
     }
 
     fun resetRange() {
-        _uiState.update { it.copy(startMs = 0L, endMs = 5000L, validationError = null) }
+        _uiState.update { state ->
+            state.copy(
+                startMs = 0L,
+                endMs = state.durationMs.takeIf { it > 0L } ?: DEFAULT_END_MS,
+                validationError = null
+            )
+        }
     }
 
     private fun validateRange() {
@@ -55,5 +90,9 @@ class CutVideoViewModel(
         val result = validator.validate(request)
         _uiState.update { it.copy(validationError = result.errorMessage) }
         return result.isValid
+    }
+
+    private companion object {
+        const val DEFAULT_END_MS = 5000L
     }
 }

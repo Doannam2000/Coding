@@ -13,8 +13,9 @@ object ClipyExportProvider {
     private var jobManager: ProcessingJobManager? = null
     private var outputRepository: LocalOutputRepository? = null
 
-    fun getOutputRepository(): LocalOutputRepository {
-        return outputRepository ?: synchronized(this) {
+    fun getOutputRepository(context: android.content.Context): LocalOutputRepository {
+        com.nantcompany.clipy.export.output.LocalOutputRepository.storageDir = context.filesDir
+        return synchronized(this) {
             outputRepository ?: LocalOutputRepository().also { outputRepository = it }
         }
     }
@@ -23,7 +24,7 @@ object ClipyExportProvider {
         return jobManager ?: synchronized(this) {
             jobManager ?: ProcessingJobManager(
                 context.applicationContext,
-                getOutputRepository()
+                getOutputRepository(context)
             ).also { jobManager = it }
         }
     }

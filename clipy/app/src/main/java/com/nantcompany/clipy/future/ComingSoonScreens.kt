@@ -3,6 +3,8 @@ package com.nantcompany.clipy.future
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
@@ -22,7 +24,13 @@ fun ComingSoonScreen(
         title = featureName,
         onBackClick = { onNavigate(AppRoute.HOME) }
     ) {
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
             ClipyEmptyState(
                 title = "Coming Soon",
                 message = "$featureName is currently being developed with Clipy's high-performance architecture.",

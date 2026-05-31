@@ -1,14 +1,9 @@
 package com.nantcompany.clipy.processing
 
-import android.content.Context
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
@@ -18,7 +13,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -27,11 +21,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.util.UnstableApi
 import com.nantcompany.clipy.app.EditorSessionViewModel
 import com.nantcompany.clipy.design.ClipyErrorState
-import com.nantcompany.clipy.design.ClipyLoadingState
 import com.nantcompany.clipy.design.ClipyPrimaryButton
 import com.nantcompany.clipy.design.ClipyScaffold
 import com.nantcompany.clipy.design.ClipySecondaryButton
-import com.nantcompany.clipy.export.job.ClipyExportProvider
 import com.nantcompany.clipy.navigation.AppRoute
 import com.nantcompany.clipy.theme.ClipyDesignTokens
 
@@ -42,11 +34,10 @@ fun ProcessingScreen(
     onNavigate: (AppRoute) -> Unit,
     viewModel: ProcessingViewModel = viewModel(factory = ProcessingViewModel.Factory(LocalContext.current))
 ) {
-    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     val sessionState by sessionViewModel.state.collectAsState()
     val pendingRequest = sessionState.pendingRequest
-    val outputRepository = remember { ClipyExportProvider.getOutputRepository() }
+    val retryRequest = uiState.activeRequest ?: pendingRequest
 
     LaunchedEffect(pendingRequest, uiState.activeRequest, uiState.isRunning) {
         if (pendingRequest != null && uiState.activeRequest == null && !uiState.isRunning) {
@@ -69,8 +60,8 @@ fun ProcessingScreen(
     BackHandler(enabled = uiState.isRunning) { }
 
     val progress = (uiState.progressPercent.coerceIn(0, 100)) / 100f
-    val outputName = pendingRequest?.outputPath?.substringAfterLast('/')?.substringAfterLast('\\') ?: "Clipy_Output.mp4"
-    
+    val outputName = retryRequest?.outputPath?.substringAfterLast('/')?.substringAfterLast('\\') ?: "Clipy_Output.mp4"
+
     val subtitle = when {
         uiState.errorMessage != null -> "Export failed"
         uiState.phase == ProcessingPhase.Preparing -> "Preparing your media..."
@@ -83,7 +74,10 @@ fun ProcessingScreen(
         onBackClick = { if (!uiState.isRunning) onNavigate(AppRoute.HOME) }
     ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             Text(text = subtitle, style = MaterialTheme.typography.bodyLarge, color = Color.White)
@@ -100,7 +94,7 @@ fun ProcessingScreen(
 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 LinearProgressIndicator(
-                    progress = { progress }, 
+                    progress = { progress },
                     modifier = Modifier.fillMaxWidth(),
                     color = ClipyDesignTokens.primaryAccent,
                     trackColor = ClipyDesignTokens.cardSurface
@@ -116,12 +110,13 @@ fun ProcessingScreen(
                     message = uiState.errorMessage!!,
                     onRetry = {
                         viewModel.clearFailure()
-                        pendingRequest?.let { viewModel.start(it) }
+                        retryRequest?.let { viewModel.start(it) }
                     }
                 )
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            // NOTE: weight(1f) is removed because it's inside a scrollable Column
+            Spacer(modifier = Modifier.height(24.dp))
 
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (uiState.isRunning) {
@@ -136,7 +131,7 @@ fun ProcessingScreen(
                         modifier = Modifier.fillMaxWidth(),
                         onClick = {
                             viewModel.clearFailure()
-                            pendingRequest?.let { viewModel.start(it) }
+                            retryRequest?.let { viewModel.start(it) }
                         }
                     )
                     ClipySecondaryButton(
