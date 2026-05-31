@@ -40,6 +40,10 @@ class ProEditorViewModel : ViewModel() {
         _state.update { it.copy(speedFactor = s) }
     }
 
+    fun setVolume(volume: Float) {
+        _state.update { it.copy(volume = volume) }
+    }
+
     fun setOverlayText(text: String) {
         _state.update { it.copy(overlayText = text) }
     }
