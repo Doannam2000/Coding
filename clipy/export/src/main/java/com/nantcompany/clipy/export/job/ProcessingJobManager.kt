@@ -177,7 +177,8 @@ class ProcessingJobManager(
                 val requestedTransition = normalizeTransitionName(r.transition)
                 val inputDurationsMs = r.inputPaths.map { probeDurationMs(it).coerceAtLeast(1L) }
                 val hasAudioTracks = r.inputPaths.map { probeHasAudioTrack(it) }
-                if (requestedTransition == "none") {
+                val gapTransitions = mergeGapTransitions(r, requestedTransition)
+                if (gapTransitions.all { it == "none" }) {
                     val args = mutableListOf("-y")
                     r.inputPaths.forEach { args.addAll(listOf("-i", it)) }
 
@@ -203,33 +204,34 @@ class ProcessingJobManager(
                     
                     val transDur = r.transitionDurationMs / 1000.0
                     val durations = inputDurationsMs.map { it / 1000.0 }
-                    var currentOffset = 0.0
+                    var currentDuration = durations.firstOrNull() ?: 0.0
                     var lastV = "v0"
                     var lastA = "a0"
                     
                     r.inputPaths.indices.drop(1).forEach { i ->
-                        val prevDur = durations[i-1]
-                        currentOffset += (prevDur - transDur)
-                        
+                        val gapTransition = gapTransitions.getOrNull(i - 1) ?: requestedTransition
                         val nextV = "v$i"
                         val nextA = "a$i"
-                        val outV = "m0v$i"
-                        val outA = "m0a$i"
-                        
-                        filter.append("[$lastV][$nextV]xfade=transition=$requestedTransition:duration=$transDur:offset=$currentOffset")
-                        if (i < r.inputPaths.size - 1) {
-                            filter.append("[$outV];")
-                            lastV = outV
+                        val outV = if (i < r.inputPaths.size - 1) "m0v$i" else "outv"
+                        val outA = if (i < r.inputPaths.size - 1) "m0a$i" else "outa"
+
+                        if (gapTransition == "none") {
+                            filter.append("[$lastV][$nextV]concat=n=2:v=1:a=0[$outV];")
+                            filter.append("[$lastA][$nextA]concat=n=2:v=0:a=1[$outA]")
+                            currentDuration += durations[i]
                         } else {
-                            filter.append("[outv];")
+                            val currentOffset = (currentDuration - transDur).coerceAtLeast(0.0)
+                            filter.append("[$lastV][$nextV]xfade=transition=$gapTransition:duration=$transDur:offset=$currentOffset[$outV];")
+                            filter.append("[$lastA][$nextA]acrossfade=d=$transDur[$outA]")
+                            currentDuration += durations[i] - transDur
                         }
-                        
-                        filter.append("[$lastA][$nextA]acrossfade=d=$transDur")
+
                         if (i < r.inputPaths.size - 1) {
-                            filter.append("[$outA];")
+                            filter.append(";")
+                            lastV = outV
+                        }
+                        if (i < r.inputPaths.size - 1) {
                             lastA = outA
-                        } else {
-                            filter.append("[outa]")
                         }
                     }
                     
@@ -412,8 +414,8 @@ class ProcessingJobManager(
             is ProcessingRequest.Merge -> {
                 val r = (request as ProcessingRequest.Merge).request
                 val total = r.inputPaths.sumOf { probeDurationMs(it) }
-                if (r.transition == "none") total
-                else total - ((r.inputPaths.size - 1) * r.transitionDurationMs)
+                val transitions = mergeGapTransitions(r, normalizeTransitionName(r.transition))
+                total - (transitions.count { it != "none" } * r.transitionDurationMs)
             }
             is ProcessingRequest.ExtractAudio -> probeDurationMs((request as ProcessingRequest.ExtractAudio).request.inputPath)
             is ProcessingRequest.Stickers -> probeDurationMs((request as ProcessingRequest.Stickers).request.inputPath)
@@ -459,7 +461,16 @@ class ProcessingJobManager(
     private fun normalizeTransitionName(name: String): String {
         return when (name.lowercase(Locale.US)) {
             "xfade", "crossfade" -> "fade"
+            "custom" -> "none"
             else -> name.lowercase(Locale.US)
+        }
+    }
+
+    private fun mergeGapTransitions(request: com.nantcompany.clipy.edit.tools.merge.MergeRequest, fallbackTransition: String): List<String> {
+        val gapCount = (request.inputPaths.size - 1).coerceAtLeast(0)
+        val configured = request.gapTransitions.orEmpty()
+        return List(gapCount) { index ->
+            normalizeTransitionName(configured.getOrNull(index)?.ifBlank { fallbackTransition } ?: fallbackTransition)
         }
     }
 

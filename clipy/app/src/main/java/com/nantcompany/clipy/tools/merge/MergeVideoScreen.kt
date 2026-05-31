@@ -92,17 +92,26 @@ fun MergeVideoScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val latestInputPaths by rememberUpdatedState(inputPaths)
-    var selectedTransition by remember { mutableStateOf(TransitionType.CROSSFADE) }
     var selectedClipIndex by remember { mutableStateOf<Int?>(null) }
     var selectedInsertIndex by remember { mutableStateOf(inputPaths.size) }
+    var selectedEffectGapIndex by remember { mutableStateOf(0) }
+    var gapTransitions by remember { mutableStateOf<List<TransitionType>>(emptyList()) }
     var previewClipIndex by remember { mutableStateOf(0) }
     val clipSpecs = remember(inputPaths) { inputPaths.map(::readClipSpec) }
     val totalDurationMs = remember(clipSpecs) { clipSpecs.sumOf { it.durationMs ?: 0L } }
+    val gapCount = (inputPaths.size - 1).coerceAtLeast(0)
+    val effectiveGapTransitions = remember(gapCount, gapTransitions) {
+        List(gapCount) { index -> gapTransitions.getOrNull(index) ?: TransitionType.CROSSFADE }
+    }
+    val selectedEffectTransition = effectiveGapTransitions.getOrNull(selectedEffectGapIndex) ?: TransitionType.NONE
+    val transitionSummary = remember(effectiveGapTransitions) { mergeTransitionSummary(effectiveGapTransitions) }
 
     LaunchedEffect(inputPaths.size) {
         selectedInsertIndex = selectedInsertIndex.coerceIn(0, inputPaths.size)
         selectedClipIndex = selectedClipIndex?.takeIf { it in inputPaths.indices }
         previewClipIndex = previewClipIndex.coerceIn(0, inputPaths.lastIndex.coerceAtLeast(0))
+        selectedEffectGapIndex = selectedEffectGapIndex.coerceIn(0, (inputPaths.size - 2).coerceAtLeast(0))
+        gapTransitions = List(gapCount) { index -> gapTransitions.getOrNull(index) ?: TransitionType.CROSSFADE }
     }
 
     val previewPlayer = remember(inputPaths, context) {
@@ -221,11 +230,17 @@ fun MergeVideoScreen(
                     totalDurationMs = totalDurationMs,
                     selectedClipIndex = selectedClipIndex,
                     selectedInsertIndex = selectedInsertIndex,
+                    gapTransitions = effectiveGapTransitions,
                     onClipSelected = { index ->
                         selectedClipIndex = index
                         previewClipIndex = index
                     },
-                    onInsertSelected = { index -> selectedInsertIndex = index.coerceIn(0, inputPaths.size) },
+                    onInsertSelected = { index ->
+                        selectedInsertIndex = index.coerceIn(0, inputPaths.size)
+                        if (index in 1 until inputPaths.size) {
+                            selectedEffectGapIndex = index - 1
+                        }
+                    },
                     onMoveSelected = {
                         val fromIndex = selectedClipIndex ?: return@MergeTimelinePanel
                         val targetIndex = targetIndexForInsertSlot(fromIndex, selectedInsertIndex, inputPaths.size)
@@ -255,23 +270,33 @@ fun MergeVideoScreen(
                 }
 
                 TransitionPanel(
-                    selectedTransition = selectedTransition,
-                    onTransitionSelected = { selectedTransition = it }
+                    selectedGapIndex = selectedEffectGapIndex,
+                    clipCount = inputPaths.size,
+                    selectedTransition = selectedEffectTransition,
+                    gapTransitions = effectiveGapTransitions,
+                    onGapSelected = { selectedEffectGapIndex = it.coerceIn(0, (inputPaths.size - 2).coerceAtLeast(0)) },
+                    onTransitionSelected = { transition ->
+                        gapTransitions = List(gapCount) { index ->
+                            if (index == selectedEffectGapIndex) transition else effectiveGapTransitions.getOrNull(index) ?: TransitionType.CROSSFADE
+                        }
+                    }
                 )
             }
 
             MergeExportBar(
                 clipCount = inputPaths.size,
                 totalDurationMs = totalDurationMs,
-                transitionLabel = selectedTransition.label,
+                transitionLabel = transitionSummary,
                 canExport = inputPaths.size >= 2,
                 modifier = Modifier.align(Alignment.BottomCenter),
                 onExport = {
+                    val gapTransitionNames = effectiveGapTransitions.map { it.ffmpegName }
                     val request = MergeRequest(
                         inputPaths = latestInputPaths,
                         outputPath = MediaFileUtils.createOutputPath(context, "merge", "mp4"),
-                        transition = selectedTransition.ffmpegName,
-                        transitionDurationMs = 1000L
+                        transition = gapTransitionNames.firstOrNull() ?: TransitionType.NONE.ffmpegName,
+                        transitionDurationMs = 1000L,
+                        gapTransitions = gapTransitionNames
                     )
                     onSubmitRequest(ProcessingRequest.Merge(request))
                 }
@@ -348,6 +373,7 @@ private fun MergeTimelinePanel(
     totalDurationMs: Long,
     selectedClipIndex: Int?,
     selectedInsertIndex: Int,
+    gapTransitions: List<TransitionType>,
     onClipSelected: (Int) -> Unit,
     onInsertSelected: (Int) -> Unit,
     onMoveSelected: () -> Unit,
@@ -413,6 +439,7 @@ private fun MergeTimelinePanel(
                     InsertSlot(
                         index = 0,
                         active = selectedInsertIndex == 0,
+                        hasEffect = false,
                         onClick = { onInsertSelected(0) }
                     )
                     inputPaths.forEachIndexed { index, path ->
@@ -427,6 +454,7 @@ private fun MergeTimelinePanel(
                         InsertSlot(
                             index = index + 1,
                             active = selectedInsertIndex == index + 1,
+                            hasEffect = gapTransitions.getOrNull(index) != null && gapTransitions[index] != TransitionType.NONE,
                             onClick = { onInsertSelected(index + 1) }
                         )
                     }
@@ -448,12 +476,19 @@ private fun MergeTimelinePanel(
 private fun InsertSlot(
     index: Int,
     active: Boolean,
+    hasEffect: Boolean,
     onClick: () -> Unit
 ) {
     val nodeSize = if (active) 25.dp else 20.dp
-    val nodeColor = if (active) ClipyDesignTokens.primaryAccent else MergeNodeColor
+    val nodeColor = when {
+        active -> ClipyDesignTokens.primaryAccent
+        hasEffect -> ClipyDesignTokens.secondaryAccent.copy(alpha = 0.88f)
+        else -> MergeNodeColor
+    }
     val lineColor = if (active) {
         ClipyDesignTokens.primaryAccent.copy(alpha = 0.68f)
+    } else if (hasEffect) {
+        ClipyDesignTokens.secondaryAccent.copy(alpha = 0.42f)
     } else {
         Color.White.copy(alpha = 0.13f)
     }
@@ -481,7 +516,7 @@ private fun InsertSlot(
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = "Insert slot $index",
-                    tint = if (active) Color.Black else ClipyDesignTokens.secondaryText,
+                    tint = if (active || hasEffect) Color.Black else ClipyDesignTokens.secondaryText,
                     modifier = Modifier.size(if (active) 15.dp else 12.dp)
                 )
             }
@@ -682,9 +717,21 @@ private fun TimelinePillButton(
 
 @Composable
 private fun TransitionPanel(
+    selectedGapIndex: Int,
+    clipCount: Int,
     selectedTransition: TransitionType,
+    gapTransitions: List<TransitionType>,
+    onGapSelected: (Int) -> Unit,
     onTransitionSelected: (TransitionType) -> Unit
 ) {
+    val gapCount = (clipCount - 1).coerceAtLeast(0)
+    val canEditGap = gapCount > 0
+    val gapLabel = if (canEditGap) {
+        "Between clip ${selectedGapIndex + 1} and ${selectedGapIndex + 2}"
+    } else {
+        "Select at least 2 clips"
+    }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
@@ -702,15 +749,17 @@ private fun TransitionPanel(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Transition",
+                        "Effect between clips",
                         color = Color.White,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.ExtraBold
                     )
                     Text(
-                        selectedTransition.label,
+                        gapLabel,
                         color = ClipyDesignTokens.secondaryText,
-                        style = MaterialTheme.typography.labelLarge
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 Surface(
@@ -727,6 +776,24 @@ private fun TransitionPanel(
                 }
             }
 
+            if (canEditGap) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    repeat(gapCount) { gapIndex ->
+                        GapChip(
+                            label = "${gapIndex + 1}-${gapIndex + 2}",
+                            transition = gapTransitions.getOrNull(gapIndex) ?: TransitionType.CROSSFADE,
+                            selected = selectedGapIndex == gapIndex,
+                            onClick = { onGapSelected(gapIndex) }
+                        )
+                    }
+                }
+            }
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -737,6 +804,7 @@ private fun TransitionPanel(
                     TransitionChip(
                         transition = transition,
                         selected = selectedTransition == transition,
+                        enabled = canEditGap,
                         onClick = { onTransitionSelected(transition) }
                     )
                 }
@@ -746,9 +814,53 @@ private fun TransitionPanel(
 }
 
 @Composable
+private fun GapChip(
+    label: String,
+    transition: TransitionType,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .height(38.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) ClipyDesignTokens.primaryAccent.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.045f),
+        border = BorderStroke(
+            if (selected) 2.dp else 1.dp,
+            if (selected) ClipyDesignTokens.primaryAccent else Color.White.copy(alpha = 0.07f)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = label,
+                color = Color.White,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1
+            )
+            Text(
+                text = transition.label,
+                color = if (selected) ClipyDesignTokens.primaryAccent else ClipyDesignTokens.textMuted,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
 private fun TransitionChip(
     transition: TransitionType,
     selected: Boolean,
+    enabled: Boolean,
     onClick: () -> Unit
 ) {
     Surface(
@@ -756,7 +868,7 @@ private fun TransitionChip(
             .width(112.dp)
             .height(62.dp)
             .clip(RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick),
+            .clickable(enabled = enabled, onClick = onClick),
         shape = RoundedCornerShape(18.dp),
         color = if (selected) ClipyDesignTokens.primaryAccent.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.045f),
         border = BorderStroke(
@@ -784,7 +896,11 @@ private fun TransitionChip(
                 }
                 Text(
                     text = transition.label,
-                    color = if (selected) Color.White else ClipyDesignTokens.secondaryText,
+                    color = when {
+                        !enabled -> ClipyDesignTokens.textMuted
+                        selected -> Color.White
+                        else -> ClipyDesignTokens.secondaryText
+                    },
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.ExtraBold,
                     maxLines = 1,
@@ -933,7 +1049,7 @@ private fun MergeExportBar(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "$transitionLabel transition",
+                    text = transitionLabel,
                     color = ClipyDesignTokens.secondaryText,
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
@@ -999,4 +1115,14 @@ private fun formatDurationShort(ms: Long): String {
     val mins = totalSecs / 60
     val secs = totalSecs % 60
     return "%d:%02d".format(mins, secs)
+}
+
+private fun mergeTransitionSummary(transitions: List<TransitionType>): String {
+    if (transitions.isEmpty() || transitions.all { it == TransitionType.NONE }) return "No effect"
+    val distinct = transitions.distinct()
+    return if (distinct.size == 1) {
+        "${distinct.first().label} effect"
+    } else {
+        "Mixed effects"
+    }
 }
