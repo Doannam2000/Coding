@@ -68,6 +68,7 @@ import com.nantcompany.clipy.design.ClipyScaffold
 import com.nantcompany.clipy.design.ClipyVideoPlayer
 import com.nantcompany.clipy.edit.common.TransitionType
 import com.nantcompany.clipy.edit.tools.merge.MergeRequest
+import com.nantcompany.clipy.export.job.MergePreviewRenderer
 import com.nantcompany.clipy.export.job.ProcessingRequest
 import com.nantcompany.clipy.navigation.AppRoute
 import com.nantcompany.clipy.theme.ClipyDesignTokens
@@ -97,6 +98,9 @@ fun MergeVideoScreen(
     var selectedEffectGapIndex by remember { mutableStateOf(0) }
     var gapTransitions by remember { mutableStateOf<List<TransitionType>>(emptyList()) }
     var previewClipIndex by remember { mutableStateOf(0) }
+    var previewMode by remember { mutableStateOf(MergePreviewMode.GAP) }
+    var effectPreviewPath by remember { mutableStateOf<String?>(null) }
+    var effectPreviewRendering by remember { mutableStateOf(false) }
     val clipSpecs = remember(inputPaths) { inputPaths.map(::readClipSpec) }
     val totalDurationMs = remember(clipSpecs) { clipSpecs.sumOf { it.durationMs ?: 0L } }
     val gapCount = (inputPaths.size - 1).coerceAtLeast(0)
@@ -105,6 +109,26 @@ fun MergeVideoScreen(
     }
     val selectedEffectTransition = effectiveGapTransitions.getOrNull(selectedEffectGapIndex) ?: TransitionType.NONE
     val transitionSummary = remember(effectiveGapTransitions) { mergeTransitionSummary(effectiveGapTransitions) }
+    val previewMediaPaths = remember(inputPaths, previewMode, effectPreviewPath, selectedEffectGapIndex, gapCount) {
+        val renderedPath = effectPreviewPath
+        when {
+            previewMode == MergePreviewMode.GAP && !renderedPath.isNullOrBlank() -> listOf(renderedPath)
+            previewMode == MergePreviewMode.GAP && gapCount > 0 -> {
+                val leftIndex = selectedEffectGapIndex.coerceIn(0, inputPaths.lastIndex)
+                inputPaths.drop(leftIndex).take(2)
+            }
+            else -> inputPaths
+        }
+    }
+    val previewSubtitle = if (previewMode == MergePreviewMode.GAP && gapCount > 0) {
+        if (effectPreviewRendering) {
+            "Rendering ${selectedEffectTransition.label} preview"
+        } else {
+            "Gap ${selectedEffectGapIndex + 1}-${selectedEffectGapIndex + 2} | ${selectedEffectTransition.label}"
+        }
+    } else {
+        "Clip ${(previewClipIndex + 1).coerceIn(1, inputPaths.size.coerceAtLeast(1))} | ${formatDurationShort(totalDurationMs)} total"
+    }
 
     LaunchedEffect(inputPaths.size) {
         selectedInsertIndex = selectedInsertIndex.coerceIn(0, inputPaths.size)
@@ -114,13 +138,39 @@ fun MergeVideoScreen(
         gapTransitions = List(gapCount) { index -> gapTransitions.getOrNull(index) ?: TransitionType.CROSSFADE }
     }
 
-    val previewPlayer = remember(inputPaths, context) {
-        if (inputPaths.isEmpty()) {
+    LaunchedEffect(inputPaths, selectedEffectGapIndex, selectedEffectTransition, previewMode) {
+        if (previewMode != MergePreviewMode.GAP || gapCount <= 0) {
+            effectPreviewRendering = false
+            if (previewMode != MergePreviewMode.GAP) effectPreviewPath = null
+            return@LaunchedEffect
+        }
+
+        val leftPath = inputPaths.getOrNull(selectedEffectGapIndex)
+        val rightPath = inputPaths.getOrNull(selectedEffectGapIndex + 1)
+        if (leftPath == null || rightPath == null) {
+            effectPreviewRendering = false
+            effectPreviewPath = null
+            return@LaunchedEffect
+        }
+
+        effectPreviewRendering = true
+        effectPreviewPath = MergePreviewRenderer.renderGapPreview(
+            context = context.applicationContext,
+            leftPath = leftPath,
+            rightPath = rightPath,
+            transition = selectedEffectTransition.ffmpegName,
+            transitionDurationMs = 1000L
+        )
+        effectPreviewRendering = false
+    }
+
+    val previewPlayer = remember(previewMediaPaths, context) {
+        if (previewMediaPaths.isEmpty()) {
             null
         } else {
             ExoPlayer.Builder(context).build().apply {
                 setMediaItems(
-                    inputPaths.map { path ->
+                    previewMediaPaths.map { path ->
                         MediaItem.fromUri(Uri.fromFile(File(path)))
                     }
                 )
@@ -154,8 +204,13 @@ fun MergeVideoScreen(
         }
     }
 
-    LaunchedEffect(previewClipIndex, previewPlayer, inputPaths.size) {
+    LaunchedEffect(previewClipIndex, previewPlayer, inputPaths.size, previewMode) {
         val player = previewPlayer ?: return@LaunchedEffect
+        if (previewMode == MergePreviewMode.GAP) {
+            player.seekTo(0L)
+            player.play()
+            return@LaunchedEffect
+        }
         if (inputPaths.isEmpty()) return@LaunchedEffect
         val targetIndex = previewClipIndex.coerceIn(0, inputPaths.lastIndex)
         if (targetIndex < player.mediaItemCount) {
@@ -218,9 +273,7 @@ fun MergeVideoScreen(
                 previewPlayer?.let { player ->
                     MergePreviewPanel(
                         player = player,
-                        activeClipIndex = previewClipIndex,
-                        clipCount = inputPaths.size,
-                        totalDurationMs = totalDurationMs
+                        subtitle = previewSubtitle
                     )
                 }
 
@@ -234,11 +287,14 @@ fun MergeVideoScreen(
                     onClipSelected = { index ->
                         selectedClipIndex = index
                         previewClipIndex = index
+                        previewMode = MergePreviewMode.CLIP
+                        effectPreviewPath = null
                     },
                     onInsertSelected = { index ->
                         selectedInsertIndex = index.coerceIn(0, inputPaths.size)
                         if (index in 1 until inputPaths.size) {
                             selectedEffectGapIndex = index - 1
+                            previewMode = MergePreviewMode.GAP
                         }
                     },
                     onMoveSelected = {
@@ -249,6 +305,8 @@ fun MergeVideoScreen(
                             selectedClipIndex = targetIndex
                             selectedInsertIndex = targetIndex
                             previewClipIndex = targetIndex
+                            previewMode = MergePreviewMode.CLIP
+                            effectPreviewPath = null
                         }
                     },
                     onAddMore = { onAddMoreAt(selectedInsertIndex.coerceIn(0, inputPaths.size)) },
@@ -274,11 +332,15 @@ fun MergeVideoScreen(
                     clipCount = inputPaths.size,
                     selectedTransition = selectedEffectTransition,
                     gapTransitions = effectiveGapTransitions,
-                    onGapSelected = { selectedEffectGapIndex = it.coerceIn(0, (inputPaths.size - 2).coerceAtLeast(0)) },
+                    onGapSelected = {
+                        selectedEffectGapIndex = it.coerceIn(0, (inputPaths.size - 2).coerceAtLeast(0))
+                        previewMode = MergePreviewMode.GAP
+                    },
                     onTransitionSelected = { transition ->
                         gapTransitions = List(gapCount) { index ->
                             if (index == selectedEffectGapIndex) transition else effectiveGapTransitions.getOrNull(index) ?: TransitionType.CROSSFADE
                         }
+                        previewMode = MergePreviewMode.GAP
                     }
                 )
             }
@@ -308,9 +370,7 @@ fun MergeVideoScreen(
 @Composable
 private fun MergePreviewPanel(
     player: ExoPlayer,
-    activeClipIndex: Int,
-    clipCount: Int,
-    totalDurationMs: Long
+    subtitle: String
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -335,7 +395,7 @@ private fun MergePreviewPanel(
                         fontWeight = FontWeight.ExtraBold
                     )
                     Text(
-                        "Clip ${(activeClipIndex + 1).coerceIn(1, clipCount.coerceAtLeast(1))} | ${formatDurationShort(totalDurationMs)} total",
+                        subtitle,
                         color = ClipyDesignTokens.secondaryText,
                         style = MaterialTheme.typography.labelLarge,
                         maxLines = 1,
@@ -1125,4 +1185,9 @@ private fun mergeTransitionSummary(transitions: List<TransitionType>): String {
     } else {
         "Mixed effects"
     }
+}
+
+private enum class MergePreviewMode {
+    GAP,
+    CLIP
 }
